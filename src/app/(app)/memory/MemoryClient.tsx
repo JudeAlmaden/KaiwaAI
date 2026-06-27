@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
 
@@ -28,16 +28,16 @@ export default function MemoryClient() {
   const [draft, setDraft] = useState("");
   const [category, setCategory] = useState("fact");
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  function load() {
+  const load = useCallback(() => {
     fetch("/api/memory")
       .then((r) => r.json())
       .then((d) => setMemories(d.memories ?? []))
       .catch(() => setMemories([]));
-  }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function add() {
     const content = draft.trim();

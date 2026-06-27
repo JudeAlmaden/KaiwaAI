@@ -29,15 +29,15 @@ describe("srs (SM-2)", () => {
   });
 
   it("graduates to known after enough reps and a long interval", () => {
-    let s = fresh;
-    for (let i = 0; i < 5; i++) s = applyReview(s, 3); // repeated Easy
+    let s = applyReview(fresh, 3);
+    for (let i = 0; i < 4; i++) s = applyReview(s, 3); // repeated Easy
     expect(s.status).toBe("known");
     expect(s.interval).toBeGreaterThanOrEqual(21);
   });
 
   it("ease factor never drops below 1.3", () => {
-    let s = fresh;
-    for (let i = 0; i < 10; i++) s = applyReview(s, 1); // repeated Hard
+    let s = applyReview(fresh, 1);
+    for (let i = 0; i < 9; i++) s = applyReview(s, 1); // repeated Hard
     expect(s.easeFactor).toBeGreaterThanOrEqual(1.3);
   });
 
