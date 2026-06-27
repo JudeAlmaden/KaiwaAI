@@ -27,7 +27,7 @@ export default function ServerKeyCard() {
     const res = await fetch("/api/settings/server-key", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: keys[0] }),
+      body: JSON.stringify({ keys }),
     });
     setBusy(false);
     if (res.ok) setStored(true);
@@ -49,9 +49,10 @@ export default function ServerKeyCard() {
             Let Kai work in the background
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Stores your Gemini key on the server (encrypted) so Kai can message
-            you first and prep summaries even when the app is closed. Off by
-            default — your key normally stays on this device.
+            Stores your Gemini key(s) on the server (encrypted) so Kai can
+            message you first and prep summaries even when the app is closed. All
+            your keys are uploaded so the server can rotate them too. Off by
+            default — your keys normally stay on this device.
           </p>
         </div>
         <Toggle

@@ -1,0 +1,3 @@
+
+Setting up the envs
+node -e "const c=require('crypto');console.log('SESSION_SECRET='+c.randomBytes(48).toString('base64'));console.log('ENCRYPTION_KEY='+c.randomBytes(32).toString('base64'));console.log('TRIGGER_SECRET='+c.randomBytes(32).toString('hex'));console.log('CRON_SECRET='+c.randomBytes(32).toString('hex'))"

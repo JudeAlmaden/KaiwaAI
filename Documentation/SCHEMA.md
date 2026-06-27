@@ -4,7 +4,9 @@ This document is the source of truth for how the app stores chat, the vocabulary
 deck, and persistent memory described in `GOALS.md`. For the memory *architecture*
 (how summaries, recall, and reconciliation work), see `MEMORY.md`.
 
-Stack: **Prisma 7 + SQLite** (via the `better-sqlite3` driver adapter).
+Stack: **Prisma 7 + PostgreSQL** (Supabase, via `@prisma/adapter-pg`). Earlier
+iterations used SQLite; the app moved to Postgres for Vercel deployment. The
+schema is provider-agnostic except where noted.
 
 ## Personal-use MVP — build this, defer the rest
 
@@ -57,9 +59,10 @@ lemma-mismatch class of bugs).
    This freezes the day boundary at insert, sidestepping midnight/DST/timezone
    ambiguity, and makes both day-grouping and summary rollups exact indexed
    lookups instead of fuzzy range math.
-3. **SQLite has no native enums or arrays.** Prisma enums are unsupported on
-   SQLite, so fields like `role`, `status`, and `partOfSpeech` are `String`.
-   Allowed values are documented here and enforced via TypeScript unions.
+3. **Enum-like fields are stored as `String`.** Fields like `role`, `status`,
+   and `partOfSpeech` are plain strings (this kept the original SQLite happy and
+   carries over fine to Postgres). Allowed values are documented here and
+   enforced via TypeScript unions.
 4. **A word is unique per user, not globally.** Flashcards use
    `@@unique([userId, word])` so re-encountering a word upserts instead of
    duplicating.
@@ -387,9 +390,10 @@ DELETE /api/memory/:id
 
 ## Migration notes
 
-- Apply with `npx prisma migrate dev --name chat_flashcards_memory`.
-- Prisma 7: do **not** put `url` in `schema.prisma` (it lives in
-  `prisma.config.ts`); SQLite uses the `better-sqlite3` driver adapter.
+- Apply with `npx prisma migrate deploy` (prod) or `migrate dev` (local).
+- Prisma 7: the connection URL lives in `prisma.config.ts` (reads `DIRECT_URL`
+  / `DATABASE_URL`), not in `schema.prisma`. Runtime uses the `pg` adapter
+  (`src/lib/prisma.ts`) with the pooled `DATABASE_URL`.
 - After migrating, regenerate the client (`npx prisma generate`).
 - **Personal-use MVP first:** `User` + `Message` (`dayKey` stream) + `Flashcard`
   + plain `Memory` + `DaySummary`. `MonthSummary`/year tiers and the

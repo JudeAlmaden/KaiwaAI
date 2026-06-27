@@ -7,6 +7,7 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
+  { href: "/home", label: "Home", jp: "ホーム", icon: "🏠" },
   { href: "/chat", label: "Chat", jp: "会話", icon: "💬" },
   { href: "/review", label: "Review", jp: "復習", icon: "🔁" },
   { href: "/vocab", label: "Vocab", jp: "単語", icon: "📒" },

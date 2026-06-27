@@ -40,7 +40,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         return;
       }
 
-      router.push("/chat");
+      router.push("/home");
       router.refresh();
     } catch {
       setError("Network error. Please try again.");

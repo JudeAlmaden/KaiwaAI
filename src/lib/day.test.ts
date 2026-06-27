@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayKeyFor, monthKeyOf, dayLabel } from "./day";
+import { dayKeyFor, monthKeyOf, previousDayKey, dayLabel } from "./day";
 
 describe("day helpers", () => {
   it("formats a dayKey as YYYY-MM-DD in the given timezone", () => {
@@ -17,6 +17,12 @@ describe("day helpers", () => {
 
   it("derives the monthKey from a dayKey", () => {
     expect(monthKeyOf("2026-06-27")).toBe("2026-06");
+  });
+
+  it("derives the previous dayKey, including across month boundaries", () => {
+    expect(previousDayKey("2026-06-27")).toBe("2026-06-26");
+    expect(previousDayKey("2026-07-01")).toBe("2026-06-30");
+    expect(previousDayKey("2026-01-01")).toBe("2025-12-31");
   });
 
   it("labels today and yesterday", () => {

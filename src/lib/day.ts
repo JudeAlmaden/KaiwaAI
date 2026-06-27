@@ -23,6 +23,13 @@ export function monthKeyOf(dayKey: string): string {
   return dayKey.slice(0, 7); // "2026-06"
 }
 
+/** The dayKey for the day before the given one (string math, tz-safe). */
+export function previousDayKey(dayKey: string): string {
+  const d = new Date(dayKey + "T12:00:00Z"); // noon avoids DST edge issues
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Human label for a day divider in the chat stream. */
 export function dayLabel(dayKey: string, todayKey: string): string {
   if (dayKey === todayKey) return "Today";

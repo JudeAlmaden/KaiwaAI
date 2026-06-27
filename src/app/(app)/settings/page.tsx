@@ -18,8 +18,8 @@ export default async function SettingsPage() {
         <section className="rounded-3xl border-2 border-border bg-card p-5">
           <h2 className="font-display text-lg font-bold">Account</h2>
           <p className="mt-1 text-sm text-muted">{session?.email}</p>
-          <div className="mt-4">
-            <LogoutButton />
+          <div className="mt-4 sm:max-w-xs">
+            <LogoutButton variant="button" />
           </div>
         </section>
 

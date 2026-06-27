@@ -7,8 +7,9 @@ function isActive(pathname: string, href: string) {
 }
 
 describe("app nav", () => {
-  it("exposes the five expected sections in order", () => {
+  it("exposes the expected sections in order", () => {
     expect(NAV_ITEMS.map((i) => i.href)).toEqual([
+      "/home",
       "/chat",
       "/review",
       "/vocab",

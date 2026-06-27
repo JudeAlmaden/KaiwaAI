@@ -7,8 +7,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
+
+// Note: connection URL is provided at runtime via the pg adapter (src/lib/prisma.ts).
+// Prisma Migrate reads DATABASE_URL / DIRECT_URL from prisma.config.ts.
 
 model User {
   id          String   @id @default(cuid())
@@ -31,6 +34,10 @@ model User {
   consecutiveIgnored Int     @default(0)      // outreach streak with no return
   lastOutreachAt    DateTime?                  // when Kai last reached out
   lastActiveAt      DateTime?                  // when the user last chatted/opened
+  // ── Streak ──
+  streakCount    Int     @default(0)  // consecutive active days
+  streakBestCount Int    @default(0)  // longest streak achieved
+  lastStreakDay  String?              // dayKey of the last counted active day
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

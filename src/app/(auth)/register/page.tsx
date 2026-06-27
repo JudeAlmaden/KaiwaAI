@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/session";
+import { getCurrentUser } from "@/lib/auth-helpers";
 import AuthForm from "../AuthForm";
 
 export default async function RegisterPage() {
-  const session = await getSession();
-  if (session) redirect("/chat");
+  const user = await getCurrentUser();
+  if (user) redirect("/home");
 
   return <AuthForm mode="register" />;
 }

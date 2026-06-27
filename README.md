@@ -39,12 +39,15 @@ words right before you'd forget them) — wrapped in a friendship, not a workshe
 ## Tech stack
 
 - **Next.js** (App Router, TypeScript) + **Tailwind CSS v4**
-- **Prisma 7** + **SQLite** (via the `better-sqlite3` driver adapter)
+- **Prisma 7** + **PostgreSQL** (hosted on **Supabase**, via `@prisma/adapter-pg`)
 - **Google Gemini** — **BYOK** (bring-your-own-key); the key stays in your
-  browser by default, with optional encrypted server-side storage for background
-  features
+  browser by default, with optional **encrypted** server-side storage
+  (AES-256-GCM) for background features
 - **Vitest** for tests
-- **web-push** + Vercel Cron for scheduled outreach (in progress)
+- **PWA** (installable, offline shell) + **Vercel Cron** for scheduled outreach
+
+> New here? See `Documentation/STATUS.md` for a full snapshot of what's built,
+> what's pending, and how the pieces fit.
 
 ## Getting started
 
@@ -53,10 +56,10 @@ npm install
 
 # set up environment
 cp .env.example .env
-# then fill in SESSION_SECRET, ENCRYPTION_KEY, etc. (see below)
+# then fill in DATABASE_URL, DIRECT_URL, and the secrets (see below)
 
-# create the database
-npx prisma migrate dev
+# apply migrations to your database
+npx prisma migrate deploy
 
 npm run dev
 ```
@@ -65,20 +68,26 @@ Open [http://localhost:3000](http://localhost:3000), create an account, and add
 your **Gemini API key** in Settings (get a free one from
 [Google AI Studio](https://aistudio.google.com/app/apikey)).
 
+> Requires a PostgreSQL database (Supabase recommended). For local dev, point
+> `DATABASE_URL`/`DIRECT_URL` at a Supabase project or a local Postgres.
+
 ### Environment variables
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | SQLite connection (e.g. `file:./dev.db`) |
-| `SESSION_SECRET` | Signs session cookies — use a long random string |
-| `ENCRYPTION_KEY` | 32-byte base64 key for encrypting stored secrets at rest |
+| `DATABASE_URL` | Postgres **pooled** connection (Supabase Transaction pooler, 6543) — runtime |
+| `DIRECT_URL` | Postgres **direct** connection (port 5432) — Prisma Migrate |
+| `SESSION_SECRET` | Signs session cookies — long random string |
+| `ENCRYPTION_KEY` | 32-byte base64 key for encrypting stored secrets (do **not** rotate after keys are stored) |
 | `TRIGGER_SECRET` | Bearer token for manual outreach trigger calls |
 | `CRON_SECRET` | Bearer token Vercel Cron sends to scheduled routes |
 
-Generate keys:
+Generate the secrets:
 
 ```bash
-# ENCRYPTION_KEY
+# SESSION_SECRET / TRIGGER_SECRET / CRON_SECRET (any long random string)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# ENCRYPTION_KEY (must be 32 bytes, base64)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
@@ -101,15 +110,20 @@ Your conversations, flashcards, and memories are stored in the app's database.
 
 ## Deploying
 
-Targeting **Vercel**. Note: SQLite does not work on Vercel's serverless runtime —
-the database must move to a hosted store (e.g. **Turso**/libSQL, or Postgres)
-before deploying. Vercel Cron drives Kai's scheduled outreach via
-`vercel.json` → `/api/cron/outreach`.
+Targeting **Vercel** with a **Supabase** Postgres database:
+
+1. Create a Supabase project; grab the **pooled** (6543) and **direct** (5432)
+   connection strings.
+2. Run `npx prisma migrate deploy` against the DB to create the tables.
+3. Import the repo into Vercel and set all env vars (the table above).
+4. Vercel Cron (`vercel.json` → `/api/cron/outreach`) drives Kai's scheduled
+   outreach every 10 minutes.
 
 ## Documentation
 
 See the `Documentation/` folder:
 
+- **STATUS.md** — current build snapshot (read this first in a new session)
 - **GOALS.md** — vision, features, and the learning model
 - **SCHEMA.md** — data model and API reference
 - **MEMORY.md** — the persistent-memory architecture

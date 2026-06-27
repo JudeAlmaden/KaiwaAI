@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Kai from "../Kai";
+import LogoutButton from "../LogoutButton";
 import { NAV_ITEMS } from "./nav";
 
 function isActive(pathname: string, href: string) {
@@ -16,7 +17,7 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r-2 border-border bg-card/50 px-4 py-6 lg:flex">
       <Link
-        href="/chat"
+        href="/home"
         className="mb-8 flex items-center gap-2 px-2 font-display text-xl font-extrabold tracking-tight"
       >
         <Kai size={32} />
@@ -53,7 +54,18 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
       <div className="mt-4 flex items-center gap-2 rounded-2xl bg-amber/10 px-3 py-2.5 text-sm font-bold text-amber">
         🔥 {streak}-day streak
       </div>
-      <p className="mt-3 truncate px-2 text-xs text-muted">{email}</p>
+
+      <div className="mt-3 flex flex-col gap-2 border-t-2 border-border pt-3">
+        <div className="flex items-center gap-2.5 px-1">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/15 text-sm font-bold uppercase text-indigo-ai">
+            {email.charAt(0)}
+          </span>
+          <p className="min-w-0 flex-1 truncate text-xs text-muted" title={email}>
+            {email}
+          </p>
+        </div>
+        <LogoutButton variant="button" />
+      </div>
     </aside>
   );
 }
@@ -88,7 +100,7 @@ export function MobileTopBar({ streak }: { streak: number }) {
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between border-b-2 border-border bg-card/95 px-4 py-3 backdrop-blur lg:hidden">
       <Link
-        href="/chat"
+        href="/home"
         className="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight"
       >
         <Kai size={26} />

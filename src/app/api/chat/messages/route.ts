@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { dayKeyFor } from "@/lib/day";
+import { dayKeyFor, previousDayKey } from "@/lib/day";
+import { advanceStreak } from "@/lib/streak";
 import { charLength, MAX_MESSAGE_CHARS, isLexical } from "@/lib/types";
 import type { CachedToken } from "@/lib/types";
 
@@ -86,11 +87,32 @@ export async function POST(req: Request) {
   const newWords = Array.isArray(body.newWords) ? body.newWords : [];
   const dayKey = dayKeyFor(new Date(), user.timezone);
 
-  // The user is active — reset Kai's "ignored" mood and mark activity.
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { consecutiveIgnored: 0, lastActiveAt: new Date() },
-  });
+  // The user is active — advance the streak and reset Kai's "ignored" mood.
+  {
+    const next = advanceStreak(
+      {
+        streakCount: user.streakCount,
+        streakBestCount: user.streakBestCount,
+        lastStreakDay: user.lastStreakDay,
+      },
+      dayKey,
+      previousDayKey(dayKey)
+    );
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        consecutiveIgnored: 0,
+        lastActiveAt: new Date(),
+        ...(next
+          ? {
+              streakCount: next.streakCount,
+              streakBestCount: next.streakBestCount,
+              lastStreakDay: next.lastStreakDay,
+            }
+          : {}),
+      },
+    });
+  }
 
   const userMsg = await prisma.message.create({
     data: { userId: user.id, role: "user", content: userText, dayKey },
