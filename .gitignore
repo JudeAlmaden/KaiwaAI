@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# local sqlite database (contains user data — never commit)
+*.db
+*.db-shm
+*.db-wal
+/prisma/*.db
+
+# AI assistant artifacts
+CLAUDE.md

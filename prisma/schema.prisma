@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  password    String
+  timezone    String   @default("UTC")
+  // Opt-in: user's Gemini API key, encrypted at rest (AES-256-GCM). Enables
+  // server-side features (scheduled messages, background summaries). Null = the
+  // key stays client-side only (default BYOK behavior).
+  geminiKeyEnc String?
+  // learning prefs
+  maxNewWords Int      @default(1)
+  level       String   @default("N5")
+  // ── Kai outreach ("messages first") ──
+  outreachMode      String   @default("off") // off | scheduled | random
+  outreachTimes     String   @default("[]")  // JSON "HH:MM"[] for scheduled mode
+  quietStart        Int      @default(22)     // hour (0-23) — no pings at/after
+  quietEnd          Int      @default(8)      // hour (0-23) — no pings before
+  consecutiveIgnored Int     @default(0)      // outreach streak with no return
+  lastOutreachAt    DateTime?                  // when Kai last reached out
+  lastActiveAt      DateTime?                  // when the user last chatted/opened
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  messages     Message[]
+  flashcards   Flashcard[]
+  daySummaries DaySummary[]
+  memories     Memory[]
+}
+
+model Message {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role    String // "kai" | "user"
+  content String
+
+  // Natural English translation/gloss of a Japanese reply (Kai messages).
+  english String?
+
+  // Cached tokenization for tap-to-translate (JSON string of CachedToken[]).
+  tokens  String?
+
+  // Day bucket, computed in the user's tz at insert time, e.g. "2026-06-27".
+  dayKey     String
+  summarized Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  capturedWords Flashcard[] @relation("WordSource")
+
+  @@index([userId, createdAt])
+  @@index([userId, dayKey])
+}
+
+model Flashcard {
+  id           String @id @default(cuid())
+  userId       String
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  word         String // dictionary/lemma form — dedupe key
+  reading      String
+  romaji       String
+  meaning      String
+  partOfSpeech String
+  jlptTier     String @default("unknown")
+
+  // SRS (SM-2). status drives usage policy.
+  status        String   @default("new") // new | learning | known
+  easeFactor    Float    @default(2.5)
+  interval      Int      @default(0)
+  repetitions   Int      @default(0)
+  timesReviewed Int      @default(0)
+  exposures     Int      @default(0)
+  nextReview    DateTime @default(now())
+  lastReviewedAt DateTime?
+
+  sourceMessageId String?
+  sourceMessage   Message? @relation("WordSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, word])
+  @@index([userId, status])
+  @@index([userId, nextReview])
+  @@index([userId, partOfSpeech])
+}
+
+model DaySummary {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  dayKey    String
+  summary   String
+  wordCount Int      @default(0)
+  partial   Boolean  @default(false)
+  monthKey  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, dayKey])
+  @@index([userId, dayKey])
+}
+
+model Memory {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  content    String
+  category   String   @default("fact") // profile | preference | fact | goal | relationship
+  importance Int      @default(1) // 1..5
+  sourceDayKey String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, category])
+}

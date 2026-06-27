@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff9f5"/>
+      <stop offset="100%" stop-color="#f3edff"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b8a4ff"/>
+      <stop offset="100%" stop-color="#7c5cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- head: half circle (flat side down) -->
+  <path d="M120 360a136 136 0 0 1 272 0Z" fill="url(#head)"/>
+  <!-- glossy sheen -->
+  <ellipse cx="256" cy="256" rx="100" ry="34" fill="#fff" opacity="0.22"/>
+  <!-- ahoge: C-shaped tapering strand -->
+  <path d="M262 262C312 248 340 206 326 158C312 110 256 96 206 112C246 124 276 160 266 200C256 240 230 252 222 262Z" fill="#7c5cff"/>
+  <!-- sakura hairpin -->
+  <g transform="translate(360 262) scale(2.0)">
+    <g fill="#ff6b9d">
+      <path d="M0 0C-6 -4 -6 -13 0 -19C6 -13 6 -4 0 0Z"/>
+      <path transform="rotate(72)" d="M0 0C-6 -4 -6 -13 0 -19C6 -13 6 -4 0 0Z"/>
+      <path transform="rotate(144)" d="M0 0C-6 -4 -6 -13 0 -19C6 -13 6 -4 0 0Z"/>
+      <path transform="rotate(216)" d="M0 0C-6 -4 -6 -13 0 -19C6 -13 6 -4 0 0Z"/>
+      <path transform="rotate(288)" d="M0 0C-6 -4 -6 -13 0 -19C6 -13 6 -4 0 0Z"/>
+    </g>
+    <circle r="3.2" fill="#ffd84d"/>
+  </g>
+</svg>

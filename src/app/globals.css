@@ -1,26 +1,145 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* KaiwaAI — friendly companion palette */
+  --background: #fff9f5; /* warm cream */
+  --foreground: #3a3247; /* soft dark plum, never harsh black */
+  --muted: #8b8499;
+
+  /* Kai's signature: a friendly violet */
+  --indigo: #7c5cff;
+  --indigo-soft: #9b82ff;
+  --indigo-deep: #5b3fd6; /* used as the 3D button "lip" */
+
+  /* Playful supporting colors */
+  --sakura: #ff6b9d; /* pink */
+  --mint: #2ec4a6; /* success / correct */
+  --amber: #ffb23e; /* streaks / xp */
+  --sky: #46b3ff; /* info */
+
+  /* Surfaces */
+  --card: #ffffff;
+  --border: #efe7f5;
+  --ring: rgba(124, 92, 255, 0.28);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-muted: var(--muted);
+  --color-indigo-ai: var(--indigo);
+  --color-indigo-soft: var(--indigo-soft);
+  --color-indigo-deep: var(--indigo-deep);
+  --color-sakura: var(--sakura);
+  --color-mint: var(--mint);
+  --color-amber: var(--amber);
+  --color-sky: var(--sky);
+  --color-card: var(--card);
+  --color-border: var(--border);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-jp: var(--font-noto-jp);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  background-image:
+    radial-gradient(
+      ellipse 70% 50% at 12% -5%,
+      rgba(124, 92, 255, 0.1),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 100% 0%,
+      rgba(255, 107, 157, 0.08),
+      transparent 55%
+    );
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/* Friendly chunky "pushable" button, Duolingo-style.
+   The darker bottom border is the 3D lip; pressing sinks it. */
+.btn-pop {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border-radius: 1rem;
+  border-bottom-width: 4px;
+  border-bottom-style: solid;
+  transition:
+    transform 0.06s ease,
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.btn-pop:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+.btn-pop:hover {
+  filter: brightness(1.04);
+}
+
+/* Flashcard flying in on the hero demo */
+@keyframes floatIn {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) rotate(8deg) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(3deg) scale(1);
+  }
+}
+
+/* Drifting sakura petals */
+@keyframes petalFall {
+  0% {
+    transform: translateY(-10vh) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(110vh) translateX(40px) rotate(360deg);
+    opacity: 0;
+  }
+}
+.petal {
+  position: fixed;
+  top: 0;
+  border-radius: 100% 0 100% 0;
+  background: var(--sakura);
+  opacity: 0.5;
+  pointer-events: none;
+  animation-name: petalFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .petal {
+    display: none;
+  }
+}
+
+/* Kai's memory — diary / lined-paper styling */
+.diary-paper {
+  background-color: #fffdf8;
+  background-image:
+    /* margin line */
+    linear-gradient(to right, transparent 38px, rgba(255, 107, 157, 0.35) 38px, rgba(255, 107, 157, 0.35) 40px, transparent 40px),
+    /* ruled lines */
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      rgba(124, 92, 255, 0.14) 31px,
+      rgba(124, 92, 255, 0.14) 32px
+    );
 }
