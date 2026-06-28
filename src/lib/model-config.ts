@@ -114,3 +114,16 @@ export function getAutoSaveWords(): boolean {
 export function setAutoSaveWords(on: boolean) {
   localStorage.setItem(AUTOSAVE_KEY, on ? "1" : "0");
 }
+
+// Auto-memory: when on, durable facts Kai notices are saved silently. When off
+// (default), they're shown as "Remember this?" suggestions you tap to save.
+const AUTO_MEMORY_KEY = "kaiwa_auto_memory";
+
+export function getAutoMemory(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(AUTO_MEMORY_KEY) === "1";
+}
+
+export function setAutoMemory(on: boolean) {
+  localStorage.setItem(AUTO_MEMORY_KEY, on ? "1" : "0");
+}

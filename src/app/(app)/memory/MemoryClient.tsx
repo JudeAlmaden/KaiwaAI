@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
 
@@ -27,17 +28,52 @@ export default function MemoryClient() {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [category, setCategory] = useState("fact");
+  const [personas, setPersonas] = useState<{ id: string; name: string; avatar: string; builtin: boolean }[]>([]);
+  // Which persona's memory we're viewing (a real persona id, "" until loaded).
+  const [activePersona, setActivePersona] = useState("");
+  const searchParams = useSearchParams();
+  const requestedPersona = searchParams.get("persona");
 
-  const load = useCallback(() => {
-    fetch("/api/memory")
+  const load = useCallback((personaId: string) => {
+    if (!personaId) return;
+    fetch(`/api/memory?personaId=${encodeURIComponent(personaId)}`)
       .then((r) => r.json())
       .then((d) => setMemories(d.memories ?? []))
       .catch(() => setMemories([]));
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    fetch("/api/personas")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d.personas ?? [];
+        setPersonas(list);
+        // Honor a ?persona=<id> deep link; else default to Kai, else first.
+        setActivePersona((cur) => {
+          if (cur) return cur;
+          if (
+            requestedPersona &&
+            list.some((p: { id: string }) => p.id === requestedPersona)
+          ) {
+            return requestedPersona;
+          }
+          const kai = list.find(
+            (p: { builtin: boolean; name: string }) => p.builtin && p.name === "Kai"
+          );
+          return kai?.id ?? list[0]?.id ?? "";
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!activePersona) return;
+    setMemories(null);
+    load(activePersona);
+  }, [load, activePersona]);
+
+  const activeName =
+    personas.find((p) => p.id === activePersona)?.name ?? "Persona";
 
   async function add() {
     const content = draft.trim();
@@ -46,7 +82,11 @@ export default function MemoryClient() {
     const res = await fetch("/api/memory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, category }),
+      body: JSON.stringify({
+        content,
+        category,
+        personaId: activePersona,
+      }),
     });
     if (res.ok) {
       const d = await res.json();
@@ -64,13 +104,25 @@ export default function MemoryClient() {
   return (
     <div className="flex flex-1 flex-col">
       <PageHeader
-        title="Kai's Memory"
+        title="Persona Memory"
         jp="日記"
-        subtitle="The things Kai remembers about you. Edit anytime."
+        subtitle="What each persona remembers about you. Edit anytime."
       />
 
       <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8">
         <div className="mx-auto max-w-2xl">
+          {/* persona switcher */}
+          <div className="mb-4 flex flex-wrap gap-2">
+            {personas.map((p) => (
+              <PersonaTab
+                key={p.id}
+                active={activePersona === p.id}
+                onClick={() => setActivePersona(p.id)}
+                label={`${p.avatar} ${p.name}`}
+              />
+            ))}
+          </div>
+
           {/* diary book */}
           <div className="overflow-hidden rounded-2xl border-2 border-border shadow-md">
             {/* cover header */}
@@ -78,7 +130,7 @@ export default function MemoryClient() {
               <Kai size={36} />
               <div>
                 <p className="font-display text-lg font-extrabold">
-                  Kai&apos;s Diary
+                  {activeName}&apos;s Diary
                 </p>
                 <p className="font-jp text-xs text-white/80">
                   あなたのこと、おぼえています
@@ -161,10 +213,34 @@ export default function MemoryClient() {
           </div>
 
           <p className="mt-4 text-center text-xs text-muted">
-            Kai injects these notes into your conversations so she remembers you.
+            {activeName} injects these notes into your conversations to remember
+            you.
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+function PersonaTab({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`whitespace-nowrap rounded-full border-2 px-3 py-1.5 text-sm font-bold transition-colors ${
+        active
+          ? "border-indigo-ai bg-indigo-ai text-white"
+          : "border-border text-muted hover:border-indigo-ai hover:text-indigo-ai"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

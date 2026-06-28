@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { isLexical, type CachedToken, type CardStatus } from "@/lib/types";
+import { type CachedToken, type CardStatus } from "@/lib/types";
 
 export async function GET(req: Request) {
   const user = await getCurrentUser();
@@ -64,12 +64,6 @@ export async function POST(req: Request) {
 
   if (!entry?.dictForm) {
     return NextResponse.json({ error: "Missing word." }, { status: 400 });
-  }
-  if (!isLexical(entry.pos as never)) {
-    return NextResponse.json(
-      { error: "That word type can't be saved as a flashcard." },
-      { status: 400 }
-    );
   }
 
   const existing = await prisma.flashcard.findUnique({

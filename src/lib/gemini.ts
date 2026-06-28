@@ -2,6 +2,7 @@
 // are sent directly to Google from the browser — never to our server.
 
 import type { KaiResponse } from "./types";
+import { normalizeCorrection } from "./types";
 import { getModel, getMaxOutputTokens, getAutoFallback, modelFallbackOrder } from "./model-config";
 import { keysForRequest, hasAnyKey } from "./api-keys";
 
@@ -14,44 +15,83 @@ export type PromptContext = {
   recentTurns: { role: "kai" | "user"; content: string }[];
 };
 
-function systemPrompt(ctx: PromptContext): string {
+function systemPrompt(ctx: PromptContext, persona?: string): string {
   const memo =
     ctx.memories.length > 0
-      ? `\nThings you remember about the user:\n${ctx.memories.map((m) => `- ${m}`).join("\n")}`
+      ? `\n\n======================== WHAT YOU KNOW ABOUT THE USER ========================\nThese are durable facts you remember about the user from past sessions. Treat them as true and known to you RIGHT NOW — do NOT say you don't remember or that you can't find them in the conversation. Use them naturally when relevant:\n${ctx.memories.map((m) => `- ${m}`).join("\n")}`
       : "";
   const reinforce =
     ctx.reinforce.length > 0
       ? `\nDeliberately reuse these words the user is learning: ${ctx.reinforce.join(", ")}.`
       : "";
 
-  return `You are Kai, a cheerful, playful Japanese tutor and close friend. You are warm, a little bubbly, and genuinely curious about the user — you use the occasional emoji or kaomoji (like (｡•ᴗ•｡), ✨, 〜), gentle exclamations, and a light teasing-but-kind tone. You are fluent in English and Japanese.
+  const identity =
+    persona ??
+    "You are Kai, a cheerful, playful Japanese tutor and close friend. You are warm, playful, encouraging, and genuinely curious about the user. You occasionally use emoji or kaomoji (✨ (｡•ᴗ•｡) 〜) but never overdo them. You are fluent in English and Japanese.";
 
-Keep the conversation ALIVE: never give a dead-end reply. End most turns with a small follow-up question, a reaction, or an invitation to say more, so the user always has something to respond to. React to what they said before moving on. Be encouraging about their Japanese.
+  return `${identity}
 
-CRITICAL language rule — match the user's language and intent:
-- If the user writes in English, reply primarily in ENGLISH. Do not reply in pure Japanese to an English message.
-- If the user asks "how do I say X", "what does X mean", "why", or asks for any explanation/help → answer in ENGLISH, then give the Japanese word/phrase as an example (with reading + romaji). Explain it like a friendly tutor.
-- Only reply primarily in Japanese when the user is actually writing to you in Japanese.
-- Mixing is good: an English explanation plus a Japanese example, or a Japanese sentence followed by a short English note.
+Your primary goal is to help the user SPEAK natural Japanese.
 
-Example — user: "how do i say potato" → reply something like: "Ooh, good one! You'd say ジャガイモ (jagaimo) 🥔 — like ジャガイモが好きです (I like potatoes). Do you like them? 😋"
+Keep the conversation alive:
+- Never give dead-end replies.
+- Always react to what the user said first.
+- End most replies with a short follow-up question or invitation.
+- Encourage the user naturally.
 
-Stay around JLPT ${ctx.level} level for the Japanese you use. The user knows about ${ctx.knownCount} words. Keep replies short and friendly (1-3 sentences). When you introduce Japanese, prefer at most ${ctx.newWordBudget} new word(s) beyond what's needed to answer.${reinforce}${memo}
+======================== LANGUAGE RULES ========================
+Determine the user's primary language.
+- If the message is mostly English, reply mostly in English.
+- If the message is mostly Japanese, reply mostly in Japanese.
+- If the message is mixed, reply mainly in English while naturally including Japanese examples.
 
-Respond ONLY with JSON matching this schema:
+If the user asks "how do I say...", "what does X mean?", "why?", "explain...", or asks about grammar or vocabulary → reply primarily in English, then provide Japanese examples with kana + romaji. Never answer an English question entirely in Japanese.
+
+======================== GRAMMAR CORRECTION (VERY IMPORTANT) ========================
+Whenever the user writes ANY Japanese (even one word), ALWAYS check it. Do NOT skip corrections. Put your feedback in the "correction" object, NOT only in the reply.
+
+Classify the user's Japanese as one of: "correct", "unnatural", "incorrect". If the user's message has no Japanese to judge, set status to "none".
+
+If it is NOT fully correct:
+1. Explain the mistake in simple English (correction.explanation).
+2. Give the corrected Japanese (correction.corrected).
+3. Give romaji (correction.romaji).
+4. If a more natural expression exists, give it (correction.natural).
+Then continue the conversation normally in "reply".
+
+Always check: particles, verb forms, adjective forms, copula, word order, tense, question forms, vocabulary misuse, unnatural phrasing, and incomplete sentences. Never pretend incorrect Japanese is correct just because the meaning is understandable. If the Japanese is fully correct, set status "correct" and leave the other correction fields empty. If the user writes only a single Japanese word, explain its meaning in the reply instead of correcting it, and set status "none".
+
+======================== TEACHING STYLE ========================
+Teach like a friendly tutor. Keep explanations short — use examples, not long grammar lectures. Stay around JLPT ${ctx.level}. The user currently knows about ${ctx.knownCount} words. Introduce at most ${ctx.newWordBudget} NEW Japanese word(s) unless required.${reinforce}${memo}
+
+======================== OUTPUT FORMAT ========================
+Respond ONLY with valid JSON matching this schema:
 {
-  "reply": "<your reply — match the user's language as described above; keep it playful and end with something that keeps the chat going>",
+  "reply": "<friendly conversational reply — match the user's language; end with something that keeps the chat going>",
+  "correction": { "status": "correct|unnatural|incorrect|none", "explanation": "<empty if none>", "corrected": "<corrected Japanese, empty if none>", "romaji": "<romaji, empty if none>", "natural": "<more natural version, empty if none>" },
   "english": "<English translation/gloss of any Japanese in your reply; empty string if the reply is already fully English>",
   "tokens": [{ "surface": "<as written>", "reading": "<kana, or surface if not Japanese>", "romaji": "<romaji, or surface if not Japanese>", "meaning": "<English meaning, or surface if not Japanese>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|other", "dictForm": "<dictionary form>" }],
-  "newWords": ["<dictForm of any NEW Japanese words you introduced>"]
+  "newWords": ["<dictForm of any NEW Japanese words you introduced>"],
+  "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn that's worth remembering long-term — e.g. 'Has a cat named Pochi', 'Is studying for JLPT N4', 'Works as a nurse'. Only stable facts, NOT small talk or questions. Empty array if nothing noteworthy. Phrase each as a short third-person note.>"]
 }
-Tokenize your ENTIRE reply into "tokens" in order, including English words, emoji, and punctuation (use pos "other" for non-Japanese). Be accurate with Japanese readings.`;
+Tokenize your ENTIRE reply into "tokens" in order, including English words, emoji, and punctuation (use pos "other" for non-Japanese). The "tokens" array must NEVER be empty — it must cover every word of your reply so the user can tap any Japanese word for its meaning. Be accurate with Japanese readings, dictionary forms, and romaji.`;
 }
 
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     reply: { type: "string" },
+    correction: {
+      type: "object",
+      properties: {
+        status: { type: "string" },
+        explanation: { type: "string" },
+        corrected: { type: "string" },
+        romaji: { type: "string" },
+        natural: { type: "string" },
+      },
+      required: ["status", "explanation", "corrected", "romaji", "natural"],
+    },
     english: { type: "string" },
     tokens: {
       type: "array",
@@ -69,11 +109,67 @@ const RESPONSE_SCHEMA = {
       },
     },
     newWords: { type: "array", items: { type: "string" } },
+    memorySuggestions: { type: "array", items: { type: "string" } },
   },
-  required: ["reply", "english", "tokens", "newWords"],
+  required: ["reply", "correction", "english", "tokens", "newWords"],
 };
 
 type GeminiContent = { role: string; parts: { text: string }[] };
+
+/** Extract a top-level JSON string field value, tolerating truncation/escapes.
+ *  Returns null if the key/opening quote isn't present. Exported for tests. */
+export function extractJsonString(text: string, key: string): string | null {
+  const marker = `"${key}"`;
+  const at = text.indexOf(marker);
+  if (at === -1) return null;
+  // Find the opening quote of the value after the colon.
+  let i = text.indexOf(":", at + marker.length);
+  if (i === -1) return null;
+  i++;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  if (text[i] !== '"') return null;
+  i++; // past opening quote
+  let out = "";
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "\\") {
+      // Keep escape sequences intact for JSON.parse to resolve.
+      const next = text[i + 1];
+      if (next === undefined) break; // truncated mid-escape
+      out += ch + next;
+      i += 2;
+      continue;
+    }
+    if (ch === '"') {
+      try {
+        return JSON.parse(`"${out}"`) as string;
+      } catch {
+        return null;
+      }
+    }
+    out += ch;
+    i++;
+  }
+  return null; // never hit a closing quote — value was truncated
+}
+
+/** Last-ditch recovery when the model's JSON is cut off (usually mid-`tokens`).
+ *  Salvages `reply`/`english` so the user still sees the message; drops tokens
+ *  (no tap-to-translate for that message) rather than failing the whole turn.
+ *  Exported for tests. */
+export function salvageKaiResponse(text: string): KaiResponse | null {
+  const reply = extractJsonString(text, "reply");
+  if (!reply) return null;
+  const english = extractJsonString(text, "english") ?? "";
+  return {
+    reply,
+    english,
+    correction: null,
+    tokens: [],
+    newWords: [],
+    memorySuggestions: [],
+  };
+}
 
 /** Shared request loop: try each model, rotate keys on rate limit, parse the
  *  structured KaiResponse. Used by both reactive and proactive turns. */
@@ -128,13 +224,24 @@ async function executeKaiTurn(
         try {
           parsed = JSON.parse(text) as KaiResponse;
         } catch {
-          throw new Error("TRUNCATED");
+          // The model usually truncates mid-`tokens` (the largest field). Try
+          // to salvage the reply text so the user still gets the message.
+          const salvaged = salvageKaiResponse(text);
+          if (!salvaged) throw new Error("TRUNCATED");
+          salvaged.usedModel = model;
+          return salvaged;
         }
         if (!parsed.reply || !Array.isArray(parsed.tokens)) {
           throw new Error("Malformed response from Gemini.");
         }
         parsed.english = parsed.english ?? "";
         parsed.newWords = parsed.newWords ?? [];
+        parsed.memorySuggestions = Array.isArray(parsed.memorySuggestions)
+          ? parsed.memorySuggestions.filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0
+            )
+          : [];
+        parsed.correction = normalizeCorrection(parsed.correction);
         parsed.usedModel = model;
         return parsed;
       }
@@ -194,6 +301,22 @@ export async function chatWithKai(
   return executeKaiTurn(systemPrompt(ctx), contents);
 }
 
+/** A 1:1 chat turn with a custom persona (BYOK, client-side). Same rich payload
+ *  as Kai — only the identity in the system prompt changes. */
+export async function chatWithPersona(
+  userMessage: string,
+  ctx: PromptContext,
+  personaPersonality: string,
+  history: { role: "user" | "model"; content: string }[] = []
+): Promise<KaiResponse> {
+  const contents: GeminiContent[] = [
+    ...history.map((t) => ({ role: t.role, parts: [{ text: t.content }] })),
+    { role: "user", parts: [{ text: userMessage }] },
+  ];
+
+  return executeKaiTurn(systemPrompt(ctx, personaPersonality), contents);
+}
+
 /** Reasons Kai might message first while the user is online. */
 export type ProactiveKind = "opener" | "followup";
 
@@ -204,22 +327,30 @@ export type ProactiveKind = "opener" | "followup";
  */
 export async function proactiveKaiMessage(
   ctx: PromptContext,
-  opts: { kind: ProactiveKind; quoted?: QuotedMessage } = { kind: "opener" }
+  opts: { kind: ProactiveKind; quoted?: QuotedMessage } = { kind: "opener" },
+  history: { role: "user" | "model"; content: string }[] = []
 ): Promise<KaiResponse> {
   const instruction =
     opts.kind === "followup"
-      ? `[The user hasn't replied yet. Send ONE short, natural follow-up that adds to what you just said — a little aside, a related thought, or a gentle nudge. Don't repeat yourself or pressure them. Keep it light.]`
-      : `[The user is online but quiet. Reach out FIRST with ONE short, friendly opener — react to something you remember about them, a word they're learning, or just say hi. Never naggy. End with something easy to respond to.]`;
+      ? `[The user hasn't replied yet. Send ONE short, natural follow-up that adds to what you JUST said above — a little aside, a related thought, or a gentle nudge. Do NOT repeat or restate anything you already said. Keep it light.]`
+      : `[The user is online but quiet. Reach out FIRST with ONE short, friendly opener. Look at the recent conversation above: do NOT repeat or paraphrase your last message. If you just talked about something, either continue it naturally or pick a fresh topic / ask how they're doing. Never naggy. End with something easy to respond to.]`;
 
   const quote = opts.quoted
     ? ` You're bringing up this earlier message: "${opts.quoted.content}".`
     : "";
 
+  // Prefer the real conversation transcript passed by the caller; fall back to
+  // the context's recentTurns so the opener is grounded in what was just said.
+  const turns =
+    history.length > 0
+      ? history
+      : ctx.recentTurns.map((t) => ({
+          role: (t.role === "user" ? "user" : "model") as "user" | "model",
+          content: t.content,
+        }));
+
   const contents: GeminiContent[] = [
-    ...ctx.recentTurns.map((t) => ({
-      role: t.role === "user" ? "user" : "model",
-      parts: [{ text: t.content }],
-    })),
+    ...turns.map((t) => ({ role: t.role, parts: [{ text: t.content }] })),
     { role: "user", parts: [{ text: instruction + quote }] },
   ];
 

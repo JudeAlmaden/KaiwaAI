@@ -1,8 +1,8 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { dayKeyFor } from "./day";
 import { canReachOut, moodFor, MOOD_PROMPT } from "./outreach";
 import { generateWithStoredKey } from "./gemini-server";
+import { resolvePersonaId, ensurePersonaConversation } from "./personas-server";
 
 function localParts(now: Date, tz: string) {
   const fmt = new Intl.DateTimeFormat("en-GB", {
@@ -22,6 +22,10 @@ export async function runOutreach(now = new Date()): Promise<OutreachOutcome[]> 
   const users = await prisma.user.findMany({
     where: { outreachMode: { not: "off" }, geminiKeyEnc: { not: null } },
   });
+
+  // Outreach is delivered into each user's 1:1 Kai conversation.
+  const kaiId = await resolvePersonaId("kai");
+  if (!kaiId) return [];
 
   const results: OutreachOutcome[] = [];
 
@@ -82,10 +86,22 @@ Output just the message text.`;
       continue;
     }
 
-    const dayKey = dayKeyFor(now, user.timezone);
+    // Deliver into the user's 1:1 Kai conversation (creating it if needed).
+    const convId = await ensurePersonaConversation(user.id, kaiId, "Kai");
+    const personaMember = await prisma.groupMember.findFirst({
+      where: { groupId: convId, kind: "persona", personaId: kaiId },
+      select: { id: true },
+    });
+
     await prisma.$transaction([
-      prisma.message.create({
-        data: { userId: user.id, role: "kai", content: text, dayKey },
+      prisma.groupMessage.create({
+        data: {
+          groupId: convId,
+          memberId: personaMember?.id ?? null,
+          senderName: "Kai",
+          senderKind: "persona",
+          content: text,
+        },
       }),
       prisma.user.update({
         where: { id: user.id },

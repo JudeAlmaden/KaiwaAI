@@ -45,6 +45,129 @@ model User {
   flashcards   Flashcard[]
   daySummaries DaySummary[]
   memories     Memory[]
+
+  // ── Social: friends, groups, personas ──
+  personas        Persona[]
+  ownedGroups     Group[]          @relation("GroupOwner")
+  groupMemberships GroupMember[]
+  groupMessages   GroupMessage[]
+  friendRequestsSent     Friendship[] @relation("FriendRequester")
+  friendRequestsReceived Friendship[] @relation("FriendAddressee")
+}
+
+// A reusable AI character. Kai ships as a built-in (seeded with a null userId);
+// users can also create their own personas to drop into group chats.
+model Persona {
+  id          String  @id @default(cuid())
+  // Null userId = built-in/global persona (e.g. Kai). Otherwise the creator.
+  userId      String?
+  user        User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  // Short tagline shown in pickers, e.g. "Cheerful Japanese tutor".
+  blurb       String  @default("")
+  // The persona's voice/role — injected into the system prompt.
+  personality String
+  avatar      String  @default("🤖") // emoji avatar for now
+  builtin     Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  groupMembers GroupMember[]
+  memories     Memory[]
+
+  @@index([userId])
+}
+
+// Symmetric friendship modeled as a directed request that gets accepted.
+model Friendship {
+  id          String @id @default(cuid())
+  requesterId String
+  requester   User   @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User   @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  status      String @default("pending") // pending | accepted
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+// A conversation. `kind` distinguishes a 1:1 persona chat, a user↔user DM, and
+// a multi-person group. AI-containing conversations get the rich learning
+// features (tokens/english/correction). The owner provides the API key.
+model Group {
+  id          String @id @default(cuid())
+  name        String
+  kind        String @default("group") // "persona" | "dm" | "group"
+  ownerId     String
+  owner       User   @relation("GroupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Owner's Gemini key(s) for this conversation, encrypted at rest
+  // (AES-256-GCM). JSON array of keys. Null = no AI replies.
+  apiKeyEnc   String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members  GroupMember[]
+  messages GroupMessage[]
+
+  @@index([ownerId])
+}
+
+// A participant in a group: either a human user OR an AI persona.
+model GroupMember {
+  id        String @id @default(cuid())
+  groupId   String
+  group     Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Exactly one of userId / personaId is set (kind disambiguates).
+  kind      String // "user" | "persona"
+  // Invite state for human members. Personas are always "accepted".
+  // The group owner is auto-accepted on creation.
+  status    String  @default("accepted") // pending | accepted
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personaId String?
+  persona   Persona? @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  messages GroupMessage[]
+
+  @@unique([groupId, userId])
+  @@unique([groupId, personaId])
+  @@index([groupId])
+}
+
+model GroupMessage {
+  id        String @id @default(cuid())
+  groupId   String
+  group     Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // The author. senderUserId set for humans, senderPersonaId for AI.
+  memberId      String?
+  member        GroupMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  senderUserId  String?
+  senderUser    User?        @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderName    String       // denormalized display name (human name or persona name)
+  senderKind    String       // "user" | "persona"
+
+  content   String
+  // Rich learning fields, populated for AI (persona) messages — same as Kai's
+  // 1:1 chat. JSON strings; null for human messages.
+  english    String?
+  tokens     String?
+  correction String?
+  createdAt DateTime @default(now())
+
+  @@index([groupId, createdAt])
 }
 
 model Message {
@@ -60,6 +183,10 @@ model Message {
 
   // Cached tokenization for tap-to-translate (JSON string of CachedToken[]).
   tokens  String?
+
+  // Grammar feedback on the user's Japanese, attached to Kai's reply for that
+  // turn (JSON string of Correction). Null when there's nothing to show.
+  correction String?
 
   // Whether this Kai message was sent proactively (Kai messaging first, no
   // preceding user turn) rather than as a direct reply.
@@ -140,6 +267,11 @@ model Memory {
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Which persona this memory belongs to (scoped per user). Null = Kai, the
+  // default tutor (preserves pre-persona memories without migration).
+  personaId  String?
+  persona    Persona? @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
   content    String
   category   String   @default("fact") // profile | preference | fact | goal | relationship
   importance Int      @default(1) // 1..5
@@ -149,4 +281,5 @@ model Memory {
   updatedAt  DateTime @updatedAt
 
   @@index([userId, category])
+  @@index([userId, personaId])
 }

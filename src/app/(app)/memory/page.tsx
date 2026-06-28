@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import MemoryClient from "./MemoryClient";
 
 export default function MemoryPage() {
-  return <MemoryClient />;
+  return (
+    <Suspense>
+      <MemoryClient />
+    </Suspense>
+  );
 }

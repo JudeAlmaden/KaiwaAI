@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SignOut } from "@phosphor-icons/react/dist/ssr";
+import { clearAllChatCache } from "@/lib/chat-cache";
 
 export default function LogoutButton({
   variant = "text",
@@ -15,9 +17,7 @@ export default function LogoutButton({
     setLoading(true);
     await fetch("/api/auth/logout", { method: "POST" });
     // Clear any client-side cache tied to the previous user.
-    try {
-      localStorage.removeItem("kaiwa_chat_cache");
-    } catch {}
+    clearAllChatCache();
     router.push("/login");
     router.refresh();
   }
@@ -29,7 +29,7 @@ export default function LogoutButton({
         disabled={loading}
         className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-border px-3 py-2.5 text-sm font-bold text-muted transition-colors hover:border-sakura/50 hover:bg-sakura/5 hover:text-sakura disabled:opacity-60"
       >
-        <span aria-hidden>↩</span>
+        <SignOut size={18} weight="bold" aria-hidden />
         {loading ? "Logging out…" : "Log out"}
       </button>
     );

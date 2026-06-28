@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { resolvePersonaId } from "@/lib/personas-server";
 
 // Builds the prompt context: level + reinforce words + knownCount + memories
 // + recent turns. Never returns the full known-words list (stays flat-sized).
-export async function GET() {
+// `personaId` scopes which persona's memory is loaded.
+export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const sp = new URL(req.url).searchParams;
+  const personaId = await resolvePersonaId(sp.get("personaId"));
 
   const now = new Date();
 
@@ -25,7 +30,7 @@ export async function GET() {
     }),
     prisma.flashcard.count({ where: { userId: user.id, status: "known" } }),
     prisma.memory.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, personaId },
       orderBy: [{ importance: "desc" }, { updatedAt: "desc" }],
       take: 12,
       select: { content: true },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { isLexical, type CachedToken } from "@/lib/types";
+import { type CachedToken } from "@/lib/types";
 
 type SaveState = "idle" | "saving" | "saved" | "exists";
 
@@ -35,7 +35,6 @@ export default function WordToken({
     return <span>{token.surface}</span>;
   }
 
-  const lexical = isLexical(token.pos);
   const alreadySaved = savedWords.has(token.dictForm) || state === "saved";
 
   async function add() {
@@ -82,23 +81,21 @@ export default function WordToken({
             {token.pos}
           </span>
 
-          {lexical && (
-            <span className="mt-2 block">
-              {alreadySaved || state === "exists" ? (
-                <span className="flex items-center gap-1 text-xs font-bold text-mint">
-                  ✓ in your review deck
-                </span>
-              ) : (
-                <button
-                  onClick={add}
-                  disabled={state === "saving"}
-                  className="w-full rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
-                >
-                  {state === "saving" ? "Adding…" : "+ Add to review"}
-                </button>
-              )}
-            </span>
-          )}
+          <span className="mt-2 block">
+            {alreadySaved || state === "exists" ? (
+              <span className="flex items-center gap-1 text-xs font-bold text-mint">
+                ✓ in your review deck
+              </span>
+            ) : (
+              <button
+                onClick={add}
+                disabled={state === "saving"}
+                className="w-full rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
+              >
+                {state === "saving" ? "Adding…" : "+ Add to review"}
+              </button>
+            )}
+          </span>
         </span>
       )}
     </span>

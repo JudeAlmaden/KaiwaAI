@@ -41,6 +41,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Shrink the layout viewport when the soft keyboard opens so the chat
+  // composer stays visible above it (Android/Chrome; iOS uses dvh fallback).
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

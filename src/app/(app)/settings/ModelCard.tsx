@@ -9,6 +9,8 @@ import {
   setAutoSaveWords,
   getAutoFallback,
   setAutoFallback,
+  getAutoMemory,
+  setAutoMemory,
 } from "@/lib/model-config";
 import { Chip, Toggle, Surface } from "../ui";
 
@@ -16,11 +18,13 @@ export default function ModelCard() {
   const [tokens, setTokensState] = useState<number>(0);
   const [autoSave, setAutoSaveState] = useState(false);
   const [fallback, setFallbackState] = useState(true);
+  const [autoMemory, setAutoMemoryState] = useState(false);
 
   useEffect(() => {
     setTokensState(getMaxOutputTokens());
     setAutoSaveState(getAutoSaveWords());
     setFallbackState(getAutoFallback());
+    setAutoMemoryState(getAutoMemory());
   }, []);
 
   function chooseTokens(n: number) {
@@ -38,6 +42,12 @@ export default function ModelCard() {
     const next = !fallback;
     setAutoFallback(next);
     setFallbackState(next);
+  }
+
+  function toggleAutoMemory() {
+    const next = !autoMemory;
+    setAutoMemory(next);
+    setAutoMemoryState(next);
   }
 
   return (
@@ -84,6 +94,19 @@ export default function ModelCard() {
           </p>
         </div>
         <Toggle on={autoSave} onClick={toggleAutoSave} />
+      </div>
+
+      <div className="mt-5 flex items-start justify-between gap-4 border-t-2 border-border pt-4">
+        <div>
+          <p className="text-sm font-bold">Auto-save memories</p>
+          <p className="text-xs text-muted">
+            When on, durable facts an AI notices about you are saved to its
+            memory automatically. Off (default): they appear as{" "}
+            <span className="font-bold">Remember this?</span> suggestions you
+            tap to keep.
+          </p>
+        </div>
+        <Toggle on={autoMemory} onClick={toggleAutoMemory} />
       </div>
     </Surface>
   );
