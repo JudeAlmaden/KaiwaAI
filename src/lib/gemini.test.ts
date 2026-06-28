@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { extractJsonString, salvageKaiResponse } from "./gemini";
+import { extractJsonString, salvageKaiResponse, stripRomajiShadows } from "./gemini";
+import type { KaiResponse } from "./types";
+
+function resp(reply: string, tokens: KaiResponse["tokens"] = []): KaiResponse {
+  return {
+    reply,
+    english: "",
+    correction: null,
+    tokens,
+    newWords: [],
+    memorySuggestions: [],
+  };
+}
 
 describe("extractJsonString", () => {
   it("reads a complete top-level string field", () => {
@@ -51,5 +63,44 @@ describe("salvageKaiResponse", () => {
   it("returns null when even the reply is unrecoverable", () => {
     expect(salvageKaiResponse('{"repl')).toBeNull();
     expect(salvageKaiResponse('{"reply":"unterminated')).toBeNull();
+  });
+});
+
+describe("stripRomajiShadows", () => {
+  it("strips a romaji shadow right after a kanji/kana word", () => {
+    const r = resp("ありがとう (arigatou) for that!");
+    stripRomajiShadows(r);
+    expect(r.reply).toBe("ありがとう for that!");
+  });
+
+  it("strips a shadow that sits after a closing bracket 」", () => {
+    const r = resp("She said 「言います」(iimasu) softly.");
+    stripRomajiShadows(r);
+    expect(r.reply).toBe("She said 「言います」 softly.");
+  });
+
+  it("strips full-width parens too", () => {
+    const r = resp("素敵（suteki）ですね");
+    stripRomajiShadows(r);
+    expect(r.reply).toBe("素敵ですね");
+  });
+
+  it("keeps a genuine English aside after Japanese", () => {
+    const r = resp("私 (this is fine) likes it");
+    stripRomajiShadows(r);
+    expect(r.reply).toBe("私 (this is fine) likes it");
+  });
+
+  it("removes shadow tokens from the tokens array", () => {
+    const r = resp("ありがとう (arigatou)!", [
+      { surface: "ありがとう", reading: "ありがとう", romaji: "arigatou", meaning: "thanks", pos: "expression", dictForm: "ありがとう" },
+      { surface: " ", reading: " ", romaji: " ", meaning: " ", pos: "other", dictForm: " " },
+      { surface: "(", reading: "(", romaji: "(", meaning: "(", pos: "other", dictForm: "(" },
+      { surface: "arigatou", reading: "arigatou", romaji: "arigatou", meaning: "thanks", pos: "other", dictForm: "arigatou" },
+      { surface: ")", reading: ")", romaji: ")", meaning: ")", pos: "other", dictForm: ")" },
+      { surface: "!", reading: "!", romaji: "!", meaning: "!", pos: "other", dictForm: "!" },
+    ]);
+    stripRomajiShadows(r);
+    expect(r.tokens.map((t) => t.surface)).toEqual(["ありがとう", " ", "!"]);
   });
 });

@@ -10,9 +10,10 @@ async function membership(userId: string, groupId: string) {
   });
 }
 
-// GET: group detail — members + recent messages. Members only.
+// GET: group detail — members + a page of messages (newest first, paginated).
+// Query: ?before=<messageId> loads the page of older messages before that id.
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
@@ -34,11 +35,20 @@ export async function GET(
   if (!(await membership(user.id, id)))
     return NextResponse.json({ error: "Not a member." }, { status: 403 });
 
-  const messages = await prisma.groupMessage.findMany({
+  const PAGE_SIZE = 30;
+  const before = new URL(req.url).searchParams.get("before");
+
+  // Pull newest-first so we always get the most recent window, then fetch one
+  // extra to know whether older messages remain. `before` walks further back.
+  const rows = await prisma.groupMessage.findMany({
     where: { groupId: id },
-    orderBy: { createdAt: "asc" },
-    take: 100,
+    orderBy: { createdAt: "desc" },
+    take: PAGE_SIZE + 1,
+    ...(before ? { cursor: { id: before }, skip: 1 } : {}),
   });
+  const hasMore = rows.length > PAGE_SIZE;
+  // Drop the probe row, then flip back to chronological (ascending) order.
+  const page = (hasMore ? rows.slice(0, PAGE_SIZE) : rows).reverse();
 
   const personaMember = group.members.find((m) => m.kind === "persona");
   // Persona conversations use client-side BYOK generation: the persona's
@@ -72,7 +82,8 @@ export async function GET(
           isMe: m.userId === user.id,
         })),
     },
-    messages: messages.map((m) => ({
+    hasMore,
+    messages: page.map((m) => ({
       id: m.id,
       senderName: m.senderName,
       senderKind: m.senderKind,

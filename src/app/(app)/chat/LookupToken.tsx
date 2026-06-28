@@ -107,7 +107,7 @@ export default function LookupToken({
                     disabled={save === "saving"}
                     className="w-full rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
                   >
-                    {save === "saving" ? "Adding…" : "+ Add to review"}
+                    {save === "saving" ? "Adding…" : "+ Add to vocabulary"}
                   </button>
                 )}
               </span>

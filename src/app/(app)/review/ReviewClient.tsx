@@ -69,24 +69,26 @@ export default function ReviewClient() {
 
   const grade = useCallback(
     async (g: number) => {
-      setQueue((q) => {
-        if (q.length === 0) return q;
-        const [card, ...rest] = q;
-        fetch("/api/flashcards/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cardId: card.id, grade: g }),
-        }).catch(() => {});
-        setTally((t) => ({
-          again: t.again + (g === 0 ? 1 : 0),
-          good: t.good + (g > 0 ? 1 : 0),
-        }));
-        if (rest.length === 0) setPhase("done");
-        return rest;
-      });
+      const card = queue[0];
+      if (!card) return;
+
+      fetch("/api/flashcards/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: card.id, grade: g }),
+      }).catch(() => {});
+
+      setTally((t) => ({
+        again: t.again + (g === 0 ? 1 : 0),
+        good: t.good + (g > 0 ? 1 : 0),
+      }));
+
+      const rest = queue.slice(1);
+      setQueue(rest);
       setFlipped(false);
+      if (rest.length === 0) setPhase("done");
     },
-    []
+    [queue]
   );
 
   // keyboard shortcuts during a session
@@ -224,6 +226,9 @@ export default function ReviewClient() {
 
   // ── SESSION ──────────────────────────────────────────────────────────────
   const card = queue[0];
+  // Guard against a transient empty queue between the last grade and the
+  // phase flip to "done" — rendering the card below assumes one exists.
+  if (!card) return null;
   const doneCount = total - queue.length;
   const pct = total ? (doneCount / total) * 100 : 0;
 

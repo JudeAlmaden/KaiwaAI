@@ -132,7 +132,7 @@ export default function LookupBox({ onAdded }: { onAdded: () => void }) {
                   onClick={add}
                   className="rounded-full bg-indigo-ai px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft"
                 >
-                  + Add to review
+                  + Add to vocabulary
                 </button>
               )}
             </div>

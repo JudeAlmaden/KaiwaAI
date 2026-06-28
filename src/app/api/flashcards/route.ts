@@ -66,6 +66,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing word." }, { status: 400 });
   }
 
+  // sourceMessageId is a FK to Message. Words tapped in persona/group chats
+  // carry a GroupMessage id, which would violate the constraint — so only keep
+  // it when it actually points at a Message we can reference.
+  let sourceMessageId: string | null = body.sourceMessageId ?? null;
+  if (sourceMessageId) {
+    const ref = await prisma.message.findUnique({
+      where: { id: sourceMessageId },
+      select: { id: true },
+    });
+    if (!ref) sourceMessageId = null;
+  }
+
   const existing = await prisma.flashcard.findUnique({
     where: { userId_word: { userId: user.id, word: entry.dictForm } },
   });
@@ -81,7 +93,7 @@ export async function POST(req: Request) {
       meaning: entry.meaning,
       partOfSpeech: entry.pos,
       status: "learning" as CardStatus,
-      sourceMessageId: body.sourceMessageId ?? null,
+      sourceMessageId,
     },
   });
 

@@ -92,7 +92,7 @@ export default function WordToken({
                 disabled={state === "saving"}
                 className="w-full rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
               >
-                {state === "saving" ? "Adding…" : "+ Add to review"}
+                {state === "saving" ? "Adding…" : "+ Add to vocabulary"}
               </button>
             )}
           </span>

@@ -90,7 +90,7 @@ export default function ModelCard() {
           <p className="text-xs text-muted">
             When on, every word Kai introduces is added to your deck. Off
             (default): only words you tap{" "}
-            <span className="font-bold">+ Add to review</span> are saved.
+            <span className="font-bold">+ Add to vocabulary</span> are saved.
           </p>
         </div>
         <Toggle on={autoSave} onClick={toggleAutoSave} />

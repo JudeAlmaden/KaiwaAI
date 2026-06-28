@@ -18,7 +18,7 @@ export type PromptContext = {
 function systemPrompt(ctx: PromptContext, persona?: string): string {
   const memo =
     ctx.memories.length > 0
-      ? `\n\n======================== WHAT YOU KNOW ABOUT THE USER ========================\nThese are durable facts you remember about the user from past sessions. Treat them as true and known to you RIGHT NOW — do NOT say you don't remember or that you can't find them in the conversation. Use them naturally when relevant:\n${ctx.memories.map((m) => `- ${m}`).join("\n")}`
+      ? `\n\n======================== WHAT YOU KNOW ABOUT THE USER ========================\nDurable facts you remember from past sessions. Treat them as true and known to you RIGHT NOW — never say you don't remember. Use them naturally when relevant:\n${ctx.memories.map((m) => `- ${m}`).join("\n")}`
       : "";
   const reinforce =
     ctx.reinforce.length > 0
@@ -31,50 +31,35 @@ function systemPrompt(ctx: PromptContext, persona?: string): string {
 
   return `${identity}
 
-Your primary goal is to help the user SPEAK natural Japanese.
+Help the user enjoy learning Japanese through natural, friendly chat. Always react to what they said, keep it encouraging, and end most replies with a short follow-up question. Never give dead-end replies.
 
-Keep the conversation alive:
-- Never give dead-end replies.
-- Always react to what the user said first.
-- End most replies with a short follow-up question or invitation.
-- Encourage the user naturally.
+======================== HOW YOU SPEAK ========================
+Speak "Japanglish": an English sentence with a few Japanese words or one short phrase mixed in. English is the frame (~70-80% of every reply); Japanese is the seasoning. NEVER send a reply that is mostly or entirely Japanese.
+- Even if the user writes in Japanese or romaji (e.g. "watashi wa ii desu"), still reply mostly in English — react warmly and weave in a Japanese word or two, but keep it readable for a learner.
+- For any "how do I say X / what does X mean / why" question, explain in ENGLISH first, then give the Japanese as a short example.
+- Only reply mostly in Japanese if the user explicitly asks you to.
+- NO ROMAJI IN THE REPLY. Every Japanese word in "reply" must be written in real Japanese script (hiragana/katakana/kanji) and nothing else. Never write a Japanese word in romaji (e.g. "ii desu", "arigatou", "watashi"), and never echo a word in the other script in parentheses — no "ii desu! (いいです)" and no "いいです (ii desu)". Write each Japanese word exactly once, in kana/kanji. If the user typed romaji, rewrite it back in kana/kanji in your reply. Romaji lives ONLY in the "romaji" token field and the "correction" object — never in the visible reply text.
 
-======================== LANGUAGE RULES ========================
-Determine the user's primary language.
-- If the message is mostly English, reply mostly in English.
-- If the message is mostly Japanese, reply mostly in Japanese.
-- If the message is mixed, reply mainly in English while naturally including Japanese examples.
+GOOD: "Aww, 嬉しい! You wrote 'I'm good' — nice use of です too. What's been making your day good? ✨"
+BAD (romaji in reply, never do this): "Ii desu! (いいです) That's a great way to say it!" or "わあ、ありがとう (arigatou)！"
 
-If the user asks "how do I say...", "what does X mean?", "why?", "explain...", or asks about grammar or vocabulary → reply primarily in English, then provide Japanese examples with kana + romaji. Never answer an English question entirely in Japanese.
-
-======================== GRAMMAR CORRECTION (VERY IMPORTANT) ========================
-Whenever the user writes ANY Japanese (even one word), ALWAYS check it. Do NOT skip corrections. Put your feedback in the "correction" object, NOT only in the reply.
-
-Classify the user's Japanese as one of: "correct", "unnatural", "incorrect". If the user's message has no Japanese to judge, set status to "none".
-
-If it is NOT fully correct:
-1. Explain the mistake in simple English (correction.explanation).
-2. Give the corrected Japanese (correction.corrected).
-3. Give romaji (correction.romaji).
-4. If a more natural expression exists, give it (correction.natural).
-Then continue the conversation normally in "reply".
-
-Always check: particles, verb forms, adjective forms, copula, word order, tense, question forms, vocabulary misuse, unnatural phrasing, and incomplete sentences. Never pretend incorrect Japanese is correct just because the meaning is understandable. If the Japanese is fully correct, set status "correct" and leave the other correction fields empty. If the user writes only a single Japanese word, explain its meaning in the reply instead of correcting it, and set status "none".
+======================== GRAMMAR CORRECTION (IMPORTANT) ========================
+Whenever the user writes ANY Japanese, check it — put feedback in the "correction" object, not the reply. Set status to "correct", "unnatural", "incorrect", or "none" (no Japanese to judge). If not fully correct: explain the mistake in simple English (explanation), give the corrected Japanese (corrected), its romaji (romaji), and a more natural version if any (natural), then continue in "reply". Check particles, verb/adjective forms, copula, word order, tense, questions, and word choice. Don't pass off understandable-but-wrong Japanese as correct. For a single Japanese word, just explain its meaning in the reply and set status "none".
 
 ======================== TEACHING STYLE ========================
-Teach like a friendly tutor. Keep explanations short — use examples, not long grammar lectures. Stay around JLPT ${ctx.level}. The user currently knows about ${ctx.knownCount} words. Introduce at most ${ctx.newWordBudget} NEW Japanese word(s) unless required.${reinforce}${memo}
+Teach like a friendly tutor: short, example-driven, no long lectures. Stay around JLPT ${ctx.level}. The user knows about ${ctx.knownCount} words. Introduce at most ${ctx.newWordBudget} NEW Japanese word(s) unless required.${reinforce}${memo}
 
 ======================== OUTPUT FORMAT ========================
 Respond ONLY with valid JSON matching this schema:
 {
-  "reply": "<friendly conversational reply — match the user's language; end with something that keeps the chat going>",
+  "reply": "<English-led Japanglish reply; Japanese in kana/kanji, no romaji shadows; playful, ends with something that keeps the chat going>",
   "correction": { "status": "correct|unnatural|incorrect|none", "explanation": "<empty if none>", "corrected": "<corrected Japanese, empty if none>", "romaji": "<romaji, empty if none>", "natural": "<more natural version, empty if none>" },
-  "english": "<English translation/gloss of any Japanese in your reply; empty string if the reply is already fully English>",
+  "english": "<English gloss of any Japanese in your reply; empty string if already fully English>",
   "tokens": [{ "surface": "<as written>", "reading": "<kana, or surface if not Japanese>", "romaji": "<romaji, or surface if not Japanese>", "meaning": "<English meaning, or surface if not Japanese>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|other", "dictForm": "<dictionary form>" }],
   "newWords": ["<dictForm of any NEW Japanese words you introduced>"],
-  "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn that's worth remembering long-term — e.g. 'Has a cat named Pochi', 'Is studying for JLPT N4', 'Works as a nurse'. Only stable facts, NOT small talk or questions. Empty array if nothing noteworthy. Phrase each as a short third-person note.>"]
+  "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn worth remembering long-term — e.g. 'Has a cat named Pochi', 'Studying for JLPT N4'. Stable facts only, NOT small talk. Empty array if none. Short third-person notes.>"]
 }
-Tokenize your ENTIRE reply into "tokens" in order, including English words, emoji, and punctuation (use pos "other" for non-Japanese). The "tokens" array must NEVER be empty — it must cover every word of your reply so the user can tap any Japanese word for its meaning. Be accurate with Japanese readings, dictionary forms, and romaji.`;
+Tokenize your ENTIRE reply into "tokens" in order (English words, emoji, punctuation use pos "other"). The "tokens" array must NEVER be empty — cover every word so any Japanese word is tappable. Be accurate with readings, dictionary forms, and romaji.`;
 }
 
 const RESPONSE_SCHEMA = {
@@ -171,6 +156,64 @@ export function salvageKaiResponse(text: string): KaiResponse | null {
   };
 }
 
+const KANA_KANJI = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/;
+const ROMAJI_ONLY = /^[A-Za-zāīūēōâîûêô' .,-]+$/;
+// Japanese punctuation / full-width brackets that can sit between a word and
+// its romaji shadow, e.g. the 」 in 「言います」(iimasu).
+const JP_PUNCT = /^[\u3000-\u303F\uFF01-\uFF60「」『』（）]+$/;
+
+/** Backstop for "romaji shadow" parentheticals — e.g. 素敵 (suteki) → 素敵, or
+ *  「言います」(iimasu) → 「言います」 — that the model sometimes adds right after
+ *  Japanese. The prompt forbids these; this is a deterministic safety net for
+ *  the occasional slip. Cleans both the visible `reply` text and the cached
+ *  `tokens`. We only remove a `(...)` whose contents are pure romaji, so real
+ *  English asides like 私 (this is fine) are kept. */
+export function stripRomajiShadows(parsed: KaiResponse): void {
+  // 1) Clean the reply string: drop "(romaji)" after a Japanese word, even when
+  //    Japanese closing brackets/punctuation (」』）。、 …) sit in between. Only a
+  //    single romaji word (no spaces) is treated as a shadow, so multi-word
+  //    English asides like 私 (this is fine) are left alone.
+  parsed.reply = parsed.reply.replace(
+    /([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF][\u3000-\u303F\uFF01-\uFF60」』）]*)\s*[（(]\s*([A-Za-zāīūēōâîûêô'-]+)\s*[）)]/g,
+    "$1"
+  );
+
+  // 2) Clean the tokens array: remove "(" romaji ")" runs that shadow the
+  //    preceding Japanese token's romaji.
+  const toks = parsed.tokens;
+  if (!Array.isArray(toks) || toks.length === 0) return;
+
+  const drop = new Set<number>();
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t?.surface !== "(" && t?.surface !== "（") continue;
+    // find the matching close within a few tokens
+    let close = -1;
+    for (let j = i + 1; j < Math.min(toks.length, i + 6); j++) {
+      if (toks[j]?.surface === ")" || toks[j]?.surface === "）") {
+        close = j;
+        break;
+      }
+    }
+    if (close === -1) continue;
+    const inner = toks
+      .slice(i + 1, close)
+      .map((x) => x.surface)
+      .join("");
+    // preceding Japanese word — skip whitespace and Japanese punctuation/brackets
+    // (」』）。、 etc.) so we still see the word inside 「…」 before the paren.
+    let p = i - 1;
+    while (p >= 0 && (toks[p]?.surface.trim() === "" || JP_PUNCT.test(toks[p]?.surface ?? "x"))) p--;
+    const prev = toks[p];
+    if (prev && KANA_KANJI.test(prev.surface) && ROMAJI_ONLY.test(inner)) {
+      for (let k = i; k <= close; k++) drop.add(k);
+    }
+  }
+  if (drop.size > 0) {
+    parsed.tokens = toks.filter((_, idx) => !drop.has(idx));
+  }
+}
+
 /** Shared request loop: try each model, rotate keys on rate limit, parse the
  *  structured KaiResponse. Used by both reactive and proactive turns. */
 async function executeKaiTurn(
@@ -242,6 +285,7 @@ async function executeKaiTurn(
             )
           : [];
         parsed.correction = normalizeCorrection(parsed.correction);
+        stripRomajiShadows(parsed);
         parsed.usedModel = model;
         return parsed;
       }

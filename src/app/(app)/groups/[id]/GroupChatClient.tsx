@@ -71,7 +71,12 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [notFound, setNotFound] = useState(false);
   const [hasKey, setHasKey] = useState(true);
   const [memSuggestions, setMemSuggestions] = useState<string[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const didInitialScroll = useRef(false);
+  const loadingOlderRef = useRef(false);
   // Proactivity bookkeeping (1:1 persona chats only).
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const followupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,10 +101,44 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         setGroup(d.group);
         const msgs: GMsg[] = d.messages ?? [];
         setMessages(msgs);
+        setHasMore(Boolean(d.hasMore));
         writeCache(cacheKey, { group: d.group, messages: msgs.slice(-50) });
       })
       .catch(() => {});
   }, [groupId, cacheKey]);
+
+  // Fetch the next older page (cursor = oldest loaded message) and prepend it,
+  // preserving the user's scroll position so the view doesn't jump.
+  const loadOlder = useCallback(() => {
+    if (loadingOlderRef.current || !hasMore) return;
+    const oldest = messagesRef.current.find((m) => !m.id.startsWith("tmp-"));
+    if (!oldest) return;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    const el = scrollRef.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    fetch(`/api/groups/${groupId}?before=${encodeURIComponent(oldest.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const older: GMsg[] = d.messages ?? [];
+        setHasMore(Boolean(d.hasMore));
+        if (older.length === 0) return;
+        setMessages((cur) => {
+          const seen = new Set(cur.map((m) => m.id));
+          return [...older.filter((m) => !seen.has(m.id)), ...cur];
+        });
+        // After the prepend paints, restore scroll so content stays put.
+        requestAnimationFrame(() => {
+          if (el) el.scrollTop = el.scrollHeight - prevHeight;
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+      });
+  }, [groupId, hasMore]);
 
   useEffect(() => {
     // Paint the cached conversation instantly, then refresh from the server.
@@ -113,7 +152,15 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   }, [load, cacheKey]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Don't yank to the bottom while we're prepending older history.
+    if (loadingOlderRef.current) return;
+    if (!didInitialScroll.current) {
+      // First paint: jump straight to the latest message (no travel animation).
+      endRef.current?.scrollIntoView();
+      if (messages.length > 0) didInitialScroll.current = true;
+    } else {
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   // Keep the local cache fresh as messages change (skips optimistic temp rows).
@@ -495,8 +542,17 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       )}
 
       {/* stream */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8">
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          if (e.currentTarget.scrollTop < 80) loadOlder();
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
+      >
         <div className="mx-auto flex max-w-2xl flex-col">
+          {loadingOlder && (
+            <p className="py-2 text-center text-xs text-muted">Loading earlier messages…</p>
+          )}
           {messages.length === 0 && (
             <p className="py-10 text-center text-sm text-muted">
               Say hi to start the conversation.
@@ -533,7 +589,14 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             );
           })}
           {sending && (
-            <p className="text-center text-xs text-muted">…</p>
+            <div className="mt-1 flex items-end gap-2">
+              {group?.persona && (
+                <Avatar name={group.persona.name} emoji={group.persona.avatar} size={28} />
+              )}
+              <div className="flex gap-1 rounded-3xl rounded-bl-md bg-card px-4 py-3.5 shadow-sm">
+                <Dot d="0ms" /> <Dot d="150ms" /> <Dot d="300ms" />
+              </div>
+            </div>
           )}
           <div ref={endRef} />
         </div>
@@ -698,5 +761,14 @@ function GroupBubble({
         )}
       </div>
     </div>
+  );
+}
+
+function Dot({ d }: { d: string }) {
+  return (
+    <span
+      className="h-2 w-2 animate-bounce rounded-full bg-indigo-ai/50"
+      style={{ animationDelay: d }}
+    />
   );
 }

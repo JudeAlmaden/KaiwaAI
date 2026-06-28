@@ -101,15 +101,7 @@ function FallbackText({
 }) {
   if (!JP_CHAR.test(content)) return <span>{content}</span>;
 
-  const parts: { text: string; jp: boolean }[] = [];
-  let last = 0;
-  for (const m of content.matchAll(JP_RUN)) {
-    const start = m.index ?? 0;
-    if (start > last) parts.push({ text: content.slice(last, start), jp: false });
-    parts.push({ text: m[0], jp: true });
-    last = start + m[0].length;
-  }
-  if (last < content.length) parts.push({ text: content.slice(last), jp: false });
+  const parts = segmentForFallback(content);
 
   return (
     <>
@@ -127,6 +119,51 @@ function FallbackText({
       )}
     </>
   );
+}
+
+type SegItem = { text: string; jp: boolean };
+
+/** Split text for the no-tokens fallback. Uses Intl.Segmenter (word
+ *  granularity) for real Japanese word boundaries when available, so each word
+ *  is individually tappable instead of one giant run; otherwise falls back to
+ *  splitting on contiguous Japanese runs. */
+function segmentForFallback(content: string): SegItem[] {
+  const Seg = (
+    Intl as unknown as {
+      Segmenter?: new (
+        loc?: string,
+        opts?: { granularity?: string }
+      ) => { segment: (s: string) => Iterable<{ segment: string }> };
+    }
+  ).Segmenter;
+
+  if (Seg) {
+    try {
+      const seg = new Seg("ja", { granularity: "word" });
+      const out: SegItem[] = [];
+      for (const { segment } of seg.segment(content)) {
+        const jp = JP_CHAR.test(segment);
+        const prev = out[out.length - 1];
+        // Merge adjacent non-Japanese pieces so English/punctuation stays whole.
+        if (!jp && prev && !prev.jp) prev.text += segment;
+        else out.push({ text: segment, jp });
+      }
+      return out;
+    } catch {
+      // fall through to the run-based split
+    }
+  }
+
+  const parts: SegItem[] = [];
+  let last = 0;
+  for (const m of content.matchAll(JP_RUN)) {
+    const start = m.index ?? 0;
+    if (start > last) parts.push({ text: content.slice(last, start), jp: false });
+    parts.push({ text: m[0], jp: true });
+    last = start + m[0].length;
+  }
+  if (last < content.length) parts.push({ text: content.slice(last), jp: false });
+  return parts;
 }
 
 function EnglishToggle({ text }: { text: string }) {
