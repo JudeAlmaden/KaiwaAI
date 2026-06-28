@@ -4,7 +4,7 @@ All notable changes to KaiwaAI are documented here. This project follows
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor = features, patch =
 fixes).
 
-## [Unreleased]
+## [0.3.1] — 2026-06-29
 
 ### Fixed
 - **Add to vocabulary** now works in persona and group chats. Tapped words
