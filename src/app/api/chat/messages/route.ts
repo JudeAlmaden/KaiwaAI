@@ -33,6 +33,9 @@ export async function GET(req: Request) {
     },
     orderBy: { createdAt: "desc" },
     take: pageSize + 1, // grab one extra to know if more remain
+    include: {
+      replyTo: { select: { id: true, role: true, content: true } },
+    },
   });
 
   const hasMore = page.length > pageSize;
@@ -64,6 +67,7 @@ export async function POST(req: Request) {
     tokens?: CachedToken[];
     newWords?: string[];
     autoSave?: boolean;
+    replyToId?: string;
   };
   try {
     body = await req.json();
@@ -86,6 +90,16 @@ export async function POST(req: Request) {
   const tokens = Array.isArray(body.tokens) ? body.tokens : [];
   const newWords = Array.isArray(body.newWords) ? body.newWords : [];
   const dayKey = dayKeyFor(new Date(), user.timezone);
+
+  // If the user is quoting an earlier message, validate it belongs to them.
+  let replyToId: string | null = null;
+  if (typeof body.replyToId === "string" && body.replyToId) {
+    const target = await prisma.message.findFirst({
+      where: { id: body.replyToId, userId: user.id },
+      select: { id: true },
+    });
+    replyToId = target?.id ?? null;
+  }
 
   // The user is active — advance the streak and reset Kai's "ignored" mood.
   {
@@ -115,7 +129,14 @@ export async function POST(req: Request) {
   }
 
   const userMsg = await prisma.message.create({
-    data: { userId: user.id, role: "user", content: userText, dayKey },
+    data: {
+      userId: user.id,
+      role: "user",
+      content: userText,
+      dayKey,
+      replyToId,
+    },
+    include: { replyTo: { select: { id: true, role: true, content: true } } },
   });
 
   const kaiMsg = await prisma.message.create({

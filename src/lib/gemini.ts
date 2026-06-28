@@ -73,23 +73,19 @@ const RESPONSE_SCHEMA = {
   required: ["reply", "english", "tokens", "newWords"],
 };
 
-export async function chatWithKai(
-  userMessage: string,
-  ctx: PromptContext
+type GeminiContent = { role: string; parts: { text: string }[] };
+
+/** Shared request loop: try each model, rotate keys on rate limit, parse the
+ *  structured KaiResponse. Used by both reactive and proactive turns. */
+async function executeKaiTurn(
+  systemText: string,
+  contents: GeminiContent[]
 ): Promise<KaiResponse> {
   if (!hasAnyKey()) throw new Error("NO_API_KEY");
   const keys = keysForRequest();
 
-  const contents = [
-    ...ctx.recentTurns.map((t) => ({
-      role: t.role === "user" ? "user" : "model",
-      parts: [{ text: t.content }],
-    })),
-    { role: "user", parts: [{ text: userMessage }] },
-  ];
-
   const requestBody = JSON.stringify({
-    systemInstruction: { parts: [{ text: systemPrompt(ctx) }] },
+    systemInstruction: { parts: [{ text: systemText }] },
     contents,
     generationConfig: {
       responseMimeType: "application/json",
@@ -110,8 +106,6 @@ export async function chatWithKai(
   // Try each model; within a model, rotate keys on rate limit. Move to the next
   // model when a model is rate-limited (429) or unavailable (404/500/503).
   for (const model of models) {
-    let modelExhausted = false;
-
     for (const key of keys) {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
@@ -155,18 +149,81 @@ export async function chatWithKai(
       if (res.status === 404 || res.status === 500 || res.status === 503) {
         // model unavailable on this account/region — skip to the next model
         lastError = new Error(`Gemini error ${res.status}`);
-        modelExhausted = true;
         break;
       }
       lastError = new Error(`Gemini error ${res.status}: ${body.slice(0, 200)}`);
     }
-
-    // If we got here via rate limits on every key, try the next model too.
-    void modelExhausted;
   }
 
   // every model + key failed
   throw lastError;
+}
+
+/** A message being quote-replied to (shown to the model for context). */
+export type QuotedMessage = { role: "kai" | "user"; content: string };
+
+function quotedPreamble(quoted: QuotedMessage | undefined): GeminiContent[] {
+  if (!quoted) return [];
+  const who = quoted.role === "user" ? "the user" : "you (Kai)";
+  return [
+    {
+      role: "user",
+      parts: [
+        {
+          text: `[The user is replying to an earlier message from ${who}: "${quoted.content}". Address that message in your reply.]`,
+        },
+      ],
+    },
+  ];
+}
+
+export async function chatWithKai(
+  userMessage: string,
+  ctx: PromptContext,
+  quoted?: QuotedMessage
+): Promise<KaiResponse> {
+  const contents: GeminiContent[] = [
+    ...ctx.recentTurns.map((t) => ({
+      role: t.role === "user" ? "user" : "model",
+      parts: [{ text: t.content }],
+    })),
+    ...quotedPreamble(quoted),
+    { role: "user", parts: [{ text: userMessage }] },
+  ];
+
+  return executeKaiTurn(systemPrompt(ctx), contents);
+}
+
+/** Reasons Kai might message first while the user is online. */
+export type ProactiveKind = "opener" | "followup";
+
+/**
+ * Kai messages first (no user turn). `opener` = she starts a fresh thread when
+ * the user is idle; `followup` = she adds another line right after her own
+ * message. `quoted` optionally has her bring up an earlier message.
+ */
+export async function proactiveKaiMessage(
+  ctx: PromptContext,
+  opts: { kind: ProactiveKind; quoted?: QuotedMessage } = { kind: "opener" }
+): Promise<KaiResponse> {
+  const instruction =
+    opts.kind === "followup"
+      ? `[The user hasn't replied yet. Send ONE short, natural follow-up that adds to what you just said — a little aside, a related thought, or a gentle nudge. Don't repeat yourself or pressure them. Keep it light.]`
+      : `[The user is online but quiet. Reach out FIRST with ONE short, friendly opener — react to something you remember about them, a word they're learning, or just say hi. Never naggy. End with something easy to respond to.]`;
+
+  const quote = opts.quoted
+    ? ` You're bringing up this earlier message: "${opts.quoted.content}".`
+    : "";
+
+  const contents: GeminiContent[] = [
+    ...ctx.recentTurns.map((t) => ({
+      role: t.role === "user" ? "user" : "model",
+      parts: [{ text: t.content }],
+    })),
+    { role: "user", parts: [{ text: instruction + quote }] },
+  ];
+
+  return executeKaiTurn(systemPrompt(ctx), contents);
 }
 
 // ── Word lookup ──────────────────────────────────────────────────────────────

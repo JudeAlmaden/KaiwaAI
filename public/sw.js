@@ -2,7 +2,10 @@
 // Phase: PWA shell (offline-friendly navigation + static caching).
 // Push handling will be added in a later phase.
 
-const CACHE = "kaiwa-shell-v1";
+// NOTE: bumping this version invalidates all previously cached entries on
+// `activate` (see below). Bump it whenever the caching strategy changes so
+// stuck clients self-heal on their next navigation.
+const CACHE = "kaiwa-shell-v2";
 const SHELL = ["/chat", "/offline"];
 
 self.addEventListener("install", (event) => {
@@ -19,8 +22,8 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
       )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
@@ -30,6 +33,24 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   // Never cache API calls — always hit the network.
   if (url.pathname.startsWith("/api/")) return;
+
+  // Build artifacts: network-first. In dev, chunk URLs are reused with new
+  // content across rebuilds, so cache-first here serves a stale client bundle
+  // and breaks hydration. Network-first keeps clients on fresh JS and only
+  // falls back to cache when offline. (Prod filenames are content-hashed, so
+  // this is still served instantly from the browser's HTTP cache.)
+  if (url.pathname.startsWith("/_next/")) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
 
   // Navigations: network-first, fall back to cache, then the offline page.
   if (request.mode === "navigate") {
@@ -47,10 +68,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets: cache-first, then network.
+  // Stable static assets: cache-first, then network.
   if (
     url.pathname.startsWith("/icons/") ||
-    url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/audio/") ||
     url.pathname.startsWith("/images/")
   ) {

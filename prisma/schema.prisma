@@ -61,6 +61,15 @@ model Message {
   // Cached tokenization for tap-to-translate (JSON string of CachedToken[]).
   tokens  String?
 
+  // Whether this Kai message was sent proactively (Kai messaging first, no
+  // preceding user turn) rather than as a direct reply.
+  proactive Boolean @default(false)
+
+  // Optional quote-reply: the earlier message this one is replying to.
+  replyToId String?
+  replyTo   Message?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[] @relation("MessageReplies")
+
   // Day bucket, computed in the user's tz at insert time, e.g. "2026-06-27".
   dayKey     String
   summarized Boolean @default(false)
@@ -71,6 +80,7 @@ model Message {
 
   @@index([userId, createdAt])
   @@index([userId, dayKey])
+  @@index([replyToId])
 }
 
 model Flashcard {

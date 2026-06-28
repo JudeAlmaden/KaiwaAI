@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Kai from "../../Kai";
 import WordToken from "./WordToken";
-import { chatWithKai, type PromptContext } from "@/lib/gemini";
+import { chatWithKai, proactiveKaiMessage, type PromptContext } from "@/lib/gemini";
 import { hasAnyKey } from "@/lib/api-keys";
 import { getAutoSaveWords, getModel, setModel, MODELS } from "@/lib/model-config";
+import { getProactiveChat, PROACTIVE } from "@/lib/proactive-config";
 import ModelSwitcher from "./ModelSwitcher";
 import ChatMenu from "./ChatMenu";
 import {
@@ -15,6 +16,12 @@ import {
   type CachedToken,
 } from "@/lib/types";
 import { dayLabel } from "@/lib/day";
+
+type QuoteRef = {
+  id: string;
+  role: "kai" | "user";
+  content: string;
+} | null;
 
 type Msg = {
   id: string;
@@ -25,6 +32,8 @@ type Msg = {
   dayKey: string;
   createdAt: string;
   pending?: boolean;
+  proactive?: boolean;
+  replyTo?: QuoteRef;
 };
 
 export default function ChatClient({ todayKey }: { todayKey: string }) {
@@ -39,9 +48,17 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
   const [openToken, setOpenToken] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // The message the user is quote-replying to (null = normal send).
+  const [replyTo, setReplyTo] = useState<QuoteRef>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  // Proactivity bookkeeping (refs so timers read fresh values without re-binding).
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const followupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastOpenerAt = useRef(0);
+  const consecutiveKai = useRef(0);
+  const busyRef = useRef(false);
 
   const CACHE_KEY = "kaiwa_chat_cache";
 
@@ -120,7 +137,15 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
     setError(null);
     setNotice(null);
     setSending(true);
+    busyRef.current = true;
     setInput("");
+    // The user replied — reset Kai's consecutive-message counter and cancel
+    // any pending proactive follow-up.
+    consecutiveKai.current = 0;
+    clearTimers();
+
+    const quoted = replyTo;
+    setReplyTo(null);
 
     const tempUser: Msg = {
       id: `tmp-${Date.now()}`,
@@ -129,6 +154,7 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
       dayKey: todayKey,
       createdAt: new Date().toISOString(),
       pending: true,
+      replyTo: quoted,
     };
     setMessages((m) => [...m, tempUser]);
     stickToBottom.current = true;
@@ -138,7 +164,11 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
       if (!ctxRes.ok) throw new Error("Couldn't load context.");
       const ctx = (await ctxRes.json()) as PromptContext;
 
-      const kai = await chatWithKai(text, ctx);
+      const kai = await chatWithKai(
+        text,
+        ctx,
+        quoted ? { role: quoted.role, content: quoted.content } : undefined
+      );
 
       // If auto-fallback used a different model than selected, adopt it so the
       // switcher reflects reality and future turns start from the working one.
@@ -160,6 +190,7 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
           tokens: kai.tokens,
           newWords: kai.newWords,
           autoSave: getAutoSaveWords(),
+          replyToId: quoted?.id,
         }),
       });
       if (!saveRes.ok) throw new Error("Couldn't save the message.");
@@ -176,9 +207,13 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
         } catch {}
         return next;
       });
+      // Kai just answered once — maybe she adds a spontaneous follow-up.
+      consecutiveKai.current = 1;
+      maybeScheduleFollowup();
     } catch (e) {
       setMessages((m) => m.filter((x) => x.id !== tempUser.id));
       setInput(text);
+      if (quoted) setReplyTo(quoted);
       const msg = e instanceof Error ? e.message : "Something went wrong.";
       if (msg === "NO_API_KEY") setHasKey(false);
       else if (msg === "BAD_API_KEY")
@@ -194,7 +229,111 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
       else setError(msg);
     } finally {
       setSending(false);
+      busyRef.current = false;
+      scheduleIdleOpener();
     }
+  }
+
+  function clearTimers() {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    if (followupTimer.current) clearTimeout(followupTimer.current);
+    idleTimer.current = null;
+    followupTimer.current = null;
+  }
+
+  // Generate + persist a Kai-initiated message (opener or follow-up). Quietly
+  // no-ops on any failure — proactivity should never surface errors.
+  const sendProactive = useCallback(
+    async (kind: "opener" | "followup", quoted?: QuoteRef) => {
+      if (busyRef.current) return;
+      if (!getProactiveChat()) return;
+      if (document.hidden) return; // only when the user is actually looking
+      if (consecutiveKai.current >= PROACTIVE.maxConsecutive) return;
+      busyRef.current = true;
+      try {
+        const ctxRes = await fetch("/api/chat/context");
+        if (!ctxRes.ok) return;
+        const ctx = (await ctxRes.json()) as PromptContext;
+
+        const kai = await proactiveKaiMessage(ctx, {
+          kind,
+          quoted: quoted
+            ? { role: quoted.role, content: quoted.content }
+            : undefined,
+        });
+
+        const saveRes = await fetch("/api/chat/kai-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reply: kai.reply,
+            english: kai.english,
+            tokens: kai.tokens,
+            proactive: true,
+            replyToId: quoted?.id,
+          }),
+        });
+        if (!saveRes.ok) return;
+        const saved = await saveRes.json();
+
+        stickToBottom.current = true;
+        setMessages((m) => {
+          const next = [...m, saved.kaiMessage];
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(next.slice(-25)));
+          } catch {}
+          return next;
+        });
+        consecutiveKai.current += 1;
+        maybeScheduleFollowup();
+      } catch {
+        // swallow — proactivity is best-effort
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    []
+  );
+
+  // After Kai speaks, sometimes (chance-based) tack on a continuous follow-up.
+  function maybeScheduleFollowup() {
+    if (!getProactiveChat()) return;
+    if (consecutiveKai.current >= PROACTIVE.maxConsecutive) return;
+    if (Math.random() > PROACTIVE.followupChance) return;
+    const delay =
+      PROACTIVE.followupDelayMin +
+      Math.random() * (PROACTIVE.followupDelayMax - PROACTIVE.followupDelayMin);
+    if (followupTimer.current) clearTimeout(followupTimer.current);
+    followupTimer.current = setTimeout(() => {
+      void sendProactive("followup");
+    }, delay);
+  }
+
+  // When the user goes quiet, Kai may open a fresh thread (rate-limited).
+  function scheduleIdleOpener() {
+    if (!getProactiveChat()) return;
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => {
+      const since = Date.now() - lastOpenerAt.current;
+      if (since < PROACTIVE.openerCooldown) return;
+      // Only sometimes — most idle moments pass without Kai jumping in.
+      if (Math.random() > PROACTIVE.openerChance) return;
+      lastOpenerAt.current = Date.now();
+      consecutiveKai.current = 0;
+      void sendProactive("opener");
+    }, PROACTIVE.idleBeforeOpener);
+  }
+
+  // Arm the idle opener once on mount; tear timers down on unmount.
+  useEffect(() => {
+    scheduleIdleOpener();
+    return () => clearTimers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Let the user start a quote-reply from any message.
+  function startReply(m: Msg) {
+    setReplyTo({ id: m.id, role: m.role, content: m.content });
   }
 
   if (hasKey === false) {
@@ -298,6 +437,7 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
                   onSaved={(w) =>
                     setSavedWords((s) => new Set(s).add(w))
                   }
+                  onReply={() => startReply(m)}
                 />
               </div>
             );
@@ -327,6 +467,24 @@ export default function ChatClient({ todayKey }: { todayKey: string }) {
             <p className="mb-2 text-center text-xs font-semibold text-sakura">
               {error}
             </p>
+          )}
+          {replyTo && (
+            <div className="mb-2 flex items-center gap-2 rounded-2xl border-2 border-border bg-indigo-ai/5 px-3 py-2">
+              <span className="text-sm">↩︎</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-indigo-ai">
+                  Replying to {replyTo.role === "kai" ? "Kai" : "you"}
+                </p>
+                <p className="truncate text-xs text-muted">{replyTo.content}</p>
+              </div>
+              <button
+                onClick={() => setReplyTo(null)}
+                className="text-muted/60 hover:text-sakura"
+                aria-label="Cancel reply"
+              >
+                ✕
+              </button>
+            </div>
           )}
           <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
             <input
@@ -369,6 +527,30 @@ function spaceBetween(prev: string | undefined, curr: string): boolean {
   return true;
 }
 
+function QuotedSnippet({ quote }: { quote: NonNullable<QuoteRef> }) {
+  return (
+    <div className="mb-1 border-l-2 border-current/30 pl-2 text-xs opacity-70">
+      <span className="font-bold">
+        {quote.role === "kai" ? "Kai" : "You"}
+      </span>
+      <span className="ml-1 line-clamp-2 break-words">{quote.content}</span>
+    </div>
+  );
+}
+
+function ReplyButton({ onReply }: { onReply: () => void }) {
+  return (
+    <button
+      onClick={onReply}
+      className="opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+      aria-label="Reply to this message"
+      title="Reply"
+    >
+      <span className="text-xs text-muted hover:text-indigo-ai">↩︎</span>
+    </button>
+  );
+}
+
 function MessageBubble({
   msg,
   startGroup,
@@ -376,6 +558,7 @@ function MessageBubble({
   openToken,
   onToggleToken,
   onSaved,
+  onReply,
 }: {
   msg: Msg;
   startGroup: boolean;
@@ -383,11 +566,16 @@ function MessageBubble({
   openToken: string | null;
   onToggleToken: (key: string) => void;
   onSaved: (w: string) => void;
+  onReply: () => void;
 }) {
   if (msg.role === "user") {
     return (
-      <div className={`flex justify-end ${startGroup ? "mt-3" : "mt-0.5"}`}>
+      <div
+        className={`group flex items-center justify-end gap-2 ${startGroup ? "mt-3" : "mt-0.5"}`}
+      >
+        <ReplyButton onReply={onReply} />
         <div className="max-w-[80%] rounded-3xl rounded-br-md bg-indigo-ai px-4 py-2.5 text-white shadow-sm">
+          {msg.replyTo && <QuotedSnippet quote={msg.replyTo} />}
           <p className="font-jp leading-relaxed">{msg.content}</p>
         </div>
       </div>
@@ -404,7 +592,7 @@ function MessageBubble({
   }
 
   return (
-    <div className={`flex items-end gap-2 ${startGroup ? "mt-3" : "mt-0.5"}`}>
+    <div className={`group flex items-end gap-2 ${startGroup ? "mt-3" : "mt-0.5"}`}>
       {/* avatar slot — only on the first message of a run */}
       <div className="w-7 shrink-0">
         {startGroup && <Kai size={28} className="mb-1" />}
@@ -418,6 +606,12 @@ function MessageBubble({
             startGroup ? "rounded-bl-md" : "rounded-bl-3xl"
           }`}
         >
+          {msg.replyTo && <QuotedSnippet quote={msg.replyTo} />}
+          {msg.proactive && (
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-indigo-ai/60">
+              ✨ Kai reached out
+            </p>
+          )}
           <p className="font-jp text-lg leading-loose">
             {tokens ? (
               tokens.map((t, i) => {
@@ -443,6 +637,7 @@ function MessageBubble({
           {msg.english && <EnglishToggle text={msg.english} />}
         </div>
       </div>
+      <ReplyButton onReply={onReply} />
     </div>
   );
 }
