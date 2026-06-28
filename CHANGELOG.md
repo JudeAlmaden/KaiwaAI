@@ -4,6 +4,24 @@ All notable changes to KaiwaAI are documented here. This project follows
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor = features, patch =
 fixes).
 
+## [Unreleased]
+
+### Fixed
+- **Add to vocabulary** now works in persona and group chats. Tapped words
+  carried a `GroupMessage` id into a field that references `Message`, so the
+  save silently hit a foreign-key error; the id is now validated and dropped
+  when it isn't a real `Message`.
+- Conversations open at the latest message instantly instead of scrolling from
+  the oldest message down.
+
+### Changed
+- Renamed "Add to review" to "Add to vocabulary" across the UI.
+- Group conversations load newest-first and page in older messages on
+  scroll-up (cursor pagination) instead of loading the whole history at once.
+- Tightened Kai's system prompt: English-led "Japanglish", no romaji in the
+  visible reply, and a more thorough romaji-shadow stripper. The prompt was
+  also condensed to save context budget.
+
 ## [0.3.0] — 2026-06-28
 
 ### Added
