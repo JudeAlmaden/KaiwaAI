@@ -46,6 +46,7 @@ model User {
   daySummaries DaySummary[]
   memories     Memory[]
   kanjiMnemonics KanjiMnemonic[]
+  userKanji    UserKanji[]
 
   // ── Social: friends, groups, personas ──
   personas        Persona[]
@@ -287,6 +288,31 @@ model Memory {
   @@index([userId, personaId])
 }
 
+// User's kanji learning progress with SRS
+model UserKanji {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kanjiId       String
+  kanji         Kanji    @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
+
+  // SRS (SM-2). Same as Flashcard
+  status        String   @default("new") // new | learning | known
+  easeFactor    Float    @default(2.5)
+  interval      Int      @default(0)
+  repetitions   Int      @default(0)
+  timesReviewed Int      @default(0)
+  nextReview    DateTime @default(now())
+  lastReviewedAt DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, kanjiId])
+  @@index([userId, status])
+  @@index([userId, nextReview])
+}
+
 // Kanji character information seeded from kanji-data.json
 model Kanji {
   id            String   @id @default(cuid())
@@ -304,6 +330,7 @@ model Kanji {
   updatedAt     DateTime @updatedAt
 
   mnemonics     KanjiMnemonic[]
+  userKanji     UserKanji[]
   
   @@index([jlptLevel])
   @@index([grade])

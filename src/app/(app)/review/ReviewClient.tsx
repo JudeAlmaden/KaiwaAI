@@ -11,11 +11,18 @@ import KanjiBreakdown from "../chat/KanjiBreakdown";
 
 type Card = {
   id: string;
-  word: string;
-  reading: string;
-  romaji: string;
-  meaning: string;
-  partOfSpeech: string;
+  // Vocabulary fields
+  word?: string;
+  reading?: string;
+  romaji?: string;
+  meaning?: string;
+  partOfSpeech?: string;
+  // Kanji fields
+  character?: string;
+  meanings?: string[];
+  readingsOn?: string[];
+  readingsKun?: string[];
+  // Common
   status: "new" | "learning" | "known";
 };
 
@@ -33,8 +40,13 @@ type StudyMode =
   | "struggling"    // Low ease factor (<2.0) or many reviews
   | "leeches";      // Cards reviewed 8+ times with interval <7 days
 
+type CardDirection = "jp-to-en" | "en-to-jp" | "mixed";
+type ReviewType = "vocabulary" | "kanji";
+
 type Setup = {
+  reviewType: ReviewType;
   studyMode: StudyMode;
+  direction: CardDirection;
   practice: boolean; // if true, don't update SRS/mastery
   limit: number;
 };
@@ -42,7 +54,9 @@ type Setup = {
 export default function ReviewClient() {
   const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
   const [setup, setSetup] = useState<Setup>({ 
+    reviewType: "vocabulary",
     studyMode: "due", 
+    direction: "jp-to-en",
     practice: false,
     limit: 20 
   });
@@ -55,20 +69,22 @@ export default function ReviewClient() {
   const [tally, setTally] = useState({ again: 0, good: 0 });
 
   useEffect(() => {
-    fetch("/api/flashcards/review?studyMode=due&limit=200")
+    const endpoint = `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review?studyMode=due&limit=200`;
+    fetch(endpoint)
       .then((r) => r.json())
       .then((d) => setDueCount(d.cards?.length ?? 0))
       .catch(() => setDueCount(0));
-  }, []);
+  }, [setup.reviewType]);
 
   async function start(custom?: Partial<Setup>) {
     const s = { ...setup, ...custom };
+    const endpoint = `/api/${s.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
     const params = new URLSearchParams({ 
       studyMode: s.studyMode, 
       limit: String(s.limit) 
     });
     if (s.practice) params.set("practice", "true");
-    const res = await fetch(`/api/flashcards/review?${params}`);
+    const res = await fetch(`${endpoint}?${params}`);
     const d = await res.json();
     const cards: Card[] = d.cards ?? [];
     if (cards.length === 0) {
@@ -76,8 +92,14 @@ export default function ReviewClient() {
       setPhase("done");
       return;
     }
-    setQueue(cards);
-    setTotal(cards.length);
+    
+    // Shuffle for mixed direction
+    const shuffled = s.direction === "mixed" 
+      ? cards.map(c => ({ ...c, _dir: Math.random() < 0.5 ? "jp-to-en" : "en-to-jp" as const }))
+      : cards.map(c => ({ ...c, _dir: s.direction as "jp-to-en" | "en-to-jp" }));
+    
+    setQueue(shuffled);
+    setTotal(shuffled.length);
     setTally({ again: 0, good: 0 });
     setFlipped(false);
     setPhase("session");
@@ -90,7 +112,8 @@ export default function ReviewClient() {
 
       // Only update SRS if not in practice mode
       if (!setup.practice) {
-        fetch("/api/flashcards/review", {
+        const endpoint = `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
+        fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cardId: card.id, grade: g }),
@@ -107,7 +130,7 @@ export default function ReviewClient() {
       setFlipped(false);
       if (rest.length === 0) setPhase("done");
     },
-    [queue, setup.practice]
+    [queue, setup.practice, setup.reviewType]
   );
 
   // keyboard shortcuts during a session
@@ -151,6 +174,48 @@ export default function ReviewClient() {
 
           <div className="mt-6 rounded-3xl border-2 border-border bg-card p-5">
             <h2 className="font-display text-base font-bold">Custom session</h2>
+
+            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+              Review Type
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                active={setup.reviewType === "vocabulary"}
+                onClick={() => setSetup((s) => ({ ...s, reviewType: "vocabulary" }))}
+              >
+                Vocabulary
+              </Chip>
+              <Chip
+                active={setup.reviewType === "kanji"}
+                onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
+              >
+                Kanji
+              </Chip>
+            </div>
+
+            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+              Card Direction
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                active={setup.direction === "jp-to-en"}
+                onClick={() => setSetup((s) => ({ ...s, direction: "jp-to-en" }))}
+              >
+                Japanese → English
+              </Chip>
+              <Chip
+                active={setup.direction === "en-to-jp"}
+                onClick={() => setSetup((s) => ({ ...s, direction: "en-to-jp" }))}
+              >
+                English → Japanese
+              </Chip>
+              <Chip
+                active={setup.direction === "mixed"}
+                onClick={() => setSetup((s) => ({ ...s, direction: "mixed" }))}
+              >
+                Mixed
+              </Chip>
+            </div>
 
             <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
               Study Focus
@@ -277,12 +342,35 @@ export default function ReviewClient() {
   }
 
   // ── SESSION ──────────────────────────────────────────────────────────────
-  const card = queue[0];
+  const card = queue[0] as Card & { _dir?: "jp-to-en" | "en-to-jp" };
   // Guard against a transient empty queue between the last grade and the
   // phase flip to "done" — rendering the card below assumes one exists.
   if (!card) return null;
   const doneCount = total - queue.length;
   const pct = total ? (doneCount / total) * 100 : 0;
+
+  const isVocab = setup.reviewType === "vocabulary";
+  const isJpToEn = card._dir === "jp-to-en";
+
+  // Front side content
+  const frontContent = isJpToEn
+    ? (isVocab ? card.word : card.character)
+    : (isVocab ? card.meaning : card.meanings?.[0]);
+
+  // Back side content (flipped)
+  const backContent = isVocab ? {
+    japanese: card.word,
+    reading: card.reading,
+    romaji: card.romaji,
+    english: card.meaning,
+    meta: card.partOfSpeech,
+  } : {
+    japanese: card.character,
+    reading: [...(card.readingsOn || []), ...(card.readingsKun || [])].join(", "),
+    romaji: "",
+    english: card.meanings?.join(", "),
+    meta: "Kanji",
+  };
 
   return (
     <div className="flex flex-1 flex-col">
@@ -312,11 +400,11 @@ export default function ReviewClient() {
           onClick={() => setFlipped((f) => !f)}
           className="relative flex aspect-[3/2] w-full max-w-md flex-col items-center justify-center rounded-3xl border-2 border-border bg-card p-6 text-center shadow-sm transition-transform active:scale-[0.99]"
         >
-          {canSpeak() && (
+          {canSpeak() && isJpToEn && (
             <span
               onClick={(e) => {
                 e.stopPropagation();
-                speakJa(card.word);
+                speakJa(backContent.japanese || "");
               }}
               className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai"
               title="Hear it"
@@ -324,16 +412,35 @@ export default function ReviewClient() {
               🔊
             </span>
           )}
-          <span className="font-jp text-5xl font-bold">{card.word}</span>
+          <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
+            {frontContent}
+          </span>
           {flipped ? (
             <div className="mt-5 w-full">
-              <p className="font-jp text-xl text-indigo-ai">{card.reading}</p>
-              <p className="text-sm text-muted">{card.romaji}</p>
-              <p className="mt-2 text-lg font-semibold">{card.meaning}</p>
-              <p className="mt-1 text-xs uppercase tracking-wide text-muted">
-                {card.partOfSpeech}
-              </p>
-              <KanjiBreakdown word={card.word} />
+              {isJpToEn ? (
+                <>
+                  {backContent.reading && (
+                    <p className="font-jp text-xl text-indigo-ai">{backContent.reading}</p>
+                  )}
+                  {backContent.romaji && (
+                    <p className="text-sm text-muted">{backContent.romaji}</p>
+                  )}
+                  <p className="mt-2 text-lg font-semibold">{backContent.english}</p>
+                  <p className="mt-1 text-xs uppercase tracking-wide text-muted">
+                    {backContent.meta}
+                  </p>
+                  {isVocab && card.word && <KanjiBreakdown word={card.word} />}
+                </>
+              ) : (
+                <>
+                  <p className="font-jp text-4xl font-bold text-indigo-ai">
+                    {backContent.japanese}
+                  </p>
+                  {backContent.reading && (
+                    <p className="mt-2 text-sm text-muted">{backContent.reading}</p>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             <p className="mt-5 text-sm text-muted">Tap or press Space to flip</p>
@@ -354,7 +461,9 @@ export default function ReviewClient() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted">How well do you know this word?</p>
+          <p className="text-sm text-muted">
+            {isJpToEn ? "What does this mean?" : "How do you say this in Japanese?"}
+          </p>
         )}
       </div>
     </div>
