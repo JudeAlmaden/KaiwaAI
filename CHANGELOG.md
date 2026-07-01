@@ -4,6 +4,76 @@ All notable changes to KaiwaAI are documented here. This project follows
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor = features, patch =
 fixes).
 
+## [Unreleased]
+
+### Added
+- **Kanji Learning System**: Comprehensive kanji study feature with local database
+  - **Backend**: Database tables `Kanji` (13,108 characters) and `KanjiMnemonic` (user-specific AI stories)
+  - Seeded kanji data from davidluzgouveia/kanji-data (MIT licensed)
+  - Includes: meanings, readings (on'yomi/kun'yomi), radicals, JLPT levels, stroke counts
+  - API endpoints: `/api/kanji` (list), `/api/kanji/[character]` (detail), `/api/kanji/[character]/mnemonic` (generate)
+  - Utility functions: kanji extraction, vocabulary lookups, mastery calculation
+  - AI-powered mnemonic generation using Gemini with caching
+  - **Frontend**: New `/kanji` page showing all kanji from your vocabulary with:
+    - Search by character, meaning, or reading with clear button
+    - Filter by JLPT level (N5-N1) with visual chips
+    - Sort by frequency, mastery, or stroke count
+    - Enhanced mastery ring indicator with color coding (mint=80%+, amber=40-79%, sky=0-39%)
+    - Improved card design with hover effects and larger kanji display
+    - Better loading states with animated spinner
+    - Enhanced empty state with call-to-action button
+  - **Frontend**: New `/kanji/[character]` detail page with:
+    - Large character display (text-6xl on mobile, text-7xl on desktop) with audio pronunciation
+    - Enhanced header showing grade level, frequency rank, and JLPT level badges
+    - Meanings with primary meaning highlighted in indigo
+    - Color-coded reading sections with Japanese labels (音/訓)
+    - Radicals section with hover scale effects
+    - Beautiful AI-generated memory aid with gradient background and glow effects
+    - Enhanced vocabulary cards showing reading, romaji, meaning, and status
+    - All sections use improved spacing and visual hierarchy
+    - Smooth transitions and hover effects throughout
+  - **Frontend**: "Learn Kanji" button added to vocabulary detail modal
+    - Appears when word contains kanji characters
+    - Navigates directly to kanji detail page
+  - **Kanji Breakdown Component**: Clickable kanji everywhere!
+    - Chat word popup: Click any kanji to learn it
+    - Vocabulary modal: Interactive kanji tiles
+    - Review flashcards: Study kanji while reviewing
+    - All kanji are clickable tiles that navigate to detail page
+  - Navigation: Added kanji link to app navigation (sidebar + bottom tabs)
+- **Intelligent vocabulary meaning merging**: When you tap a word that's already in
+  your vocabulary but with a different meaning (e.g., "取る" as "to take" vs "to steal"),
+  the system now uses AI to intelligently merge the meanings instead of ignoring the new
+  context. The button changes to show "New meaning added!" with a ✨ icon.
+- **Vocabulary pre-loading**: Chat now pre-loads your saved vocabulary on mount, fixing
+  the false positive where words already in your deck would show "Add to vocabulary"
+  before checking the database.
+
+### Improved
+- **Kanji UI Polish**: Major visual enhancements across kanji system
+  - Larger, more prominent kanji characters in all views
+  - Color-coded sections (sky=on'yomi, amber=kun'yomi, mint=radicals)
+  - Smooth hover effects with scale transforms
+  - Better loading states with pulse animations
+  - Enhanced empty states with visual hierarchy
+  - Improved spacing and typography throughout
+  - Gradient backgrounds for mnemonic cards
+  - Shadow effects for depth perception
+  - Better mobile responsiveness
+  - Clearer visual feedback on interactions
+
+### Fixed
+- **Japanese word tokenization**: Improved system prompt to instruct the AI model
+  to keep complete Japanese words together as single tokens (e.g., "寝たい" now
+  stays as one tappable word instead of being split into "寝" + "たい"). Added
+  tests documenting expected tokenization behavior.
+- **False positive "Add to vocabulary"**: Previously, saved words would show the add
+  button on first tap because vocabulary wasn't pre-loaded. Now the system fetches
+  your vocabulary list when the chat loads.
+
+### Changed
+- Added `meaningContexts` field to Flashcard schema for future multi-meaning support.
+
 ## [0.3.1] — 2026-06-29
 
 ### Fixed

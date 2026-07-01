@@ -45,6 +45,7 @@ model User {
   flashcards   Flashcard[]
   daySummaries DaySummary[]
   memories     Memory[]
+  kanjiMnemonics KanjiMnemonic[]
 
   // ── Social: friends, groups, personas ──
   personas        Persona[]
@@ -218,9 +219,11 @@ model Flashcard {
   word         String // dictionary/lemma form — dedupe key
   reading      String
   romaji       String
-  meaning      String
+  meaning      String // primary meaning, or comma-separated meanings
   partOfSpeech String
   jlptTier     String @default("unknown")
+  // JSON array of meaning contexts: [{ meaning: "to take", example: "物を取る" }]
+  meaningContexts String?
 
   // SRS (SM-2). status drives usage policy.
   status        String   @default("new") // new | learning | known
@@ -282,4 +285,43 @@ model Memory {
 
   @@index([userId, category])
   @@index([userId, personaId])
+}
+
+// Kanji character information seeded from kanji-data.json
+model Kanji {
+  id            String   @id @default(cuid())
+  character     String   @unique  // The kanji itself, e.g., "勝"
+  strokes       Int                // Stroke count
+  grade         Int?               // School grade level (1-6 for kyouiku)
+  frequency     Int?               // Usage frequency rank (lower = more common)
+  jlptLevel     Int?               // JLPT level: 5=N5, 4=N4, 3=N3, 2=N2, 1=N1
+  meanings      String             // JSON array: ["Victory", "Win"]
+  readingsOn    String             // JSON array: ["しょう"]
+  readingsKun   String             // JSON array: ["か.つ", "まさ.る"]
+  radicals      String             // JSON array: ["Moon", "Gladiator", "Power"]
+  wkLevel       Int?               // WaniKani level (1-60)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  mnemonics     KanjiMnemonic[]
+  
+  @@index([jlptLevel])
+  @@index([grade])
+  @@index([frequency])
+  @@index([character])
+}
+
+// User-specific AI-generated mnemonics for kanji
+model KanjiMnemonic {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kanjiId    String
+  kanji      Kanji    @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
+  mnemonic   String   // AI-generated story
+  createdAt  DateTime @default(now())
+  
+  @@unique([userId, kanjiId])
+  @@index([userId])
+  @@index([kanjiId])
 }

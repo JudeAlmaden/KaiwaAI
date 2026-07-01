@@ -13,6 +13,7 @@ describe("app nav", () => {
       "/chat",
       "/review",
       "/vocab",
+      "/kanji",
       "/memory",
       "/settings",
     ]);

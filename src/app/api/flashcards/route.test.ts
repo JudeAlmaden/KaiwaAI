@@ -64,6 +64,33 @@ describe("POST /api/flashcards", () => {
     });
   });
 
+  it("merges meanings when the same word has different context", async () => {
+    // Simulate existing word with different meaning
+    flashcardFindUnique.mockResolvedValue({
+      id: "c1",
+      word: "取る",
+      meaning: "to take",
+      userId: "u1",
+    });
+    
+    const tokenWithNewMeaning = {
+      ...token,
+      surface: "取る",
+      dictForm: "取る",
+      meaning: "to steal",
+    };
+    
+    const res = await POST(req({ token: tokenWithNewMeaning }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.meaningMerged).toBe(true);
+    expect(data.alreadyExisted).toBe(true);
+    
+    // Should have called upsert with merged meaning in update
+    const update = flashcardUpsert.mock.calls[0][0].update;
+    expect(update.meaning).toBeDefined();
+  });
+
   it("drops a sourceMessageId that isn't a real Message (group-chat ids)", async () => {
     messageFindUnique.mockResolvedValue(null); // group-message id has no Message row
     const res = await POST(req({ token, sourceMessageId: "groupmsg-123" }));

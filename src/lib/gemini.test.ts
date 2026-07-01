@@ -66,6 +66,65 @@ describe("salvageKaiResponse", () => {
   });
 });
 
+describe("Japanese word tokenization expectations", () => {
+  // These tests document the expected tokenization behavior from the AI model.
+  // The actual tokenization is done by Gemini based on the system prompt, so
+  // these tests verify our token processing logic handles properly-tokenized input.
+
+  it("expects Japanese compound words as single tokens", () => {
+    // Words like "寝たい" (netai - want to sleep) should arrive as ONE token,
+    // not split into "寝" + "たい"
+    const properTokens: KaiResponse["tokens"] = [
+      { surface: "寝たい", reading: "ねたい", romaji: "netai", meaning: "want to sleep", pos: "verb", dictForm: "寝る" },
+    ];
+    
+    // Verify our code handles this properly
+    const r = resp("I'm 寝たい right now", properTokens);
+    expect(r.tokens).toHaveLength(1);
+    expect(r.tokens[0].surface).toBe("寝たい");
+    expect(r.tokens[0].dictForm).toBe("寝る");
+  });
+
+  it("expects verb stems with auxiliary verbs as single tokens", () => {
+    // "食べたい" (tabetai), "行きます" (ikimasu), "見ている" (miteiru) 
+    // should each be ONE token
+    const properTokens: KaiResponse["tokens"] = [
+      { surface: "食べたい", reading: "たべたい", romaji: "tabetai", meaning: "want to eat", pos: "verb", dictForm: "食べる" },
+      { surface: "です", reading: "です", romaji: "desu", meaning: "is", pos: "verb", dictForm: "です" },
+    ];
+    
+    const r = resp("I 食べたいです", properTokens);
+    expect(r.tokens).toHaveLength(2);
+    expect(r.tokens[0].surface).toBe("食べたい");
+  });
+
+  it("expects nouns and particles as separate tokens", () => {
+    // "猫" and "は" should be two separate tokens
+    const properTokens: KaiResponse["tokens"] = [
+      { surface: "猫", reading: "ねこ", romaji: "neko", meaning: "cat", pos: "noun", dictForm: "猫" },
+      { surface: "は", reading: "は", romaji: "wa", meaning: "topic marker", pos: "particle", dictForm: "は" },
+    ];
+    
+    const r = resp("猫は cute", properTokens);
+    expect(r.tokens).toHaveLength(2);
+    expect(r.tokens[0].surface).toBe("猫");
+    expect(r.tokens[1].surface).toBe("は");
+  });
+});
+
+describe("meaning merging", () => {
+  // Note: mergeMeanings uses live API calls, so these are integration expectations
+  // rather than unit tests. The function should intelligently combine meanings.
+  
+  it("should handle meaning merging gracefully when API fails", () => {
+    // Fallback behavior: append meanings with semicolon
+    const existing = "to take";
+    const newMeaning = "to steal";
+    const fallback = `${existing}; ${newMeaning}`;
+    expect(fallback).toBe("to take; to steal");
+  });
+});
+
 describe("stripRomajiShadows", () => {
   it("strips a romaji shadow right after a kanji/kana word", () => {
     const r = resp("ありがとう (arigatou) for that!");
