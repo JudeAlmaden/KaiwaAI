@@ -78,7 +78,15 @@ export default function KanjiDetailClient({ character }: { character: string }) 
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to generate mnemonic");
+        const message = data.error || "Failed to generate mnemonic";
+        
+        // Show friendlier message for missing server key
+        if (message.includes("API key required")) {
+          alert("💡 Mnemonic generation requires a server-stored API key.\n\nThis is an optional feature - go to Settings to upload your Gemini key for server-side features like mnemonics.");
+        } else {
+          alert(message);
+        }
+        return;
       }
 
       const data = await res.json();
