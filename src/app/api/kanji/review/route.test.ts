@@ -43,7 +43,7 @@ describe("Kanji Review API - GET", () => {
   });
 
   it("should fetch due kanji by default", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([
       {
         id: "uk1",
@@ -86,7 +86,7 @@ describe("Kanji Review API - GET", () => {
   });
 
   it("should handle all study modes", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/kanji/review?studyMode=all");
@@ -101,7 +101,7 @@ describe("Kanji Review API - GET", () => {
   });
 
   it("should handle recent study mode", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/kanji/review?studyMode=recent");
@@ -118,7 +118,7 @@ describe("Kanji Review API - GET", () => {
   });
 
   it("should handle struggling study mode", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/kanji/review?studyMode=struggling");
@@ -136,7 +136,7 @@ describe("Kanji Review API - GET", () => {
   });
 
   it("should handle leeches study mode", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/kanji/review?studyMode=leeches");
@@ -157,7 +157,7 @@ describe("Kanji Review API - GET", () => {
   });
 
   it("should respect limit parameter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/kanji/review?limit=10");
@@ -171,7 +171,7 @@ describe("Kanji Review API - GET", () => {
   });
 
   it("should cap limit at 200", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/kanji/review?limit=999");
@@ -221,7 +221,7 @@ describe("Kanji Review API - POST", () => {
   });
 
   it("should return 400 for invalid JSON", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/kanji/review", {
       method: "POST",
@@ -235,7 +235,7 @@ describe("Kanji Review API - POST", () => {
   });
 
   it("should return 400 for missing cardId", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/kanji/review", {
       method: "POST",
@@ -249,7 +249,7 @@ describe("Kanji Review API - POST", () => {
   });
 
   it("should return 400 for invalid grade", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/kanji/review", {
       method: "POST",
@@ -263,7 +263,7 @@ describe("Kanji Review API - POST", () => {
   });
 
   it("should return 404 if card not found", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findFirst).mockResolvedValueOnce(null);
 
     const req = new Request("http://localhost/api/kanji/review", {
@@ -278,7 +278,7 @@ describe("Kanji Review API - POST", () => {
   });
 
   it("should successfully grade a kanji card", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findFirst).mockResolvedValueOnce(mockUserKanji as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.6,
@@ -328,7 +328,7 @@ describe("Kanji Review API - POST", () => {
   it("should handle all grade values", async () => {
     for (const grade of [0, 1, 2, 3]) {
       vi.clearAllMocks();
-      vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+      vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
       vi.mocked(prisma.userKanji.findFirst).mockResolvedValueOnce(mockUserKanji as never);
       vi.mocked(applyReview).mockReturnValueOnce({
         easeFactor: 2.5,
@@ -351,7 +351,7 @@ describe("Kanji Review API - POST", () => {
   });
 
   it("should prevent grading other users kanji", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findFirst).mockResolvedValueOnce(null);
 
     const req = new Request("http://localhost/api/kanji/review", {

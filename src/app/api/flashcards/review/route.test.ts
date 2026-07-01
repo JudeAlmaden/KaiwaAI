@@ -43,7 +43,7 @@ describe("Review API - GET", () => {
   });
 
   it("should fetch due cards by default", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([
       { id: "1", word: "猫", userId: "user-123" } as never,
     ]);
@@ -64,7 +64,7 @@ describe("Review API - GET", () => {
   });
 
   it("should fetch cards with 'all' study mode (no nextReview filter)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=all");
@@ -81,7 +81,7 @@ describe("Review API - GET", () => {
   });
 
   it("should fetch 'recent' cards (last 7 days)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=recent");
@@ -99,7 +99,7 @@ describe("Review API - GET", () => {
   });
 
   it("should fetch 'struggling' cards (low ease factor)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=struggling");
@@ -117,7 +117,7 @@ describe("Review API - GET", () => {
   });
 
   it("should fetch 'leeches' cards (many reviews, short interval)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=leeches");
@@ -138,7 +138,7 @@ describe("Review API - GET", () => {
   });
 
   it("should apply status filter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?status=learning");
@@ -155,7 +155,7 @@ describe("Review API - GET", () => {
   });
 
   it("should apply part of speech filter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?pos=verb");
@@ -172,7 +172,7 @@ describe("Review API - GET", () => {
   });
 
   it("should apply JLPT level filter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?jlpt=N5");
@@ -189,7 +189,7 @@ describe("Review API - GET", () => {
   });
 
   it("should ignore invalid JLPT levels", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?jlpt=N99");
@@ -206,7 +206,7 @@ describe("Review API - GET", () => {
   });
 
   it("should ignore invalid status values", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?status=invalid");
@@ -223,7 +223,7 @@ describe("Review API - GET", () => {
   });
 
   it("should combine multiple filters", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request(
@@ -245,7 +245,7 @@ describe("Review API - GET", () => {
   });
 
   it("should respect limit parameter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?limit=10");
@@ -259,7 +259,7 @@ describe("Review API - GET", () => {
   });
 
   it("should cap limit at 200", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?limit=999");
@@ -273,7 +273,7 @@ describe("Review API - GET", () => {
   });
 
   it("should enforce minimum limit of 1", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?limit=-5");
@@ -287,7 +287,7 @@ describe("Review API - GET", () => {
   });
 
   it("should use default limit of 50 if not specified", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review");
@@ -331,7 +331,7 @@ describe("Review API - POST", () => {
   });
 
   it("should return 400 for invalid JSON", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -345,7 +345,7 @@ describe("Review API - POST", () => {
   });
 
   it("should return 400 for missing cardId", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -359,7 +359,7 @@ describe("Review API - POST", () => {
   });
 
   it("should return 400 for missing grade", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -373,7 +373,7 @@ describe("Review API - POST", () => {
   });
 
   it("should return 400 for invalid grade (negative)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -387,7 +387,7 @@ describe("Review API - POST", () => {
   });
 
   it("should return 400 for invalid grade (too high)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -401,7 +401,7 @@ describe("Review API - POST", () => {
   });
 
   it("should return 404 if card not found", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(null);
 
     const req = new Request("http://localhost/api/flashcards/review", {
@@ -416,7 +416,7 @@ describe("Review API - POST", () => {
   });
 
   it("should successfully grade a card", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.6,
@@ -464,7 +464,7 @@ describe("Review API - POST", () => {
   });
 
   it("should handle grade 0 (again)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.5,
@@ -486,7 +486,7 @@ describe("Review API - POST", () => {
   });
 
   it("should handle grade 3 (easy)", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.8,
@@ -508,7 +508,7 @@ describe("Review API - POST", () => {
   });
 
   it("should increment timesReviewed counter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.6,
@@ -536,7 +536,7 @@ describe("Review API - POST", () => {
   });
 
   it("should prevent grading cards from other users", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(null);
 
     const req = new Request("http://localhost/api/flashcards/review", {
