@@ -59,6 +59,7 @@ export default function KanjiDetailClient({ character }: { character: string }) 
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadKanjiDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [character]);

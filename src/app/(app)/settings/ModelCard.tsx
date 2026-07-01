@@ -21,6 +21,7 @@ export default function ModelCard() {
   const [autoMemory, setAutoMemoryState] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTokensState(getMaxOutputTokens());
     setAutoSaveState(getAutoSaveWords());
     setFallbackState(getAutoFallback());

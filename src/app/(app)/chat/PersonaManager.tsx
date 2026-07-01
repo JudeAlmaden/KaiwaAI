@@ -150,7 +150,7 @@ function PersonaEditor({
             body: JSON.stringify(payload),
           });
       const d = await res.json();
-      if (!res.ok) setError(d.error ?? "Couldn't save.");
+      if (!res.ok) setError(d.error ?? "Couldn&apos;t save.");
       else onSaved();
     } finally {
       setBusy(false);
@@ -204,7 +204,7 @@ function PersonaEditor({
         placeholder={
           persona
             ? "Personality / role (leave blank to keep current)"
-            : "Personality / role — e.g. 'You are Yuki, a strict but kind kanji coach who loves examples.'"
+            : "Personality / role — e.g. &apos;You are Yuki, a strict but kind kanji coach who loves examples.&apos;"
         }
         className="mt-2 w-full rounded-2xl border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-indigo-ai"
       />

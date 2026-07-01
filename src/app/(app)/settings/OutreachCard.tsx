@@ -161,6 +161,7 @@ export default function OutreachCard() {
  *  Client-only setting (BYOK, localStorage) like the model preferences. */
 function ProactiveToggle() {
   const [on, setOn] = useState(true);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setOn(getProactiveChat()), []);
 
   function toggle() {

@@ -60,7 +60,7 @@ export default function NewChat({
         body: JSON.stringify(payload),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) setError(d.error ?? "Couldn't start the chat.");
+      if (!res.ok) setError(d.error ?? "Couldn&apos;t start the chat.");
       else onCreated(d.group.id);
     } finally {
       setBusy(false);
