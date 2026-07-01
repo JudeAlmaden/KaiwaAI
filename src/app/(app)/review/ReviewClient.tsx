@@ -27,6 +27,7 @@ const GRADES: { grade: number; label: string; key: string; color: string }[] = [
 ];
 
 type Setup = {
+  reviewType: "vocabulary" | "kanji";
   mode: "due" | "all";
   status: string; // "" | new | learning | known
   limit: number;
@@ -34,7 +35,7 @@ type Setup = {
 
 export default function ReviewClient() {
   const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
-  const [setup, setSetup] = useState<Setup>({ mode: "due", status: "", limit: 20 });
+  const [setup, setSetup] = useState<Setup>({ reviewType: "vocabulary", mode: "due", status: "", limit: 20 });
   const [dueCount, setDueCount] = useState<number | null>(null);
 
   const [queue, setQueue] = useState<Card[]>([]);
@@ -109,12 +110,43 @@ export default function ReviewClient() {
 
   // ── SETUP ──────────────────────────────────────────────────────────────
   if (phase === "setup") {
+    // If kanji mode selected, redirect to kanji page
+    if (setup.reviewType === "kanji") {
+      window.location.href = "/kanji";
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <p className="text-sm text-muted">Redirecting to Kanji page...</p>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-1 flex-col">
         <PageHeader title="Review" jp="復習" subtitle="Build a session, or review what's due." />
         <div className="mx-auto w-full max-w-lg px-5 py-6 sm:px-8">
+          {/* Review Type Selector */}
+          <div className="mb-6 rounded-3xl border-2 border-border bg-card p-5">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
+              Review Type
+            </p>
+            <div className="flex gap-2">
+              <Chip
+                active={setup.reviewType === "vocabulary"}
+                onClick={() => setSetup((s) => ({ ...s, reviewType: "vocabulary" }))}
+              >
+                📚 Vocabulary
+              </Chip>
+              <Chip
+                active={setup.reviewType === "kanji"}
+                onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
+              >
+                漢 Kanji
+              </Chip>
+            </div>
+          </div>
+
           <button
-            onClick={() => start({ mode: "due", status: "", limit: 200 })}
+            onClick={() => start({ ...setup, mode: "due", status: "", limit: 200 })}
             disabled={dueCount === 0}
             className="flex w-full items-center justify-between rounded-3xl border-2 border-indigo-ai bg-indigo-ai/5 px-5 py-4 text-left transition-colors hover:bg-indigo-ai/10 disabled:opacity-50"
           >
