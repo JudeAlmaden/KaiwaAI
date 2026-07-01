@@ -7,6 +7,29 @@ fixes).
 ## [0.4.0] — 2026-07-02
 
 ### Added
+- **Enhanced Review System**: Comprehensive study modes and filters for vocabulary review
+  - **Practice Mode**: Study without affecting mastery/SRS (ideal for preview or warm-up)
+  - **Study Focus Modes**: 
+    - ⏰ Due now (cards with `nextReview` in the past)
+    - 📚 Study ahead (any cards, sorted by most recent)
+    - ✨ Recently added (cards from the last 7 days)
+    - 😓 Struggling cards (low ease factor <2.0 or high review count)
+    - 🐛 Leeches (reviewed 8+ times but interval still <7 days)
+  - **Advanced Filters**:
+    - JLPT level selector (N5, N4, N3, N2, N1)
+    - Part of speech filter (noun, verb, adjective, adverb, particle, expression)
+    - Status filter (new, learning, known)
+  - **Review Type Selector**: Choose between vocabulary or kanji review (kanji redirects to `/kanji` page)
+  - **Backend**: Enhanced `/api/flashcards/review` GET endpoint with:
+    - `studyMode` parameter supporting all 5 focus modes
+    - `jlpt` filter for JLPT level restrictions
+    - `pos` filter for part of speech restrictions
+    - Smart sorting based on study mode (ease factor for struggling, review count for leeches, etc.)
+  - **Tests**: 28 comprehensive API tests covering all study modes, filters, edge cases, and error handling
+
+## [0.4.0] — 2026-07-02
+
+### Added
 - **Kanji Learning System**: Comprehensive kanji study feature with local database
   - **Backend**: Database tables `Kanji` (13,108 characters) and `KanjiMnemonic` (user-specific AI stories)
   - Seeded kanji data from davidluzgouveia/kanji-data (MIT licensed)
