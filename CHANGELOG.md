@@ -4,7 +4,7 @@ All notable changes to KaiwaAI are documented here. This project follows
 [Semantic Versioning](https://semver.org/) (pre-1.0: minor = features, patch =
 fixes).
 
-## [Unreleased]
+## [0.4.0] — 2026-07-02
 
 ### Added
 - **Kanji Learning System**: Comprehensive kanji study feature with local database
@@ -61,6 +61,7 @@ fixes).
   - Shadow effects for depth perception
   - Better mobile responsiveness
   - Clearer visual feedback on interactions
+- **Lint enforcement**: Added `--max-warnings 0` to enforce strict linting in CI/CD
 
 ### Fixed
 - **Japanese word tokenization**: Improved system prompt to instruct the AI model
@@ -70,9 +71,14 @@ fixes).
 - **False positive "Add to vocabulary"**: Previously, saved words would show the add
   button on first tap because vocabulary wasn't pre-loaded. Now the system fetches
   your vocabulary list when the chat loads.
+- **HTML hydration errors**: Fixed React hydration errors caused by nested `<p>` tags.
+  Changed `<p>` to `<div>` in RichText, KanjiBreakdown, and CorrectionCard components.
+- **Popup management**: Added click-outside handler to close word/kanji popups when
+  clicking elsewhere. Previously, multiple popups could be open simultaneously.
 
 ### Changed
 - Added `meaningContexts` field to Flashcard schema for future multi-meaning support.
+- Migrations squashed into single `20260701000000_init` migration.
 
 ## [0.3.1] — 2026-06-29
 
