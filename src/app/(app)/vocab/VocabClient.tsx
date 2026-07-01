@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import PageHeader from "../PageHeader";
 import LookupBox from "./LookupBox";
 import { Chip, StatusBadge, STATUS_STYLE } from "../ui";
 import { speakJa, canSpeak } from "@/lib/speak";
+import { hasKanji, extractKanji } from "@/lib/kanji-utils";
+import KanjiBreakdown from "../chat/KanjiBreakdown";
 
 type Card = {
   id: string;
@@ -29,6 +32,7 @@ function progressOf(c: Card): number {
 }
 
 export default function VocabClient() {
+  const router = useRouter();
   const [cards, setCards] = useState<Card[] | null>(null);
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
@@ -272,6 +276,27 @@ export default function VocabClient() {
                 day: "numeric",
               })}
             </p>
+
+            <KanjiBreakdown word={selected.word} />
+
+            {/* Learn Kanji Button */}
+            {hasKanji(selected.word) && (
+              <button
+                onClick={() => {
+                  const kanjiChars = extractKanji(selected.word);
+                  console.log("Extracted kanji from", selected.word, ":", kanjiChars);
+                  if (kanjiChars.length > 0) {
+                    router.push(`/kanji/${encodeURIComponent(kanjiChars[0])}`);
+                  }
+                }}
+                className="mt-3 rounded-full border-2 border-indigo-ai bg-indigo-ai/5 px-4 py-2 text-sm font-bold text-indigo-ai transition-colors hover:bg-indigo-ai hover:text-white"
+              >
+                📚 Learn Kanji
+                {extractKanji(selected.word).length > 0 && (
+                  <span className="ml-2 font-jp">({extractKanji(selected.word)[0]})</span>
+                )}
+              </button>
+            )}
 
             <div className="mt-5 flex flex-wrap gap-2">
               {selected.status !== "known" && (

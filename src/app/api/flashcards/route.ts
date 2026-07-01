@@ -7,7 +7,19 @@ export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const status = new URL(req.url).searchParams.get("status");
+  const url = new URL(req.url);
+  const status = url.searchParams.get("status");
+  const wordsOnly = url.searchParams.get("wordsOnly") === "true";
+
+  // Fast query for just the word list (used for chat vocabulary checks)
+  if (wordsOnly) {
+    const words = await prisma.flashcard.findMany({
+      where: { userId: user.id },
+      select: { word: true, meaning: true, meaningContexts: true },
+    });
+    return NextResponse.json({ words });
+  }
+
   const where: { userId: string; status?: string } = { userId: user.id };
   if (status && ["new", "learning", "known"].includes(status)) {
     where.status = status;
@@ -22,6 +34,7 @@ export async function GET(req: Request) {
 }
 
 // Tap-to-add: upsert a flashcard from a tapped token. Dedupes on dictForm.
+// If the word exists with a different meaning, merges meanings via AI.
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -82,20 +95,44 @@ export async function POST(req: Request) {
     where: { userId_word: { userId: user.id, word: entry.dictForm } },
   });
 
+  // If word exists with a different meaning, merge meanings using AI
+  let finalMeaning = entry.meaning;
+  let meaningWasMerged = false;
+  
+  if (existing && existing.meaning !== entry.meaning) {
+    try {
+      const { mergeMeanings } = await import("@/lib/gemini");
+      finalMeaning = await mergeMeanings(
+        entry.dictForm,
+        existing.meaning,
+        entry.meaning
+      );
+      meaningWasMerged = true;
+    } catch {
+      // If merging fails, append the new meaning manually
+      finalMeaning = `${existing.meaning}; ${entry.meaning}`;
+      meaningWasMerged = true;
+    }
+  }
+
   const card = await prisma.flashcard.upsert({
     where: { userId_word: { userId: user.id, word: entry.dictForm } },
-    update: {}, // already saved — no-op
+    update: meaningWasMerged ? { meaning: finalMeaning } : {}, // update meaning if merged
     create: {
       userId: user.id,
       word: entry.dictForm,
       reading: entry.reading,
       romaji: entry.romaji,
-      meaning: entry.meaning,
+      meaning: finalMeaning,
       partOfSpeech: entry.pos,
       status: "learning" as CardStatus,
       sourceMessageId,
     },
   });
 
-  return NextResponse.json({ card, alreadyExisted: Boolean(existing) });
+  return NextResponse.json({ 
+    card, 
+    alreadyExisted: Boolean(existing),
+    meaningMerged: meaningWasMerged 
+  });
 }

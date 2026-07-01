@@ -59,7 +59,13 @@ Respond ONLY with valid JSON matching this schema:
   "newWords": ["<dictForm of any NEW Japanese words you introduced>"],
   "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn worth remembering long-term — e.g. 'Has a cat named Pochi', 'Studying for JLPT N4'. Stable facts only, NOT small talk. Empty array if none. Short third-person notes.>"]
 }
-Tokenize your ENTIRE reply into "tokens" in order (English words, emoji, punctuation use pos "other"). The "tokens" array must NEVER be empty — cover every word so any Japanese word is tappable. Be accurate with readings, dictionary forms, and romaji.`;
+Tokenize your ENTIRE reply into "tokens" in order. CRITICAL TOKENIZATION RULES:
+- Each COMPLETE Japanese word/phrase must be a SINGLE token (e.g. "寝たい" is ONE token, not separate characters "寝" + "たい")
+- Keep verb stems + auxiliary verbs together (e.g. "食べたい", "行きます", "見ている")
+- Keep noun + particle combinations separate (e.g. "猫" + "は" are two tokens)
+- Each English word is one token
+- Emoji and punctuation use pos "other"
+The "tokens" array must NEVER be empty — cover every word so any Japanese word is tappable. Be accurate with readings, dictionary forms, and romaji.`;
 }
 
 const RESPONSE_SCHEMA = {
@@ -487,6 +493,75 @@ sentence in Japanese with its English translation. Respond ONLY as JSON.`;
 }
 
 // ── Conversation summary (for compacting) ────────────────────────────────────
+
+/** Merge two meanings for the same word using AI to avoid duplication while
+ *  preserving nuance. Returns a consolidated meaning string. */
+export async function mergeMeanings(
+  word: string,
+  existingMeaning: string,
+  newMeaning: string
+): Promise<string> {
+  if (!hasAnyKey()) throw new Error("NO_API_KEY");
+  const keys = keysForRequest();
+  const models = getAutoFallback() ? modelFallbackOrder() : [getModel()];
+
+  const prompt = `You are a Japanese dictionary editor. The word "${word}" has these two meanings:
+
+Existing: ${existingMeaning}
+New: ${newMeaning}
+
+Task: Merge these meanings into ONE concise definition that captures both nuances without redundancy.
+- If they're essentially the same, keep one version
+- If they're different contexts/uses, combine them clearly (use semicolons or "also:")
+- Keep it brief and natural
+- Output ONLY the merged meaning, nothing else
+
+Example:
+Existing: "to take"
+New: "to steal"
+Output: "to take; to steal"
+
+Example:
+Existing: "fun, enjoyable"
+New: "fun"
+Output: "fun, enjoyable"`;
+
+  const requestBody = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 128,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+
+  let lastError: Error = new Error("Merge failed.");
+  for (const model of models) {
+    for (const key of keys) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: requestBody,
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        return (text ?? existingMeaning).trim();
+      }
+      if (res.status === 429) {
+        lastError = new Error("RATE_LIMIT");
+        continue;
+      }
+      if (res.status === 400 || res.status === 403) throw new Error("BAD_API_KEY");
+      lastError = new Error(`Gemini error ${res.status}`);
+      break;
+    }
+  }
+  throw lastError;
+}
 
 /** Summarize a stretch of conversation into a few sentences Kai can remember. */
 export async function summarizeConversation(

@@ -7,6 +7,7 @@ import PageHeader from "../PageHeader";
 import { Chip } from "../ui";
 import { PopButton } from "../../PopButton";
 import { speakJa, canSpeak } from "@/lib/speak";
+import KanjiBreakdown from "../chat/KanjiBreakdown";
 
 type Card = {
   id: string;
@@ -274,13 +275,14 @@ export default function ReviewClient() {
           )}
           <span className="font-jp text-5xl font-bold">{card.word}</span>
           {flipped ? (
-            <div className="mt-5">
+            <div className="mt-5 w-full">
               <p className="font-jp text-xl text-indigo-ai">{card.reading}</p>
               <p className="text-sm text-muted">{card.romaji}</p>
               <p className="mt-2 text-lg font-semibold">{card.meaning}</p>
               <p className="mt-1 text-xs uppercase tracking-wide text-muted">
                 {card.partOfSpeech}
               </p>
+              <KanjiBreakdown word={card.word} />
             </div>
           ) : (
             <p className="mt-5 text-sm text-muted">Tap or press Space to flip</p>

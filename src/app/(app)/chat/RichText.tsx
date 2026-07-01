@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import WordToken from "./WordToken";
 import LookupToken from "./LookupToken";
 import { hasFeedback, type CachedToken, type Correction } from "@/lib/types";
@@ -37,6 +37,20 @@ export function RichKaiText({
 }) {
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
   const [openToken, setOpenToken] = useState<string | null>(null);
+  const [vocabLoaded, setVocabLoaded] = useState(false);
+
+  // Pre-load user's saved vocabulary on mount
+  useEffect(() => {
+    fetch("/api/flashcards?wordsOnly=true")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.words)) {
+          setSavedWords(new Set(d.words.map((w: { word: string }) => w.word)));
+        }
+        setVocabLoaded(true);
+      })
+      .catch(() => setVocabLoaded(true));
+  }, []);
 
   let tokens: CachedToken[] | null = null;
   if (tokensJson) {
@@ -65,6 +79,7 @@ export function RichKaiText({
                   onToggle={() =>
                     setOpenToken((cur) => (cur === key ? null : key))
                   }
+                  vocabLoaded={vocabLoaded}
                 />
               </span>
             );
