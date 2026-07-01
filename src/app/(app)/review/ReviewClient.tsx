@@ -34,11 +34,7 @@ type StudyMode =
   | "leeches";      // Cards reviewed 8+ times with interval <7 days
 
 type Setup = {
-  reviewType: "vocabulary" | "kanji";
   studyMode: StudyMode;
-  status: string; // "" | new | learning | known
-  jlptLevel: string; // "" | N5 | N4 | N3 | N2 | N1
-  partOfSpeech: string; // "" | noun | verb | adjective | etc
   practice: boolean; // if true, don't update SRS/mastery
   limit: number;
 };
@@ -46,15 +42,12 @@ type Setup = {
 export default function ReviewClient() {
   const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
   const [setup, setSetup] = useState<Setup>({ 
-    reviewType: "vocabulary", 
     studyMode: "due", 
-    status: "", 
-    jlptLevel: "",
-    partOfSpeech: "",
     practice: false,
     limit: 20 
   });
   const [dueCount, setDueCount] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [queue, setQueue] = useState<Card[]>([]);
   const [total, setTotal] = useState(0);
@@ -68,15 +61,12 @@ export default function ReviewClient() {
       .catch(() => setDueCount(0));
   }, []);
 
-  async function start(custom?: Setup) {
-    const s = custom ?? setup;
+  async function start(custom?: Partial<Setup>) {
+    const s = { ...setup, ...custom };
     const params = new URLSearchParams({ 
       studyMode: s.studyMode, 
       limit: String(s.limit) 
     });
-    if (s.status) params.set("status", s.status);
-    if (s.jlptLevel) params.set("jlpt", s.jlptLevel);
-    if (s.partOfSpeech) params.set("pos", s.partOfSpeech);
     if (s.practice) params.set("practice", "true");
     const res = await fetch(`/api/flashcards/review?${params}`);
     const d = await res.json();
@@ -136,50 +126,13 @@ export default function ReviewClient() {
   }, [phase, flipped, grade]);
 
   // ── SETUP ──────────────────────────────────────────────────────────────
-  // Redirect to kanji page if kanji mode is selected
-  useEffect(() => {
-    if (phase === "setup" && setup.reviewType === "kanji") {
-      window.location.href = "/kanji";
-    }
-  }, [phase, setup.reviewType]);
-
   if (phase === "setup") {
-    // If kanji mode selected, show redirecting message
-    if (setup.reviewType === "kanji") {
-      return (
-        <div className="flex flex-1 flex-col items-center justify-center">
-          <p className="text-sm text-muted">Redirecting to Kanji page...</p>
-        </div>
-      );
-    }
-
     return (
       <div className="flex flex-1 flex-col">
-        <PageHeader title="Review" jp="復習" subtitle="Build a session, or review what's due." />
+        <PageHeader title="Review" jp="復習" subtitle="Build a session, or review what&apos;s due." />
         <div className="mx-auto w-full max-w-lg px-5 py-6 sm:px-8">
-          {/* Review Type Selector */}
-          <div className="mb-6 rounded-3xl border-2 border-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
-              Review Type
-            </p>
-            <div className="flex gap-2">
-              <Chip
-                active={setup.reviewType === "vocabulary"}
-                onClick={() => setSetup((s) => ({ ...s, reviewType: "vocabulary" }))}
-              >
-                📚 Vocabulary
-              </Chip>
-              <Chip
-                active={setup.reviewType === "kanji"}
-                onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
-              >
-                漢 Kanji
-              </Chip>
-            </div>
-          </div>
-
           <button
-            onClick={() => start({ ...setup, studyMode: "due", status: "", practice: false, limit: 200 })}
+            onClick={() => start({ studyMode: "due", practice: false, limit: 200 })}
             disabled={dueCount === 0}
             className="flex w-full items-center justify-between rounded-3xl border-2 border-indigo-ai bg-indigo-ai/5 px-5 py-4 text-left transition-colors hover:bg-indigo-ai/10 disabled:opacity-50"
           >
@@ -200,24 +153,6 @@ export default function ReviewClient() {
             <h2 className="font-display text-base font-bold">Custom session</h2>
 
             <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Mode
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                active={!setup.practice}
-                onClick={() => setSetup((s) => ({ ...s, practice: false }))}
-              >
-                📝 Review (affects mastery)
-              </Chip>
-              <Chip
-                active={setup.practice}
-                onClick={() => setSetup((s) => ({ ...s, practice: true }))}
-              >
-                🎯 Practice (no mastery change)
-              </Chip>
-            </div>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
               Study Focus
             </p>
             <div className="flex flex-wrap gap-2">
@@ -225,101 +160,36 @@ export default function ReviewClient() {
                 active={setup.studyMode === "due"}
                 onClick={() => setSetup((s) => ({ ...s, studyMode: "due" }))}
               >
-                ⏰ Due now
+                Due now
               </Chip>
               <Chip
                 active={setup.studyMode === "all"}
                 onClick={() => setSetup((s) => ({ ...s, studyMode: "all" }))}
               >
-                📚 Study ahead
+                Study ahead
               </Chip>
               <Chip
                 active={setup.studyMode === "recent"}
                 onClick={() => setSetup((s) => ({ ...s, studyMode: "recent" }))}
               >
-                ✨ Recently added
+                Recent
               </Chip>
               <Chip
                 active={setup.studyMode === "struggling"}
                 onClick={() => setSetup((s) => ({ ...s, studyMode: "struggling" }))}
               >
-                😓 Struggling cards
+                Struggling
               </Chip>
               <Chip
                 active={setup.studyMode === "leeches"}
                 onClick={() => setSetup((s) => ({ ...s, studyMode: "leeches" }))}
               >
-                🐛 Leeches
+                Leeches
               </Chip>
             </div>
 
             <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Status
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { v: "", l: "Any" },
-                { v: "new", l: "New" },
-                { v: "learning", l: "Learning" },
-                { v: "known", l: "Known" },
-              ].map((o) => (
-                <Chip
-                  key={o.v}
-                  active={setup.status === o.v}
-                  onClick={() => setSetup((s) => ({ ...s, status: o.v }))}
-                >
-                  {o.l}
-                </Chip>
-              ))}
-            </div>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              JLPT Level
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { v: "", l: "Any" },
-                { v: "N5", l: "N5" },
-                { v: "N4", l: "N4" },
-                { v: "N3", l: "N3" },
-                { v: "N2", l: "N2" },
-                { v: "N1", l: "N1" },
-              ].map((o) => (
-                <Chip
-                  key={o.v}
-                  active={setup.jlptLevel === o.v}
-                  onClick={() => setSetup((s) => ({ ...s, jlptLevel: o.v }))}
-                >
-                  {o.l}
-                </Chip>
-              ))}
-            </div>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Part of Speech
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { v: "", l: "Any" },
-                { v: "noun", l: "Noun" },
-                { v: "verb", l: "Verb" },
-                { v: "adjective", l: "Adjective" },
-                { v: "adverb", l: "Adverb" },
-                { v: "particle", l: "Particle" },
-                { v: "expression", l: "Expression" },
-              ].map((o) => (
-                <Chip
-                  key={o.v}
-                  active={setup.partOfSpeech === o.v}
-                  onClick={() => setSetup((s) => ({ ...s, partOfSpeech: o.v }))}
-                >
-                  {o.l}
-                </Chip>
-              ))}
-            </div>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              How many
+              Session Size
             </p>
             <div className="flex flex-wrap gap-2">
               {[10, 20, 50, 100].map((n) => (
@@ -333,8 +203,40 @@ export default function ReviewClient() {
               ))}
             </div>
 
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="mt-4 text-sm font-semibold text-indigo-ai hover:underline"
+            >
+              {showAdvanced ? "Hide" : "Show"} advanced options
+            </button>
+
+            {showAdvanced && (
+              <>
+                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+                  Mode
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Chip
+                    active={!setup.practice}
+                    onClick={() => setSetup((s) => ({ ...s, practice: false }))}
+                  >
+                    Review
+                  </Chip>
+                  <Chip
+                    active={setup.practice}
+                    onClick={() => setSetup((s) => ({ ...s, practice: true }))}
+                  >
+                    Practice only
+                  </Chip>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  Practice mode won&apos;t affect your mastery scores
+                </p>
+              </>
+            )}
+
             <PopButton onClick={() => start()} size="md" className="mt-6 w-full">
-              Start custom session
+              Start session
             </PopButton>
           </div>
         </div>
