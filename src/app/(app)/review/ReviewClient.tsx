@@ -26,16 +26,34 @@ const GRADES: { grade: number; label: string; key: string; color: string }[] = [
   { grade: 3, label: "Easy", key: "4", color: "bg-mint/20 text-mint border-mint/40" },
 ];
 
+type StudyMode = 
+  | "due"           // Cards with nextReview in the past
+  | "all"           // Study ahead (any cards)
+  | "recent"        // Recently added (last 7 days)
+  | "struggling"    // Low ease factor (<2.0) or many reviews
+  | "leeches";      // Cards reviewed 8+ times with interval <7 days
+
 type Setup = {
   reviewType: "vocabulary" | "kanji";
-  mode: "due" | "all";
+  studyMode: StudyMode;
   status: string; // "" | new | learning | known
+  jlptLevel: string; // "" | N5 | N4 | N3 | N2 | N1
+  partOfSpeech: string; // "" | noun | verb | adjective | etc
+  practice: boolean; // if true, don't update SRS/mastery
   limit: number;
 };
 
 export default function ReviewClient() {
   const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
-  const [setup, setSetup] = useState<Setup>({ reviewType: "vocabulary", mode: "due", status: "", limit: 20 });
+  const [setup, setSetup] = useState<Setup>({ 
+    reviewType: "vocabulary", 
+    studyMode: "due", 
+    status: "", 
+    jlptLevel: "",
+    partOfSpeech: "",
+    practice: false,
+    limit: 20 
+  });
   const [dueCount, setDueCount] = useState<number | null>(null);
 
   const [queue, setQueue] = useState<Card[]>([]);
@@ -44,7 +62,7 @@ export default function ReviewClient() {
   const [tally, setTally] = useState({ again: 0, good: 0 });
 
   useEffect(() => {
-    fetch("/api/flashcards/review?mode=due&limit=200")
+    fetch("/api/flashcards/review?studyMode=due&limit=200")
       .then((r) => r.json())
       .then((d) => setDueCount(d.cards?.length ?? 0))
       .catch(() => setDueCount(0));
@@ -52,8 +70,14 @@ export default function ReviewClient() {
 
   async function start(custom?: Setup) {
     const s = custom ?? setup;
-    const params = new URLSearchParams({ mode: s.mode, limit: String(s.limit) });
+    const params = new URLSearchParams({ 
+      studyMode: s.studyMode, 
+      limit: String(s.limit) 
+    });
     if (s.status) params.set("status", s.status);
+    if (s.jlptLevel) params.set("jlpt", s.jlptLevel);
+    if (s.partOfSpeech) params.set("pos", s.partOfSpeech);
+    if (s.practice) params.set("practice", "true");
     const res = await fetch(`/api/flashcards/review?${params}`);
     const d = await res.json();
     const cards: Card[] = d.cards ?? [];
@@ -74,11 +98,14 @@ export default function ReviewClient() {
       const card = queue[0];
       if (!card) return;
 
-      fetch("/api/flashcards/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardId: card.id, grade: g }),
-      }).catch(() => {});
+      // Only update SRS if not in practice mode
+      if (!setup.practice) {
+        fetch("/api/flashcards/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cardId: card.id, grade: g }),
+        }).catch(() => {});
+      }
 
       setTally((t) => ({
         again: t.again + (g === 0 ? 1 : 0),
@@ -90,7 +117,7 @@ export default function ReviewClient() {
       setFlipped(false);
       if (rest.length === 0) setPhase("done");
     },
-    [queue]
+    [queue, setup.practice]
   );
 
   // keyboard shortcuts during a session
@@ -109,10 +136,16 @@ export default function ReviewClient() {
   }, [phase, flipped, grade]);
 
   // ── SETUP ──────────────────────────────────────────────────────────────
-  if (phase === "setup") {
-    // If kanji mode selected, redirect to kanji page
-    if (setup.reviewType === "kanji") {
+  // Redirect to kanji page if kanji mode is selected
+  useEffect(() => {
+    if (phase === "setup" && setup.reviewType === "kanji") {
       window.location.href = "/kanji";
+    }
+  }, [phase, setup.reviewType]);
+
+  if (phase === "setup") {
+    // If kanji mode selected, show redirecting message
+    if (setup.reviewType === "kanji") {
       return (
         <div className="flex flex-1 flex-col items-center justify-center">
           <p className="text-sm text-muted">Redirecting to Kanji page...</p>
@@ -146,7 +179,7 @@ export default function ReviewClient() {
           </div>
 
           <button
-            onClick={() => start({ ...setup, mode: "due", status: "", limit: 200 })}
+            onClick={() => start({ ...setup, studyMode: "due", status: "", practice: false, limit: 200 })}
             disabled={dueCount === 0}
             className="flex w-full items-center justify-between rounded-3xl border-2 border-indigo-ai bg-indigo-ai/5 px-5 py-4 text-left transition-colors hover:bg-indigo-ai/10 disabled:opacity-50"
           >
@@ -167,18 +200,57 @@ export default function ReviewClient() {
             <h2 className="font-display text-base font-bold">Custom session</h2>
 
             <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Which cards
+              Mode
             </p>
             <div className="flex flex-wrap gap-2">
-              {(["due", "all"] as const).map((m) => (
-                <Chip
-                  key={m}
-                  active={setup.mode === m}
-                  onClick={() => setSetup((s) => ({ ...s, mode: m }))}
-                >
-                  {m === "due" ? "Due now" : "Study ahead"}
-                </Chip>
-              ))}
+              <Chip
+                active={!setup.practice}
+                onClick={() => setSetup((s) => ({ ...s, practice: false }))}
+              >
+                📝 Review (affects mastery)
+              </Chip>
+              <Chip
+                active={setup.practice}
+                onClick={() => setSetup((s) => ({ ...s, practice: true }))}
+              >
+                🎯 Practice (no mastery change)
+              </Chip>
+            </div>
+
+            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+              Study Focus
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                active={setup.studyMode === "due"}
+                onClick={() => setSetup((s) => ({ ...s, studyMode: "due" }))}
+              >
+                ⏰ Due now
+              </Chip>
+              <Chip
+                active={setup.studyMode === "all"}
+                onClick={() => setSetup((s) => ({ ...s, studyMode: "all" }))}
+              >
+                📚 Study ahead
+              </Chip>
+              <Chip
+                active={setup.studyMode === "recent"}
+                onClick={() => setSetup((s) => ({ ...s, studyMode: "recent" }))}
+              >
+                ✨ Recently added
+              </Chip>
+              <Chip
+                active={setup.studyMode === "struggling"}
+                onClick={() => setSetup((s) => ({ ...s, studyMode: "struggling" }))}
+              >
+                😓 Struggling cards
+              </Chip>
+              <Chip
+                active={setup.studyMode === "leeches"}
+                onClick={() => setSetup((s) => ({ ...s, studyMode: "leeches" }))}
+              >
+                🐛 Leeches
+              </Chip>
             </div>
 
             <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
@@ -195,6 +267,51 @@ export default function ReviewClient() {
                   key={o.v}
                   active={setup.status === o.v}
                   onClick={() => setSetup((s) => ({ ...s, status: o.v }))}
+                >
+                  {o.l}
+                </Chip>
+              ))}
+            </div>
+
+            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+              JLPT Level
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { v: "", l: "Any" },
+                { v: "N5", l: "N5" },
+                { v: "N4", l: "N4" },
+                { v: "N3", l: "N3" },
+                { v: "N2", l: "N2" },
+                { v: "N1", l: "N1" },
+              ].map((o) => (
+                <Chip
+                  key={o.v}
+                  active={setup.jlptLevel === o.v}
+                  onClick={() => setSetup((s) => ({ ...s, jlptLevel: o.v }))}
+                >
+                  {o.l}
+                </Chip>
+              ))}
+            </div>
+
+            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+              Part of Speech
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { v: "", l: "Any" },
+                { v: "noun", l: "Noun" },
+                { v: "verb", l: "Verb" },
+                { v: "adjective", l: "Adjective" },
+                { v: "adverb", l: "Adverb" },
+                { v: "particle", l: "Particle" },
+                { v: "expression", l: "Expression" },
+              ].map((o) => (
+                <Chip
+                  key={o.v}
+                  active={setup.partOfSpeech === o.v}
+                  onClick={() => setSetup((s) => ({ ...s, partOfSpeech: o.v }))}
                 >
                   {o.l}
                 </Chip>
