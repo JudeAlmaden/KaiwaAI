@@ -9,6 +9,7 @@ export default function ModelSwitcher() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setModelState(getModel());
   }, []);
 

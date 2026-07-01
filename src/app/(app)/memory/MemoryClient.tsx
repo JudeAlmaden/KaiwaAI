@@ -64,10 +64,12 @@ export default function MemoryClient() {
         });
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!activePersona) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMemories(null);
     load(activePersona);
   }, [load, activePersona]);

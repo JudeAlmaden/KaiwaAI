@@ -31,6 +31,7 @@ export default function HomeClient() {
   useEffect(() => {
     // Compute the time-based greeting on the client only, to avoid an SSR/client
     // hydration mismatch (server and client clocks/timezones can differ).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGreet(greeting());
     // Register today's visit (advances streak), then load stats.
     fetch("/api/activity", { method: "POST" })

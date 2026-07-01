@@ -74,6 +74,7 @@ export default function ChatHub() {
   useEffect(() => {
     // Paint cached conversations + personas instantly, then refresh.
     const cachedC = readCache<Conversation[]>(cacheKeys.convos);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (cachedC) setConvos(cachedC);
     const cachedP = readCache<Persona[]>(cacheKeys.personas);
     if (cachedP) setPersonas(cachedP);

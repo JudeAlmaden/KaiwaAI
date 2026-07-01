@@ -144,6 +144,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     // Paint the cached conversation instantly, then refresh from the server.
     const cached = readCache<{ group: GroupInfo; messages: GMsg[] }>(cacheKey);
     if (cached) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (cached.group) setGroup(cached.group);
       if (Array.isArray(cached.messages)) setMessages(cached.messages);
     }
