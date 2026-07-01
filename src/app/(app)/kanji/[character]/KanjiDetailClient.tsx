@@ -36,11 +36,7 @@ export default function KanjiDetailClient({ character }: { character: string }) 
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadKanjiDetail();
-  }, [character]);
-
-  async function loadKanjiDetail() {
+  const loadKanjiDetail = async () => {
     setLoading(true);
     setError(null);
     try {
@@ -60,7 +56,12 @@ export default function KanjiDetailClient({ character }: { character: string }) 
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useEffect(() => {
+    loadKanjiDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [character]);
 
   async function generateMnemonic(regenerate = false) {
     setGeneratingMnemonic(true);
@@ -200,7 +201,7 @@ export default function KanjiDetailClient({ character }: { character: string }) 
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky/20 text-[10px]">
                       音
                     </span>
-                    On'yomi (音読み)
+                    On&apos;yomi (音読み)
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {kanji.readingsOn.map((reading, i) => (
@@ -220,7 +221,7 @@ export default function KanjiDetailClient({ character }: { character: string }) 
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber/20 text-[10px]">
                       訓
                     </span>
-                    Kun'yomi (訓読み)
+                    Kun&apos;yomi (訓読み)
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {kanji.readingsKun.map((reading, i) => (
@@ -304,7 +305,7 @@ export default function KanjiDetailClient({ character }: { character: string }) 
               <div className="rounded-2xl border-2 border-dashed border-border/50 bg-card p-8 text-center">
                 <div className="text-3xl">📝</div>
                 <p className="mt-2 text-sm text-muted">
-                  You don't have any vocabulary words using this kanji yet.
+                  You don&apos;t have any vocabulary words using this kanji yet.
                 </p>
               </div>
             ) : (

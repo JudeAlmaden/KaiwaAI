@@ -21,7 +21,6 @@ export default function WordToken({
   onSaved,
   isOpen,
   onToggle,
-  vocabLoaded = true,
 }: {
   token: CachedToken;
   sourceMessageId?: string;

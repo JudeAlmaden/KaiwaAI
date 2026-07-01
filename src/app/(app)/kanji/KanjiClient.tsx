@@ -32,11 +32,7 @@ export default function KanjiClient() {
   const [sortBy, setSortBy] = useState<SortOption>("Frequency");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadKanji();
-  }, []);
-
-  async function loadKanji() {
+  const loadKanji = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -53,7 +49,12 @@ export default function KanjiClient() {
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useEffect(() => {
+    loadKanji();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     if (!kanji) return [];
