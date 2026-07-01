@@ -63,7 +63,7 @@ export function RichKaiText({
 
   return (
     <>
-      <p className="font-jp text-lg leading-loose">
+      <div className="font-jp text-lg leading-loose">
         {tokens && tokens.length > 0 ? (
           tokens.map((t, i) => {
             const key = `${messageId}-${i}`;
@@ -94,7 +94,7 @@ export function RichKaiText({
             }
           />
         )}
-      </p>
+      </div>
       {english && <EnglishToggle text={english} />}
       {correctionJson && <CorrectionCard raw={correctionJson} />}
     </>
@@ -186,7 +186,7 @@ function EnglishToggle({ text }: { text: string }) {
   return (
     <div className="mt-1.5 border-t border-border/60 pt-1.5">
       {show ? (
-        <p className="text-sm text-muted">{text}</p>
+        <div className="text-sm text-muted">{text}</div>
       ) : (
         <button
           onClick={() => setShow(true)}
@@ -215,25 +215,25 @@ function CorrectionCard({ raw }: { raw: string }) {
         incorrect ? "border-sakura/30 bg-sakura/5" : "border-amber/30 bg-amber/5"
       }`}
     >
-      <p
+      <div
         className={`mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${
           incorrect ? "text-sakura" : "text-amber"
         }`}
       >
         <span>✏️</span>
         {incorrect ? "Correction" : "More natural"}
-      </p>
-      {c.explanation && <p className="text-muted">{c.explanation}</p>}
+      </div>
+      {c.explanation && <div className="text-muted">{c.explanation}</div>}
       {c.corrected && (
-        <p className="mt-1 font-jp text-base">
+        <div className="mt-1 font-jp text-base">
           {c.corrected}
           {c.romaji && <span className="ml-2 text-xs text-muted">{c.romaji}</span>}
-        </p>
+        </div>
       )}
       {c.natural && c.natural !== c.corrected && (
-        <p className="mt-1 text-xs text-muted">
+        <div className="mt-1 text-xs text-muted">
           More natural: <span className="font-jp">{c.natural}</span>
-        </p>
+        </div>
       )}
     </div>
   );

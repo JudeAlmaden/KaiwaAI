@@ -11,9 +11,9 @@ export default function KanjiBreakdown({ word }: { word: string }) {
 
   return (
     <div className="mt-3 border-t-2 border-border pt-3">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">
         Kanji in this word
-      </p>
+      </div>
       <div className="flex flex-wrap gap-2">
         {kanjiChars.map((kanji, i) => (
           <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { lookupWord, type LookupResult } from "@/lib/gemini";
 import { type PartOfSpeech } from "@/lib/types";
 
@@ -24,6 +24,27 @@ export default function LookupToken({
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [save, setSave] = useState<SaveState>("idle");
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handleClickOutside(e: MouseEvent) {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        onToggle(); // Close the popup
+      }
+    }
+
+    // Add slight delay to prevent immediate closing when opening
+    setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+    }, 0);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen, onToggle]);
 
   async function open() {
     onToggle();
@@ -77,30 +98,33 @@ export default function LookupToken({
       </button>
 
       {isOpen && (
-        <span className="absolute bottom-full left-1/2 z-20 mb-2 block w-48 -translate-x-1/2 rounded-2xl border-2 border-border bg-card p-3 text-left shadow-xl">
-          {loading && <span className="block text-xs text-muted">Looking up…</span>}
+        <div
+          ref={popupRef}
+          className="absolute bottom-full left-1/2 z-20 mb-2 block w-48 -translate-x-1/2 rounded-2xl border-2 border-border bg-card p-3 text-left shadow-xl"
+        >
+          {loading && <div className="block text-xs text-muted">Looking up…</div>}
           {failed && (
-            <span className="block text-xs text-sakura">
+            <div className="block text-xs text-sakura">
               Couldn&apos;t look that up. Tap again to retry.
-            </span>
+            </div>
           )}
           {result && (
             <>
-              <span className="block font-jp text-base font-bold text-foreground">
+              <div className="block font-jp text-base font-bold text-foreground">
                 {result.reading}
-              </span>
-              <span className="block text-xs text-muted">{result.romaji}</span>
-              <span className="mt-1 block text-sm font-semibold text-indigo-ai">
+              </div>
+              <div className="block text-xs text-muted">{result.romaji}</div>
+              <div className="mt-1 block text-sm font-semibold text-indigo-ai">
                 {result.meaning}
-              </span>
-              <span className="mt-0.5 block text-[10px] uppercase tracking-wide text-muted">
+              </div>
+              <div className="mt-0.5 block text-[10px] uppercase tracking-wide text-muted">
                 {result.pos}
-              </span>
-              <span className="mt-2 block">
+              </div>
+              <div className="mt-2 block">
                 {save === "saved" || save === "exists" ? (
-                  <span className="flex items-center gap-1 text-xs font-bold text-mint">
+                  <div className="flex items-center gap-1 text-xs font-bold text-mint">
                     ✓ in your review deck
-                  </span>
+                  </div>
                 ) : (
                   <button
                     onClick={add}
@@ -110,10 +134,10 @@ export default function LookupToken({
                     {save === "saving" ? "Adding…" : "+ Add to vocabulary"}
                   </button>
                 )}
-              </span>
+              </div>
             </>
           )}
-        </span>
+        </div>
       )}
     </span>
   );

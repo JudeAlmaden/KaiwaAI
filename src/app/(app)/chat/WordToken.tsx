@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { type CachedToken } from "@/lib/types";
 import KanjiBreakdown from "./KanjiBreakdown";
 
@@ -32,6 +32,27 @@ export default function WordToken({
   vocabLoaded?: boolean;
 }) {
   const [state, setState] = useState<SaveState>("idle");
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handleClickOutside(e: MouseEvent) {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        onToggle(); // Close the popup
+      }
+    }
+
+    // Add slight delay to prevent immediate closing when opening
+    setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+    }, 0);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen, onToggle]);
 
   // Non-Japanese tokens (punctuation, English words) render as plain text.
   if (!isTappable(token)) {
@@ -82,7 +103,10 @@ export default function WordToken({
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-1/2 z-20 mb-2 block w-56 -translate-x-1/2 rounded-2xl border-2 border-border bg-card p-3 text-left shadow-xl max-h-[80vh] overflow-y-auto">
+        <div 
+          ref={popupRef}
+          className="absolute bottom-full left-1/2 z-20 mb-2 block w-56 -translate-x-1/2 rounded-2xl border-2 border-border bg-card p-3 text-left shadow-xl max-h-[80vh] overflow-y-auto"
+        >
           <div className="block font-jp text-base font-bold text-foreground">
             {token.reading}
           </div>
