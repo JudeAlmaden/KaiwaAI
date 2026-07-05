@@ -69,6 +69,7 @@ export async function GET(req: Request) {
     meanings: JSON.parse(uk.kanji.meanings),
     readingsOn: JSON.parse(uk.kanji.readingsOn),
     readingsKun: JSON.parse(uk.kanji.readingsKun),
+    mnemonic: uk.mnemonic, // User's custom mnemonic
     status: uk.status,
   }));
 

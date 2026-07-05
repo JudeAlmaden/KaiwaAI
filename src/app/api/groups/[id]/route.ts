@@ -37,6 +37,34 @@ export async function GET(
 
   const PAGE_SIZE = 30;
   const before = new URL(req.url).searchParams.get("before");
+  const after = new URL(req.url).searchParams.get("after");
+
+  // If "after" is provided, fetch messages newer than that ID (polling for new messages)
+  if (after) {
+    const newMessages = await prisma.groupMessage.findMany({
+      where: {
+        groupId: id,
+        createdAt: { gt: (await prisma.groupMessage.findUnique({ where: { id: after } }))?.createdAt },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 50, // Limit to 50 new messages at once
+    });
+
+    return NextResponse.json({
+      messages: newMessages.map((m) => ({
+        id: m.id,
+        senderName: m.senderName,
+        senderKind: m.senderKind,
+        content: m.content,
+        english: m.english,
+        tokens: m.tokens,
+        correction: m.correction,
+        userCorrection: m.userCorrection,
+        isMe: m.senderUserId === user.id,
+        createdAt: m.createdAt,
+      })),
+    });
+  }
 
   // Pull newest-first so we always get the most recent window, then fetch one
   // extra to know whether older messages remain. `before` walks further back.
@@ -91,6 +119,7 @@ export async function GET(
       english: m.english,
       tokens: m.tokens,
       correction: m.correction,
+      userCorrection: m.userCorrection,
       isMe: m.senderUserId === user.id,
       createdAt: m.createdAt,
     })),

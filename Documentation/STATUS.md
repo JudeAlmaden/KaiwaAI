@@ -3,7 +3,7 @@
 A running snapshot of what's built, what's pending, and how it fits together.
 Read this first when picking up the project in a new session.
 
-_Last updated: after the home dashboard + real streaks._
+_Last updated: after review improvements, mixed mode, mnemonics, and chat fixes._
 
 ## Stack (as built)
 
@@ -13,7 +13,7 @@ _Last updated: after the home dashboard + real streaks._
   - `DIRECT_URL` = Supabase **direct** (port 5432) — migrations
 - **Google Gemini**, BYOK. Default key lives client-side (localStorage); an
   opt-in **encrypted** copy can live server-side for background features.
-- **Vitest** (71 tests passing)
+- **Vitest** (242 tests passing)
 - **PWA** (manifest, service worker, icons) + **Vercel Cron** for outreach
 - Deploy target: **Vercel**
 
@@ -32,13 +32,27 @@ _Last updated: after the home dashboard + real streaks._
 - **Word lookup**: search any word via Gemini and add it.
 - **SRS review (SM-2)**: due sessions + custom sessions (status/count/study-
   ahead), flip cards, keyboard shortcuts, audio (speechSynthesis), end summary.
+  **Mixed review mode** combines vocabulary and kanji in one session. **Kanji 
+  mnemonics** with hint display during review (show before flip, always visible 
+  after flip).
 - **Vocab deck**: search, filters, POS grouping, progress rings, detail sheet
   (reset / mark-known / delete), audio.
+- **Kanji learning**: auto-add from vocabulary, review status indicators, 
+  add/remove from review queue, mnemonic indicators. Bulk mnemonic generation
+  API ready (UI pending).
 - **Kai's Memory**: diary page; view/add/delete facts (`/api/memory`).
-- **Home dashboard** (`/home`): greeting, streak card, stat cards, vocab bar,
-  quick actions. Registers daily activity on load.
+- **Home dashboard** (`/home`): greeting, streak card, stat cards (with level
+  progression system: 8 levels from Beginner to Native-like based on mastered
+  vocabulary + kanji), vocab bar, kanji stats, quick actions. Registers daily 
+  activity on load.
 - **Streaks**: real, on `User` (`streakCount`/`streakBestCount`/`lastStreakDay`).
   Advances on chat or app open; shown in nav + home.
+- **Settings**: tabbed interface (User, AI Settings, Learning). User tab for
+  name/password changes and logout. AI Settings for Gemini API key with tutorial.
+  Learning tab for model preferences, JLPT level, and study settings.
+- **Chat conversations**: persona chats, friend DMs, groups. "Delete for me"
+  feature hides conversations from list but auto-unhides when someone messages
+  you (via `GroupMember.hidden` flag).
 - **Models/keys**: multiple API keys with rotation (client) + auto model
   fallback; same multi-key rotation server-side (encrypted JSON array).
 - **Kai outreach ("messages first")**: settings (off/scheduled/random + quiet
@@ -49,17 +63,21 @@ _Last updated: after the home dashboard + real streaks._
 
 ## Pending / not built
 
-1. **Push notifications** — the missing half of "Kai messages you offline".
+1. **Kanji mnemonic UI enhancements**:
+   - Review page: button to create/edit mnemonic during review session
+   - Kanji page: multi-select checkboxes + "Generate Mnemonics" bulk action
+   Backend APIs are ready; frontend UI pending.
+2. **Push notifications** — the missing half of "Kai messages you offline".
    VAPID keys generated, `web-push` installed, service worker exists, but:
    no subscription storage, no SW push handler, no send-on-cron. This is the
    next big piece. (iOS requires the PWA be installed to home screen, 16.4+.)
-2. **Server/local key sync** — changing client keys doesn't auto-refresh the
+3. **Server/local key sync** — changing client keys doesn't auto-refresh the
    encrypted server copy; user must re-toggle background mode.
-3. **Memory depth** (post-MVP, see MEMORY.md): day/month summaries, reconciliation,
+4. **Memory depth** (post-MVP, see MEMORY.md): day/month summaries, reconciliation,
    temporal-reference resolution, embedding fallback.
-4. **Exposure-based reinforcement**: `exposures` is tracked but doesn't yet nudge
+5. **Exposure-based reinforcement**: `exposures` is tracked but doesn't yet nudge
    mastery; reinforce payload is wired but not fully exercised.
-5. **N5 seed set** for cold-start (empty deck) — not built.
+6. **N5 seed set** for cold-start (empty deck) — not built.
 
 ## Key files / structure
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MagnifyingGlass, PencilSimple, Sparkle } from "@phosphor-icons/react/dist/ssr";
@@ -203,7 +203,19 @@ export default function ChatHub() {
           )}
 
           {filteredConvos?.map((c) => (
-            <ConversationRow key={c.id} convo={c} />
+            <ConversationRow 
+              key={c.id} 
+              convo={c} 
+              onHide={(id) => {
+                // Optimistically remove from list
+                setConvos((convos) => convos?.filter((conv) => conv.id !== id) ?? null);
+                // Hide on server
+                fetch(`/api/groups/${id}/hide`, { method: "POST" }).catch(() => {
+                  // If failed, reload to restore
+                  loadConvos();
+                });
+              }}
+            />
           ))}
 
           {filteredConvos?.length === 0 && convos && convos.length > 0 && (
@@ -254,6 +266,7 @@ function relativeTime(iso?: string): string {
 
 function ConversationRow({
   convo,
+  onHide,
 }: {
   convo: {
     id: string;
@@ -263,11 +276,35 @@ function ConversationRow({
     lastAt?: string;
     members: { kind: string; name?: string | null; avatar?: string | null }[];
   };
+  onHide: (id: string) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  
   const personaMember = convo.members.find((m) => m.kind === "persona");
   const isAi = convo.kind === "persona";
   const isGroup = convo.kind === "group";
   const unread = isUnread(convo.id, convo.lastAt, convo.lastMessage?.fromMe ?? false);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener("mousedown", handleClick);
+      return () => document.removeEventListener("mousedown", handleClick);
+    }
+  }, [menuOpen]);
+
+  const handleHide = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+    onHide(convo.id);
+  };
 
   const avatar = isGroup ? (
     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-ai/20 to-sakura/20 text-2xl">
@@ -287,11 +324,10 @@ function ConversationRow({
   const time = relativeTime(convo.lastAt);
 
   return (
-    <Link
-      href={`/chat/c/${convo.id}`}
-      className="group flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-3.5 py-3 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md"
-    >
-      <div className="relative">
+    <div className="group relative flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-3.5 py-3 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md">
+      <Link href={`/chat/c/${convo.id}`} className="absolute inset-0" aria-label={`Open conversation with ${convo.name}`} />
+      
+      <div className="relative z-10">
         {avatar}
         {isAi && (
           <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai text-[8px] text-white ring-2 ring-card">
@@ -299,7 +335,8 @@ function ConversationRow({
           </span>
         )}
       </div>
-      <span className="min-w-0 flex-1">
+      
+      <span className="relative z-10 min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className={`truncate ${unread ? "font-extrabold" : "font-bold"}`}>
             {convo.name}
@@ -336,6 +373,40 @@ function ConversationRow({
           )}
         </span>
       </span>
-    </Link>
+
+      {/* Three-dots menu */}
+      <div ref={menuRef} className="relative z-20">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenuOpen(!menuOpen);
+          }}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-muted opacity-0 transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai group-hover:opacity-100 sm:opacity-100"
+          aria-label="Conversation options"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="8" cy="3" r="1.5" />
+            <circle cx="8" cy="8" r="1.5" />
+            <circle cx="8" cy="13" r="1.5" />
+          </svg>
+        </button>
+
+        {menuOpen && (
+          <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-xl border-2 border-border bg-card p-1 shadow-xl">
+            <button
+              onClick={handleHide}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-sakura/5"
+            >
+              <span className="text-base">🗑️</span>
+              <span>
+                <span className="block font-bold text-sakura">Delete for me</span>
+                <span className="block text-xs text-muted">Reappears if they message you</span>
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

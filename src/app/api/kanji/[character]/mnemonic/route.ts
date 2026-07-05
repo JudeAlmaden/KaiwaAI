@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { getOrCreateMnemonic } from "@/lib/kanji-mnemonic";
 
-export async function POST(
+// PATCH: Update mnemonic for a kanji in user's learning list
+export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ character: string }> }
 ) {
@@ -11,62 +11,51 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { character } = await params;
-  const decodedChar = decodeURIComponent(character);
 
-  let body: { regenerate?: boolean } = {};
+  let body: { mnemonic?: string };
   try {
     body = await req.json();
   } catch {
-    // Empty body is fine
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  // Find kanji by character
+  const mnemonic = (body.mnemonic ?? "").trim();
+  if (!mnemonic) {
+    return NextResponse.json({ error: "Mnemonic required" }, { status: 400 });
+  }
+
+  // Find the kanji
   const kanji = await prisma.kanji.findUnique({
-    where: { character: decodedChar },
+    where: { character },
+    select: { id: true },
   });
 
   if (!kanji) {
     return NextResponse.json({ error: "Kanji not found" }, { status: 404 });
   }
 
-  try {
-    const result = await getOrCreateMnemonic(
-      user.id,
-      kanji.id,
-      body.regenerate || false
-    );
+  // Find or create user's kanji record
+  let userKanji = await prisma.userKanji.findFirst({
+    where: { userId: user.id, kanjiId: kanji.id },
+  });
 
-    return NextResponse.json({
-      mnemonic: result.mnemonic,
-      cached: result.cached,
+  if (!userKanji) {
+    // Create new record if user hasn't added this kanji yet
+    userKanji = await prisma.userKanji.create({
+      data: {
+        userId: user.id,
+        kanjiId: kanji.id,
+        mnemonic,
+        status: "new",
+      },
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to generate mnemonic";
-    
-    if (message === "NO_API_KEY") {
-      return NextResponse.json(
-        { error: "API key required. Add your Gemini key in Settings." },
-        { status: 400 }
-      );
-    }
-    
-    if (message === "BAD_API_KEY") {
-      return NextResponse.json(
-        { error: "Invalid API key. Check your Gemini key in Settings." },
-        { status: 400 }
-      );
-    }
-    
-    if (message === "RATE_LIMIT") {
-      return NextResponse.json(
-        { error: "Rate limit exceeded. Please try again in a moment." },
-        { status: 429 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Failed to generate mnemonic" },
-      { status: 500 }
-    );
+  } else {
+    // Update existing record
+    userKanji = await prisma.userKanji.update({
+      where: { id: userKanji.id },
+      data: { mnemonic },
+    });
   }
+
+  return NextResponse.json({ mnemonic: userKanji.mnemonic });
 }

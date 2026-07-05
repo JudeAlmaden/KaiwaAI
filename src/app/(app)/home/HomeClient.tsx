@@ -8,10 +8,15 @@ import { Surface } from "../ui";
 type Stats = {
   name: string | null;
   level: string;
+  progressLevel: string;
+  progress: number;
+  nextMilestone: number;
+  masteredCount: number;
   streak: number;
   bestStreak: number;
   activeToday: boolean;
   vocab: { known: number; learning: number; new: number; total: number };
+  kanji: { known: number; learning: number; new: number; total: number };
   dueNow: number;
   messagesSent: number;
 };
@@ -47,6 +52,8 @@ export default function HomeClient() {
   const known = stats?.vocab.known ?? 0;
   const total = stats?.vocab.total ?? 0;
   const learning = stats?.vocab.learning ?? 0;
+  const kanjiKnown = stats?.kanji.known ?? 0;
+  const kanjiTotal = stats?.kanji.total ?? 0;
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
@@ -62,7 +69,39 @@ export default function HomeClient() {
       </div>
 
       <div className="mx-auto grid w-full max-w-3xl grid-cols-2 gap-3 px-5 sm:px-8">
-        {/* streak — full width feature */}
+        {/* Level progression — full width feature */}
+        <div className="col-span-2 rounded-3xl border-2 border-indigo-ai/30 bg-gradient-to-br from-indigo-ai/10 to-sakura/5 p-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted">
+                Level
+              </p>
+              <p className="mt-1 font-display text-3xl font-extrabold text-indigo-ai">
+                {stats?.progressLevel ?? "Beginner"}
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                {stats?.masteredCount ?? 0} mastered ·{" "}
+                {stats?.nextMilestone && stats.nextMilestone !== Infinity
+                  ? `${stats.nextMilestone - (stats?.masteredCount ?? 0)} until next level`
+                  : "Max level reached!"}
+              </p>
+            </div>
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-ai to-sakura text-3xl">
+              {getLevelEmoji(stats?.progressLevel ?? "Beginner")}
+            </div>
+          </div>
+          <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-border/40">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-ai to-sakura transition-all duration-500"
+              style={{ width: `${stats?.progress ?? 0}%` }}
+            />
+          </div>
+          <p className="mt-2 text-right text-xs font-bold text-indigo-ai">
+            {stats?.progress ?? 0}%
+          </p>
+        </div>
+
+        {/* streak */}
         <div className="col-span-2 flex items-center justify-between rounded-3xl border-2 border-amber/30 bg-amber/10 p-5">
           <div>
             <p className="font-display text-3xl font-extrabold text-amber">
@@ -85,9 +124,19 @@ export default function HomeClient() {
           </div>
         </div>
 
-        <StatCard label="Words known" value={known} accent="text-mint" />
-        <StatCard label="Learning" value={learning} accent="text-amber" />
-        <StatCard label="Level" value={stats?.level ?? "—"} accent="text-indigo-ai" />
+        <StatCard 
+          label="Words mastered" 
+          value={known} 
+          accent="text-mint"
+          subtitle={`${learning} learning`}
+        />
+        <StatCard 
+          label="Kanji mastered" 
+          value={kanjiKnown} 
+          accent="text-sakura"
+          subtitle={`${stats?.kanji.learning ?? 0} learning`}
+        />
+        <StatCard label="JLPT Level" value={stats?.level ?? "—"} accent="text-indigo-ai" />
         <StatCard
           label="Messages sent"
           value={stats?.messagesSent ?? 0}
@@ -118,6 +167,33 @@ export default function HomeClient() {
             {total === 0
               ? "No words yet — tap words while chatting to collect them."
               : `${known} known · ${learning} learning · ${stats?.vocab.new ?? 0} new`}
+          </p>
+        </Surface>
+
+        {/* kanji progress bar */}
+        <Surface className="col-span-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-base font-bold">Kanji</h2>
+            <Link href="/kanji" className="text-xs font-bold text-sakura">
+              View all →
+            </Link>
+          </div>
+          <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-border/40">
+            {kanjiTotal > 0 && (
+              <>
+                <div className="h-full bg-sakura" style={{ flex: kanjiKnown }} />
+                <div className="h-full bg-amber" style={{ flex: stats?.kanji.learning ?? 0 }} />
+                <div
+                  className="h-full bg-sky"
+                  style={{ flex: stats?.kanji.new ?? 0 }}
+                />
+              </>
+            )}
+          </div>
+          <p className="mt-2 text-sm text-muted">
+            {kanjiTotal === 0
+              ? "No kanji yet — start learning from the kanji page."
+              : `${kanjiKnown} known · ${stats?.kanji.learning ?? 0} learning · ${stats?.kanji.new ?? 0} new`}
           </p>
         </Surface>
 
@@ -156,15 +232,32 @@ function StatCard({
   label,
   value,
   accent,
+  subtitle,
 }: {
   label: string;
   value: string | number;
   accent: string;
+  subtitle?: string;
 }) {
   return (
     <div className="rounded-3xl border-2 border-border bg-card p-4">
       <p className={`font-display text-2xl font-extrabold ${accent}`}>{value}</p>
       <p className="mt-0.5 text-xs font-bold text-muted">{label}</p>
+      {subtitle && <p className="mt-1 text-[10px] text-muted">{subtitle}</p>}
     </div>
   );
+}
+
+function getLevelEmoji(level: string): string {
+  const emojiMap: Record<string, string> = {
+    "Beginner": "🌱",
+    "Elementary": "🌿",
+    "Intermediate": "🌳",
+    "Upper Intermediate": "🎋",
+    "Advanced": "⭐",
+    "Expert": "💎",
+    "Master": "👑",
+    "Native-like": "🏆",
+  };
+  return emojiMap[level] || "🌱";
 }

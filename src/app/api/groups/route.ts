@@ -10,7 +10,12 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const memberships = await prisma.groupMember.findMany({
-    where: { userId: user.id, kind: "user", status: "accepted" },
+    where: { 
+      userId: user.id, 
+      kind: "user", 
+      status: "accepted",
+      hidden: false, // Don't show hidden conversations
+    },
     include: {
       group: {
         include: {

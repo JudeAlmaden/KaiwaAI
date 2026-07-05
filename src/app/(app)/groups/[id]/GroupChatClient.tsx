@@ -8,6 +8,7 @@ import { chatWithPersona, proactiveKaiMessage, type PromptContext } from "@/lib/
 import { hasAnyKey } from "@/lib/api-keys";
 import { getAutoMemory } from "@/lib/model-config";
 import { getProactiveChat, PROACTIVE } from "@/lib/proactive-config";
+import { checkJapaneseGrammar, hasJapanese } from "@/lib/grammar-check";
 import { RichKaiText } from "../../chat/RichText";
 import Avatar from "../../chat/Avatar";
 import ModelSwitcher from "../../chat/ModelSwitcher";
@@ -31,6 +32,7 @@ type GMsg = {
   english?: string | null;
   tokens?: string | null;
   correction?: string | null;
+  userCorrection?: string | null; // AI correction for user's Japanese
   isMe: boolean;
   createdAt: string;
 };
@@ -73,6 +75,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [memSuggestions, setMemSuggestions] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [quotedMessage, setQuotedMessage] = useState<GMsg | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScroll = useRef(false);
@@ -84,8 +87,46 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const consecutiveAi = useRef(0);
   const busyRef = useRef(false);
   const messagesRef = useRef<GMsg[]>([]);
+  const pollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cacheKey = cacheKeys.conv(groupId);
+
+  // Poll for new messages every 3 seconds for user-to-user chats
+  const pollForNewMessages = useCallback(() => {
+    if (pollingTimer.current) clearTimeout(pollingTimer.current);
+    
+    // Only poll for non-persona chats or group chats (where other users might message)
+    if (!group || group.kind === "persona") return;
+    
+    const poll = async () => {
+      try {
+        const lastMsg = messagesRef.current[messagesRef.current.length - 1];
+        if (!lastMsg || lastMsg.id.startsWith("tmp-")) return;
+        
+        const res = await fetch(
+          `/api/groups/${groupId}?after=${encodeURIComponent(lastMsg.id)}`
+        );
+        if (!res.ok) return;
+        
+        const d = await res.json();
+        const newMsgs: GMsg[] = d.messages ?? [];
+        
+        if (newMsgs.length > 0) {
+          setMessages((m) => {
+            const seen = new Set(m.map((x) => x.id));
+            return [...m, ...newMsgs.filter((x) => !seen.has(x.id))];
+          });
+        }
+      } catch {
+        // Polling is best-effort, ignore errors
+      } finally {
+        pollingTimer.current = setTimeout(poll, 3000); // Poll every 3 seconds
+      }
+    };
+    
+    pollingTimer.current = setTimeout(poll, 3000);
+  }, [groupId, group]);
+
 
   const load = useCallback(() => {
     fetch(`/api/groups/${groupId}`)
@@ -175,6 +216,16 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     markConversationSeen(groupId, last?.createdAt);
   }, [messages, group, cacheKey, groupId]);
 
+  // Start polling when group loads
+  useEffect(() => {
+    if (group && group.kind !== "persona") {
+      pollForNewMessages();
+    }
+    return () => {
+      if (pollingTimer.current) clearTimeout(pollingTimer.current);
+    };
+  }, [group, pollForNewMessages]);
+
   // ── In-chat proactivity: persona messages first while you're online ──
   // Only for 1:1 persona conversations (BYOK, client-generated).
   const canBeProactive = () =>
@@ -199,7 +250,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       busyRef.current = true;
       try {
         const ctx = await buildCtx(persona.id);
-        const history = messagesRef.current.map((m) => ({
+        // Only send last 12 messages for context
+        const history = messagesRef.current.slice(-12).map((m) => ({
           role: (m.senderKind === "persona" ? "model" : "user") as
             | "user"
             | "model",
@@ -267,7 +319,10 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   // Arm the idle opener once the conversation (with a persona) is loaded.
   useEffect(() => {
     if (group?.kind === "persona") scheduleIdleOpener();
-    return () => clearProactiveTimers();
+    return () => {
+      clearProactiveTimers();
+      if (pollingTimer.current) clearTimeout(pollingTimer.current);
+    };
   }, [group?.id, group?.kind, scheduleIdleOpener]);
 
   const len = charLength(input);
@@ -308,10 +363,33 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     setSending(true);
     setError(null);
     setInput("");
+    const quotedMsg = quotedMessage;
+    setQuotedMessage(null); // Clear quote after sending
     // The user spoke — cancel any pending proactive timers and reset counters.
     clearProactiveTimers();
     consecutiveAi.current = 0;
     busyRef.current = true;
+
+    // Check grammar for Japanese messages (client-side, BYOK)
+    let userCorrection = null;
+    if (hasJapanese(content) && hasAnyKey()) {
+      try {
+        console.log("Checking grammar for:", content);
+        const correction = await checkJapaneseGrammar(content);
+        console.log("Grammar check result:", correction);
+        if (correction.status !== "none" && correction.status !== "correct") {
+          userCorrection = correction;
+          console.log("Grammar correction applied:", userCorrection);
+        } else {
+          console.log("No correction needed, status:", correction.status);
+        }
+      } catch (err) {
+        console.warn("Grammar check failed:", err);
+        // Continue sending even if grammar check fails
+      }
+    } else {
+      console.log("Skipping grammar check - hasJapanese:", hasJapanese(content), "hasKey:", hasAnyKey());
+    }
 
     // When the AI should reply: 1:1 persona chats always; group chats only when
     // the persona is @mentioned. Generation is client-side (BYOK).
@@ -334,6 +412,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         senderName: "You",
         senderKind: "user",
         content,
+        userCorrection: userCorrection ? JSON.stringify(userCorrection) : null,
         isMe: true,
         createdAt: new Date().toISOString(),
       };
@@ -341,7 +420,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
 
       try {
         const ctx = await buildCtx(persona!.id);
-        const history = messages.map((m) => ({
+        // Only send last 12 messages for context (not the entire conversation)
+        const history = messages.slice(-12).map((m) => ({
           role: (m.senderKind === "persona" ? "model" : "user") as
             | "user"
             | "model",
@@ -358,6 +438,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             content,
+            quotedMessageId: quotedMsg?.id,
+            userCorrection: userCorrection ? JSON.stringify(userCorrection) : undefined,
             aiReply: {
               reply: kai.reply,
               english: kai.english,
@@ -421,7 +503,11 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       const res = await fetch(`/api/groups/${groupId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ 
+          content, 
+          quotedMessageId: quotedMsg?.id,
+          userCorrection: userCorrection ? JSON.stringify(userCorrection) : undefined,
+        }),
       });
       const d = await res.json();
       if (!res.ok) {
@@ -441,13 +527,20 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   }
 
   async function deleteGroup() {
-    if (!group?.isOwner) return;
-    const res = await fetch(`/api/groups/${groupId}`, { method: "DELETE" });
-    if (res.ok) {
-      // Remove its transcript cache AND drop it from the conversation list so
-      // it doesn't flash back before the hub refetches.
-      clearConversationCache(groupId);
-      router.push("/chat");
+    if (group?.isOwner) {
+      // Owner: actually delete the conversation for everyone
+      const res = await fetch(`/api/groups/${groupId}`, { method: "DELETE" });
+      if (res.ok) {
+        clearConversationCache(groupId);
+        router.push("/chat");
+      }
+    } else {
+      // Non-owner: just hide it from their list
+      const res = await fetch(`/api/groups/${groupId}/hide`, { method: "POST" });
+      if (res.ok) {
+        dropFromConvosCache(groupId);
+        router.push("/chat");
+      }
     }
   }
 
@@ -501,11 +594,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             {group?.members.map((m) => (m.kind === "persona" ? m.name : m.name)).join(", ")}
           </p>
         </div>
-        {group?.clientGenerated && (
-          <div className="hidden sm:block">
-            <ModelSwitcher />
-          </div>
-        )}
+        {group?.clientGenerated && <ModelSwitcher />}
         {group?.isOwner && !group.clientGenerated && personaCount > 0 && (
           <button
             onClick={() => setShowKey(true)}
@@ -585,6 +674,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
                   msg={m}
                   startGroup={!sameAsPrev || !!divider}
                   endGroup={!sameAsNext}
+                  onReply={() => setQuotedMessage(m)}
                 />
               </div>
             );
@@ -610,6 +700,24 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             <p className="mb-2 text-center text-xs font-semibold text-sakura">
               {error}
             </p>
+          )}
+          {quotedMessage && (
+            <div className="mb-2 flex items-start gap-2 rounded-2xl border-2 border-indigo-ai/30 bg-indigo-ai/5 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-indigo-ai">
+                  Replying to {quotedMessage.senderName}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {quotedMessage.content}
+                </p>
+              </div>
+              <button
+                onClick={() => setQuotedMessage(null)}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted hover:bg-border hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
           )}
           {memSuggestions.length > 0 && group?.persona && (
             <MemorySuggestions
@@ -697,29 +805,129 @@ function GroupBubble({
   msg,
   startGroup,
   endGroup,
+  onReply,
 }: {
   msg: GMsg;
   startGroup: boolean;
   endGroup: boolean;
+  onReply: () => void;
 }) {
+  const [showReply, setShowReply] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
   const isPersona = msg.senderKind === "persona";
   const time = timeLabel(new Date(msg.createdAt));
+
+  // Parse user correction if available
+  let userCorrection = null;
+  if (msg.userCorrection) {
+    try {
+      userCorrection = JSON.parse(msg.userCorrection);
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+
+  // Handle touch events for swipe gesture
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    setIsSwiping(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isSwiping) return;
+    const touchX = e.touches[0].clientX;
+    const touchY = e.touches[0].clientY;
+    const deltaX = touchX - touchStartX.current;
+    const deltaY = touchY - touchStartY.current;
+
+    // Only swipe horizontally if more horizontal than vertical movement
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+      e.preventDefault();
+      // Determine swipe direction based on message position
+      const correctDirection = msg.isMe ? deltaX < 0 : deltaX > 0;
+      if (correctDirection) {
+        const offset = Math.min(Math.abs(deltaX), 80);
+        setSwipeOffset(msg.isMe ? -offset : offset);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsSwiping(false);
+    // If swiped enough (more than 50px), trigger reply
+    if (Math.abs(swipeOffset) > 50) {
+      onReply();
+    }
+    // Animate back to original position
+    setTimeout(() => setSwipeOffset(0), 100);
+  };
 
   if (msg.isMe) {
     return (
       <div
-        className={`group flex justify-end ${startGroup ? "mt-3" : "mt-0.5"}`}
+        className={`group flex items-center justify-end gap-2 ${startGroup ? "mt-3" : "mt-0.5"}`}
+        onMouseEnter={() => setShowReply(true)}
+        onMouseLeave={() => setShowReply(false)}
       >
-        <div className="flex max-w-[80%] flex-col items-end">
+        {/* Reply button on the side - vertically centered, visible during swipe */}
+        <button
+          onClick={onReply}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white ${
+            showReply || Math.abs(swipeOffset) > 20 ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
+          }`}
+          title="Reply"
+        >
+          ↩
+        </button>
+        <div
+          className="flex max-w-[80%] flex-col items-end touch-pan-y"
+          style={{ 
+            transform: `translateX(${swipeOffset}px)`,
+            transition: isSwiping ? 'none' : 'transform 0.2s ease-out'
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           <div
             className={`rounded-3xl bg-indigo-ai px-4 py-2.5 text-white shadow-sm ${
               endGroup ? "rounded-br-md" : ""
             }`}
           >
-            <p className="leading-relaxed">{msg.content}</p>
+            <p className="font-jp leading-relaxed">{msg.content}</p>
           </div>
           {endGroup && (
             <span className="mr-1 mt-0.5 text-[10px] text-muted/60">{time}</span>
+          )}
+          {/* Grammar correction for user's message */}
+          {userCorrection && userCorrection.status !== "correct" && userCorrection.status !== "none" && (
+            <div className="mt-2 max-w-full rounded-2xl border-2 border-amber/30 bg-amber/5 px-3 py-2 text-left">
+              <div className="flex items-start gap-2">
+                <span className="text-sm">✏️</span>
+                <div className="min-w-0 flex-1 text-xs">
+                  {userCorrection.corrected && (
+                    <p className="mb-1">
+                      <span className="font-jp text-sakura line-through">{msg.content}</span>
+                      {" → "}
+                      <span className="font-jp font-bold text-mint">{userCorrection.corrected}</span>
+                    </p>
+                  )}
+                  {userCorrection.explanation && (
+                    <p className="text-muted">{userCorrection.explanation}</p>
+                  )}
+                  {userCorrection.natural && userCorrection.natural !== userCorrection.corrected && (
+                    <p className="mt-1">
+                      <span className="text-muted/70">More natural: </span>
+                      <span className="font-jp font-semibold text-foreground">{userCorrection.natural}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -727,12 +935,25 @@ function GroupBubble({
   }
 
   return (
-    <div className={`flex items-end gap-2 ${startGroup ? "mt-3" : "mt-0.5"}`}>
+    <div
+      className={`group flex items-center gap-2 ${startGroup ? "mt-3" : "mt-0.5"}`}
+      onMouseEnter={() => setShowReply(true)}
+      onMouseLeave={() => setShowReply(false)}
+    >
       {/* avatar slot — rendered only on the last bubble of a run */}
       <div className="w-7 shrink-0">
         {endGroup && <Avatar name={msg.senderName} emoji={undefined} size={28} />}
       </div>
-      <div className="flex min-w-0 max-w-[82%] flex-col items-start">
+      <div
+        className="flex min-w-0 max-w-[82%] flex-col items-start touch-pan-y"
+        style={{ 
+          transform: `translateX(${swipeOffset}px)`,
+          transition: isSwiping ? 'none' : 'transform 0.2s ease-out'
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         {startGroup && (
           <span
             className={`mb-0.5 ml-1 text-xs font-bold ${isPersona ? "text-indigo-ai" : "text-muted"}`}
@@ -761,6 +982,16 @@ function GroupBubble({
           <span className="ml-1 mt-0.5 text-[10px] text-muted/60">{time}</span>
         )}
       </div>
+      {/* Reply button on the side - vertically centered, visible during swipe */}
+      <button
+        onClick={onReply}
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white ${
+          showReply || Math.abs(swipeOffset) > 20 ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
+        }`}
+        title="Reply"
+      >
+        ↩
+      </button>
     </div>
   );
 }

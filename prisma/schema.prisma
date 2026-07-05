@@ -134,6 +134,8 @@ model GroupMember {
   // Invite state for human members. Personas are always "accepted".
   // The group owner is auto-accepted on creation.
   status    String  @default("accepted") // pending | accepted
+  // Whether this member has hidden the conversation from their chat list
+  hidden    Boolean @default(false)
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   personaId String?
@@ -167,6 +169,9 @@ model GroupMessage {
   english    String?
   tokens     String?
   correction String?
+  // AI grammar correction for user's Japanese messages (JSON string). Generated
+  // client-side when user sends Japanese text.
+  userCorrection String?
   createdAt DateTime @default(now())
 
   @@index([groupId, createdAt])
