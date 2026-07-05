@@ -324,10 +324,11 @@ function ConversationRow({
   const time = relativeTime(convo.lastAt);
 
   return (
-    <div className="group relative flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-3.5 py-3 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md">
-      <Link href={`/chat/c/${convo.id}`} className="absolute inset-0" aria-label={`Open conversation with ${convo.name}`} />
-      
-      <div className="relative z-10">
+    <Link 
+      href={`/chat/c/${convo.id}`} 
+      className="group relative flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-3.5 py-3 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md"
+    >
+      <div className="relative">
         {avatar}
         {isAi && (
           <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai text-[8px] text-white ring-2 ring-card">
@@ -336,7 +337,7 @@ function ConversationRow({
         )}
       </div>
       
-      <span className="relative z-10 min-w-0 flex-1">
+      <span className="relative min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className={`truncate ${unread ? "font-extrabold" : "font-bold"}`}>
             {convo.name}
@@ -375,7 +376,7 @@ function ConversationRow({
       </span>
 
       {/* Three-dots menu */}
-      <div ref={menuRef} className="relative z-20">
+      <div ref={menuRef} className="relative z-10">
         <button
           onClick={(e) => {
             e.preventDefault();
@@ -393,7 +394,7 @@ function ConversationRow({
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-xl border-2 border-border bg-card p-1 shadow-xl">
+          <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border-2 border-border bg-card p-1 shadow-xl">
             <button
               onClick={handleHide}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-sakura/5"
@@ -407,6 +408,6 @@ function ConversationRow({
           </div>
         )}
       </div>
-    </div>
+    </Link>
   );
 }
