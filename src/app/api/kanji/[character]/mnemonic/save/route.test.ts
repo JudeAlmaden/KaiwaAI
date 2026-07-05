@@ -18,15 +18,15 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
   const mockUser = { id: "user1", email: "test@example.com" };
   const mockKanji = {
     id: "kanji1",
-    character: "一",
+    character: "ä¸€",
     strokes: 1,
     grade: 1,
     frequency: 2,
     jlptLevel: 5,
     wkLevel: 1,
     meanings: '["one"]',
-    readingsOn: '["イチ","イツ"]',
-    readingsKun: '["ひと"]',
+    readingsOn: '["ã‚¤ãƒ","ã‚¤ãƒ„"]',
+    readingsKun: '["ã²ã¨"]',
     radicals: '[]',
   };
 
@@ -38,10 +38,10 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     it("should return 401 if not authenticated", async () => {
       vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(null);
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(401);
@@ -50,13 +50,13 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should return 400 if mnemonic is missing", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({}),
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(400);
@@ -65,13 +65,13 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should return 400 if mnemonic is not a string", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({ mnemonic: 123 }),
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(400);
@@ -80,14 +80,14 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should return 404 if kanji not found", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
       vi.mocked(prisma.kanji.findUnique).mockResolvedValue(null);
 
-      const req = new Request("http://localhost/api/kanji/不存在/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸å­˜åœ¨/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({ mnemonic: "Test mnemonic" }),
       });
-      const params = Promise.resolve({ character: "不存在" });
+      const params = Promise.resolve({ character: "ä¸å­˜åœ¨" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(404);
@@ -96,22 +96,21 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should save new mnemonic successfully", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji as never);
       vi.mocked(prisma.kanjiMnemonic.upsert).mockResolvedValue({
         id: "mnemonic1",
         userId: mockUser.id,
         kanjiId: mockKanji.id,
         mnemonic: "One horizontal line, simple as that!",
         createdAt: new Date(),
-        updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({ mnemonic: "One horizontal line, simple as that!" }),
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(200);
@@ -130,22 +129,21 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should update existing mnemonic", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji as never);
       vi.mocked(prisma.kanjiMnemonic.upsert).mockResolvedValue({
         id: "mnemonic1",
         userId: mockUser.id,
         kanjiId: mockKanji.id,
         mnemonic: "Updated mnemonic story",
         createdAt: new Date(),
-        updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({ mnemonic: "Updated mnemonic story" }),
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(200);
@@ -154,43 +152,42 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should handle URL-encoded characters", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji as never);
       vi.mocked(prisma.kanjiMnemonic.upsert).mockResolvedValue({
         id: "mnemonic1",
         userId: mockUser.id,
         kanjiId: mockKanji.id,
         mnemonic: "Test",
         createdAt: new Date(),
-        updatedAt: new Date(),
       });
 
       const req = new Request("http://localhost/api/kanji/%E4%B8%80/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({ mnemonic: "Test" }),
       });
-      const params = Promise.resolve({ character: "%E4%B8%80" }); // 一 encoded
+      const params = Promise.resolve({ character: "%E4%B8%80" }); // URL-encoded 一
 
       const res = await POST(req, { params });
       expect(res.status).toBe(200);
 
       expect(prisma.kanji.findUnique).toHaveBeenCalledWith({
-        where: { character: "一" },
+        where: { character: "一" }, // Decoded
       });
     });
 
     it("should return 500 on database error", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+      vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji as never);
       vi.mocked(prisma.kanjiMnemonic.upsert).mockRejectedValue(
         new Error("Database error")
       );
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({ mnemonic: "Test" }),
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(500);
@@ -199,13 +196,13 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should handle empty mnemonic string", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
         body: JSON.stringify({ mnemonic: "" }),
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(400);
@@ -214,13 +211,13 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     });
 
     it("should handle invalid JSON body", async () => {
-      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
 
-      const req = new Request("http://localhost/api/kanji/一/mnemonic/save", {
+      const req = new Request("http://localhost/api/kanji/ä¸€/mnemonic/save", {
         method: "POST",
         body: "invalid json",
       });
-      const params = Promise.resolve({ character: "一" });
+      const params = Promise.resolve({ character: "ä¸€" });
 
       const res = await POST(req, { params });
       expect(res.status).toBe(400);

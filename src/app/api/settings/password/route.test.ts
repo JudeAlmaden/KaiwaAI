@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import bcrypt from "bcryptjs";
 import { PATCH } from "./route";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import type { User } from "@/generated/prisma";
 
 vi.mock("@/lib/auth-helpers");
 vi.mock("bcryptjs");
@@ -33,7 +32,7 @@ describe("/api/settings/password", () => {
   });
 
   it("returns 400 when passwords are missing", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as User);
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as never);
     const req = new Request("http://localhost/api/settings/password", {
       method: "PATCH",
       body: JSON.stringify({ currentPassword: "old" }),
@@ -45,7 +44,7 @@ describe("/api/settings/password", () => {
   });
 
   it("returns 400 when new password is too short", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as User);
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as never);
     const req = new Request("http://localhost/api/settings/password", {
       method: "PATCH",
       body: JSON.stringify({ currentPassword: "old123", newPassword: "short" }),
@@ -60,7 +59,7 @@ describe("/api/settings/password", () => {
     vi.mocked(getCurrentUser).mockResolvedValue({
       id: "user1",
       password: "hashedOldPassword",
-    } as Partial<User> as User);
+    } as Partial<User> as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
     const req = new Request("http://localhost/api/settings/password", {
@@ -77,10 +76,10 @@ describe("/api/settings/password", () => {
     vi.mocked(getCurrentUser).mockResolvedValue({
       id: "user1",
       password: "hashedOldPassword",
-    } as Partial<User> as User);
+    } as Partial<User> as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
     vi.mocked(bcrypt.hash).mockResolvedValue("hashedNewPassword" as never);
-    vi.mocked(prisma.user.update).mockResolvedValue({ id: "user1" } as Partial<User> as User);
+    vi.mocked(prisma.user.update).mockResolvedValue({ id: "user1" } as Partial<User> as never);
 
     const req = new Request("http://localhost/api/settings/password", {
       method: "PATCH",

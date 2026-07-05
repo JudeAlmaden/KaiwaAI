@@ -310,6 +310,9 @@ model UserKanji {
   nextReview    DateTime @default(now())
   lastReviewedAt DateTime?
 
+  // User's custom mnemonic for remembering this kanji
+  mnemonic      String?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

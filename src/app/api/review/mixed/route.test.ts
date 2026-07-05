@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "./route";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import type { Flashcard, UserKanji, Kanji } from "@prisma/client";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -11,11 +10,6 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 vi.mock("@/lib/auth-helpers");
-
-type MockFlashcard = Pick<Flashcard, "id" | "word" | "reading" | "romaji" | "meaning" | "partOfSpeech" | "status">;
-type MockUserKanji = Pick<UserKanji, "id" | "mnemonic" | "status"> & {
-  kanji: Pick<Kanji, "character" | "meanings" | "readingsOn" | "readingsKun">;
-};
 
 describe("/api/review/mixed GET", () => {
   beforeEach(() => {
@@ -32,7 +26,7 @@ describe("/api/review/mixed GET", () => {
   it("fetches and shuffles vocabulary and kanji cards", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
     
-    const mockVocab: MockFlashcard[] = [
+    const mockVocab = [
       {
         id: "v1",
         word: "猫",
@@ -44,7 +38,7 @@ describe("/api/review/mixed GET", () => {
       },
     ];
     
-    const mockKanji: MockUserKanji[] = [
+    const mockKanji = [
       {
         id: "k1",
         kanji: {
@@ -74,7 +68,7 @@ describe("/api/review/mixed GET", () => {
   it("respects limit parameter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
     
-    const mockVocab: MockFlashcard[] = Array.from({ length: 50 }, (_, i) => ({
+    const mockVocab = Array.from({ length: 50 }, (_, i) => ({
       id: `v${i}`,
       word: "word",
       reading: "reading",
@@ -84,7 +78,7 @@ describe("/api/review/mixed GET", () => {
       status: "learning",
     }));
     
-    const mockKanji: MockUserKanji[] = Array.from({ length: 50 }, (_, i) => ({
+    const mockKanji = Array.from({ length: 50 }, (_, i) => ({
       id: `k${i}`,
       kanji: {
         character: "字",

@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "./route";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { currentStreak } from "@/lib/streak";
-import type { User } from "@/generated/prisma";
 
 vi.mock("@/lib/auth-helpers");
 vi.mock("@/lib/streak");
@@ -44,7 +43,7 @@ describe("/api/stats", () => {
       streakCount: 5,
       streakBestCount: 10,
       lastStreakDay: "2026-07-05",
-    } as Partial<User> as User);
+    } as Partial<User> as never);
 
     vi.mocked(currentStreak).mockReturnValue(5);
 
@@ -94,7 +93,7 @@ describe("/api/stats", () => {
       streakCount: 0,
       streakBestCount: 0,
       lastStreakDay: null,
-    } as Partial<User> as User);
+    } as Partial<User> as never);
 
     vi.mocked(currentStreak).mockReturnValue(0);
 
@@ -131,7 +130,7 @@ describe("/api/stats", () => {
       streakCount: 0,
       streakBestCount: 0,
       lastStreakDay: null,
-    } as Partial<User> as User);
+    } as Partial<User> as never);
 
     vi.mocked(currentStreak).mockReturnValue(0);
 
@@ -168,7 +167,7 @@ describe("/api/stats", () => {
       streakCount: 0,
       streakBestCount: 0,
       lastStreakDay: null,
-    } as Partial<User> as User);
+    } as Partial<User> as never);
 
     vi.mocked(currentStreak).mockReturnValue(0);
 
@@ -205,7 +204,7 @@ describe("/api/stats", () => {
       streakCount: 0,
       streakBestCount: 0,
       lastStreakDay: null,
-    } as Partial<User> as User);
+    } as Partial<User> as never);
 
     vi.mocked(currentStreak).mockReturnValue(0);
 

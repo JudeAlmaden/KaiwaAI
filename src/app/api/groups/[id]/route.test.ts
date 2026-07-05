@@ -40,8 +40,8 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
   });
 
   it("should return new messages when 'after' parameter is provided", async () => {
-    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" });
+    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
     vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
 
     const afterMessage = {
@@ -103,8 +103,8 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
   });
 
   it("should return empty array when no new messages after specified ID", async () => {
-    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" });
+    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
     vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
 
     const afterMessage = {
@@ -126,8 +126,8 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
   });
 
   it("should limit new messages to 50 when polling", async () => {
-    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" });
+    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
     vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
 
     const afterMessage = {
@@ -151,8 +151,8 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
   });
 
   it("should not return group details when 'after' is provided (only messages)", async () => {
-    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" });
+    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
     vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
 
     const afterMessage = {
@@ -188,7 +188,7 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
   });
 
   it("should still require membership for polling", async () => {
-    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser);
+    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
     vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
     vi.mocked(prisma.groupMember.findFirst).mockResolvedValue(null);
 
