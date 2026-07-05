@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PATCH } from "./route";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import type { User } from "@/generated/prisma";
 
 vi.mock("@/lib/auth-helpers");
 
@@ -31,7 +30,7 @@ describe("/api/settings/name", () => {
   });
 
   it("returns 400 when name is missing", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as User);
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as never);
     const req = new Request("http://localhost/api/settings/name", {
       method: "PATCH",
       body: JSON.stringify({ name: "" }),
@@ -43,7 +42,7 @@ describe("/api/settings/name", () => {
   });
 
   it("returns 400 when name is too long", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as User);
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as never);
     const req = new Request("http://localhost/api/settings/name", {
       method: "PATCH",
       body: JSON.stringify({ name: "a".repeat(51) }),
@@ -55,8 +54,8 @@ describe("/api/settings/name", () => {
   });
 
   it("updates name successfully", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as User);
-    vi.mocked(prisma.user.update).mockResolvedValue({ id: "user1", name: "New Name" } as Partial<User> as User);
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({ id: "user1", name: "New Name" } as never);
 
     const req = new Request("http://localhost/api/settings/name", {
       method: "PATCH",
@@ -76,8 +75,8 @@ describe("/api/settings/name", () => {
   });
 
   it("trims whitespace from name", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as Partial<User> as User);
-    vi.mocked(prisma.user.update).mockResolvedValue({ id: "user1", name: "Trimmed" } as Partial<User> as User);
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1" } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({ id: "user1", name: "Trimmed" } as never);
 
     const req = new Request("http://localhost/api/settings/name", {
       method: "PATCH",
