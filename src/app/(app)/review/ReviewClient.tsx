@@ -11,6 +11,7 @@ import KanjiBreakdown from "../chat/KanjiBreakdown";
 
 type Card = {
   id: string;
+  type?: "vocabulary" | "kanji"; // For mixed mode
   // Vocabulary fields
   word?: string;
   reading?: string;
@@ -22,6 +23,7 @@ type Card = {
   meanings?: string[];
   readingsOn?: string[];
   readingsKun?: string[];
+  mnemonic?: string; // User's mnemonic for this kanji
   // Common
   status: "new" | "learning" | "known";
 };
@@ -41,7 +43,7 @@ type StudyMode =
   | "leeches";      // Cards reviewed 8+ times with interval <7 days
 
 type CardDirection = "jp-to-en" | "en-to-jp" | "mixed";
-type ReviewType = "vocabulary" | "kanji";
+type ReviewType = "vocabulary" | "kanji" | "mixed";
 
 type Setup = {
   reviewType: ReviewType;
@@ -67,6 +69,7 @@ export default function ReviewClient() {
   const [total, setTotal] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [tally, setTally] = useState({ again: 0, good: 0 });
+  const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
     const endpoint = `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review?studyMode=due&limit=200`;
@@ -78,7 +81,12 @@ export default function ReviewClient() {
 
   async function start(custom?: Partial<Setup>) {
     const s = { ...setup, ...custom };
-    const endpoint = `/api/${s.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
+    
+    // For mixed mode, use the dedicated mixed endpoint
+    const endpoint = s.reviewType === "mixed" 
+      ? "/api/review/mixed"
+      : `/api/${s.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
+      
     const params = new URLSearchParams({ 
       studyMode: s.studyMode, 
       limit: String(s.limit) 
@@ -102,6 +110,7 @@ export default function ReviewClient() {
     setTotal(shuffled.length);
     setTally({ again: 0, good: 0 });
     setFlipped(false);
+    setShowHint(false);
     setPhase("session");
   }
 
@@ -112,7 +121,12 @@ export default function ReviewClient() {
 
       // Only update SRS if not in practice mode
       if (!setup.practice) {
-        const endpoint = `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
+        // Determine which endpoint based on card type (for mixed mode) or setup
+        const cardType = card.type || setup.reviewType;
+        const endpoint = cardType === "kanji" 
+          ? "/api/kanji/review"
+          : "/api/flashcards/review";
+          
         fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -128,6 +142,7 @@ export default function ReviewClient() {
       const rest = queue.slice(1);
       setQueue(rest);
       setFlipped(false);
+      setShowHint(false); // Reset hint when moving to next card
       if (rest.length === 0) setPhase("done");
     },
     [queue, setup.practice, setup.reviewType]
@@ -190,6 +205,12 @@ export default function ReviewClient() {
                 onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
               >
                 Kanji
+              </Chip>
+              <Chip
+                active={setup.reviewType === "mixed"}
+                onClick={() => setSetup((s) => ({ ...s, reviewType: "mixed" }))}
+              >
+                Mixed
               </Chip>
             </div>
 
@@ -349,7 +370,9 @@ export default function ReviewClient() {
   const doneCount = total - queue.length;
   const pct = total ? (doneCount / total) * 100 : 0;
 
-  const isVocab = setup.reviewType === "vocabulary";
+  // Determine if this is vocabulary or kanji (for mixed mode)
+  const cardType = card.type || setup.reviewType;
+  const isVocab = cardType === "vocabulary";
   const isJpToEn = card._dir === "jp-to-en";
 
   // Front side content
@@ -364,12 +387,14 @@ export default function ReviewClient() {
     romaji: card.romaji,
     english: card.meaning,
     meta: card.partOfSpeech,
+    mnemonic: undefined,
   } : {
     japanese: card.character,
     reading: [...(card.readingsOn || []), ...(card.readingsKun || [])].join(", "),
     romaji: "",
     english: card.meanings?.join(", "),
     meta: "Kanji",
+    mnemonic: card.mnemonic,
   };
 
   return (
@@ -430,6 +455,14 @@ export default function ReviewClient() {
                     {backContent.meta}
                   </p>
                   {isVocab && card.word && <KanjiBreakdown word={card.word} />}
+                  {!isVocab && backContent.mnemonic && (
+                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
+                      <p className="text-xs font-bold uppercase tracking-wide text-mint">
+                        💡 Mnemonic
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">{backContent.mnemonic}</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -439,11 +472,40 @@ export default function ReviewClient() {
                   {backContent.reading && (
                     <p className="mt-2 text-sm text-muted">{backContent.reading}</p>
                   )}
+                  {!isVocab && backContent.mnemonic && (
+                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
+                      <p className="text-xs font-bold uppercase tracking-wide text-mint">
+                        💡 Mnemonic
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">{backContent.mnemonic}</p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
           ) : (
-            <p className="mt-5 text-sm text-muted">Tap or press Space to flip</p>
+            <>
+              <p className="mt-5 text-sm text-muted">Tap or press Space to flip</p>
+              {!isVocab && card.mnemonic && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowHint(!showHint);
+                  }}
+                  className="mt-3 rounded-full border-2 border-mint/30 bg-mint/5 px-4 py-1.5 text-xs font-bold text-mint transition-colors hover:bg-mint/10"
+                >
+                  {showHint ? "Hide hint" : "💡 Show hint"}
+                </button>
+              )}
+              {showHint && !isVocab && card.mnemonic && (
+                <div className="mt-3 w-full rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
+                  <p className="text-xs font-bold uppercase tracking-wide text-mint">
+                    Mnemonic
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">{card.mnemonic}</p>
+                </div>
+              )}
+            </>
           )}
         </button>
 

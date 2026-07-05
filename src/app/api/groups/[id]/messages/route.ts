@@ -39,6 +39,7 @@ function rowToMsg(m: {
   english: string | null;
   tokens: string | null;
   correction: string | null;
+  userCorrection: string | null;
   senderUserId: string | null;
   createdAt: Date;
 }, meId: string) {
@@ -50,6 +51,7 @@ function rowToMsg(m: {
     english: m.english,
     tokens: m.tokens,
     correction: m.correction,
+    userCorrection: m.userCorrection,
     isMe: m.senderUserId === meId,
     createdAt: m.createdAt,
   };
@@ -71,7 +73,16 @@ export async function POST(
   });
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
 
-  let body: { content?: string; aiReply?: { reply: string; english?: string; tokens?: unknown[]; correction?: unknown } };
+  let body: { 
+    content?: string; 
+    userCorrection?: string;
+    aiReply?: { 
+      reply: string; 
+      english?: string; 
+      tokens?: unknown[]; 
+      correction?: unknown;
+    };
+  };
   try {
     body = await req.json();
   } catch {
@@ -88,6 +99,19 @@ export async function POST(
 
   const senderName = user.name || user.email;
 
+  // Unhide the conversation for all members who have it hidden when a new message arrives
+  const hiddenMembers = await prisma.groupMember.findMany({
+    where: { groupId: id, hidden: true, kind: "user" },
+    select: { id: true },
+  });
+  
+  if (hiddenMembers.length > 0) {
+    await prisma.groupMember.updateMany({
+      where: { id: { in: hiddenMembers.map((m) => m.id) } },
+      data: { hidden: false },
+    });
+  }
+
   const humanMsg = await prisma.groupMessage.create({
     data: {
       groupId: id,
@@ -96,6 +120,7 @@ export async function POST(
       senderName,
       senderKind: "user",
       content,
+      userCorrection: body.userCorrection || null,
     },
   });
 

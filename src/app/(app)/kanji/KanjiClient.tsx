@@ -16,10 +16,14 @@ type KanjiCard = {
   vocabCount: number;
   knownVocabCount: number;
   masteryPercent: number;
+  inReviews: boolean;
 };
 
 const JLPT_LEVELS = ["All", "N5", "N4", "N3", "N2", "N1"] as const;
 type JlptFilter = (typeof JLPT_LEVELS)[number];
+
+const REVIEW_FILTERS = ["All", "In Reviews", "Not in Reviews"] as const;
+type ReviewFilter = (typeof REVIEW_FILTERS)[number];
 
 const SORT_OPTIONS = ["Frequency", "Mastery", "Strokes"] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
@@ -29,6 +33,7 @@ export default function KanjiClient() {
   const [kanji, setKanji] = useState<KanjiCard[] | null>(null);
   const [search, setSearch] = useState("");
   const [jlptFilter, setJlptFilter] = useState<JlptFilter>("All");
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("All");
   const [sortBy, setSortBy] = useState<SortOption>("Frequency");
   const [loading, setLoading] = useState(true);
 
@@ -68,6 +73,13 @@ export default function KanjiClient() {
       list = list.filter((k) => k.jlptLevel === level);
     }
 
+    // Review filter
+    if (reviewFilter === "In Reviews") {
+      list = list.filter((k) => k.inReviews);
+    } else if (reviewFilter === "Not in Reviews") {
+      list = list.filter((k) => !k.inReviews);
+    }
+
     // Search filter
     const q = search.trim().toLowerCase();
     if (q) {
@@ -81,7 +93,7 @@ export default function KanjiClient() {
     }
 
     return list;
-  }, [kanji, jlptFilter, search]);
+  }, [kanji, jlptFilter, reviewFilter, search]);
 
   if (loading) {
     return (
@@ -167,6 +179,19 @@ export default function KanjiClient() {
           ))}
         </div>
 
+        {/* Review Status Filter */}
+        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto pb-1">
+          {REVIEW_FILTERS.map((filter) => (
+            <Chip
+              key={filter}
+              active={reviewFilter === filter}
+              onClick={() => setReviewFilter(filter)}
+            >
+              {filter}
+            </Chip>
+          ))}
+        </div>
+
         {/* Sort Selector */}
         <div className="mx-auto flex w-full max-w-3xl items-center gap-2 text-xs">
           <span className="font-semibold text-muted">Sort:</span>
@@ -198,6 +223,7 @@ export default function KanjiClient() {
             onClick={() => {
               setSearch("");
               setJlptFilter("All");
+              setReviewFilter("All");
             }}
             className="mt-4 rounded-full border-2 border-indigo-ai px-5 py-2 text-sm font-bold text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white hover:scale-105"
           >
@@ -212,6 +238,16 @@ export default function KanjiClient() {
                 key={k.id}
                 kanji={k}
                 onClick={() => router.push(`/kanji/${encodeURIComponent(k.character)}`)}
+                onToggleReview={(character, nowInReviews) => {
+                  // Update local state
+                  setKanji((prev) =>
+                    prev?.map((item) =>
+                      item.character === character
+                        ? { ...item, inReviews: nowInReviews }
+                        : item
+                    ) ?? null
+                  );
+                }}
               />
             ))}
           </div>
@@ -224,15 +260,53 @@ export default function KanjiClient() {
 function KanjiCardItem({
   kanji,
   onClick,
+  onToggleReview,
 }: {
   kanji: KanjiCard;
   onClick: () => void;
+  onToggleReview?: (character: string, inReviews: boolean) => void;
 }) {
+  const [adding, setAdding] = useState(false);
+
+  const handleToggleReview = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (adding) return;
+    
+    setAdding(true);
+    try {
+      if (kanji.inReviews) {
+        await fetch(`/api/kanji/${encodeURIComponent(kanji.character)}/learn`, {
+          method: "DELETE",
+        });
+      } else {
+        await fetch(`/api/kanji/${encodeURIComponent(kanji.character)}/learn`, {
+          method: "POST",
+        });
+      }
+      onToggleReview?.(kanji.character, !kanji.inReviews);
+    } catch (error) {
+      console.error("Failed to toggle review:", error);
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <div
       onClick={onClick}
-      className="group relative flex cursor-pointer flex-col items-center gap-2.5 rounded-2xl border-2 border-border bg-card p-5 text-center transition-all hover:-translate-y-1 hover:border-indigo-soft hover:shadow-lg hover:shadow-indigo-ai/10"
+      className={`group relative flex cursor-pointer flex-col items-center gap-2.5 rounded-2xl border-2 bg-card p-5 text-center transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-ai/10 ${
+        kanji.inReviews
+          ? "border-mint/50 hover:border-mint"
+          : "border-border hover:border-indigo-soft"
+      }`}
     >
+      {/* Review Badge - top-left */}
+      {kanji.inReviews && (
+        <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-mint/20 px-2 py-0.5">
+          <span className="text-xs">✓</span>
+        </div>
+      )}
+
       {/* Mastery Ring - positioned absolute top-right */}
       <div className="absolute right-3 top-3">
         <MasteryRing percent={kanji.masteryPercent} />
@@ -266,6 +340,19 @@ function KanjiCardItem({
       <p className="text-[10px] text-muted">
         {kanji.vocabCount} word{kanji.vocabCount !== 1 ? "s" : ""}
       </p>
+
+      {/* Add/Remove from Reviews Button */}
+      <button
+        onClick={handleToggleReview}
+        disabled={adding}
+        className={`mt-1 w-full rounded-full px-3 py-1.5 text-[10px] font-bold transition-all ${
+          kanji.inReviews
+            ? "bg-sakura/20 text-sakura hover:bg-sakura/30"
+            : "bg-indigo-ai/20 text-indigo-ai hover:bg-indigo-ai/30"
+        } disabled:opacity-50`}
+      >
+        {adding ? "..." : kanji.inReviews ? "Remove" : "+ Add to Reviews"}
+      </button>
     </div>
   );
 }

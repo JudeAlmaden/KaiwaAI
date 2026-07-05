@@ -98,33 +98,35 @@ export default function ConvMenu({
             </button>
           )}
 
-          {/* Delete conversation (owner only) */}
-          {isOwner &&
-            (confirm === "delete" ? (
-              <ConfirmRow
-                title="Delete conversation?"
-                note="Permanently deletes the conversation and all its messages for everyone. This can't be undone."
-                actionLabel={busy === "delete" ? "Deleting…" : "Delete"}
-                onConfirm={() => run("delete")}
-                onCancel={() => setConfirm(null)}
-                disabled={busy !== null}
-              />
-            ) : (
-              <button
-                onClick={() => setConfirm("delete")}
-                className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-sakura/5"
-              >
-                <span className="text-lg">🗑️</span>
-                <span>
-                  <span className="block text-sm font-bold text-sakura">
-                    Delete conversation
-                  </span>
-                  <span className="block text-xs text-muted">
-                    Remove it for everyone, permanently.
-                  </span>
+          {/* Delete conversation - always available for any member */}
+          {confirm === "delete" ? (
+            <ConfirmRow
+              title="Delete conversation?"
+              note={isOwner 
+                ? "Permanently deletes the conversation and all its messages for everyone. This can't be undone."
+                : "Removes this conversation from your list. Reappears if someone messages you."
+              }
+              actionLabel={busy === "delete" ? "Deleting…" : "Delete"}
+              onConfirm={() => run("delete")}
+              onCancel={() => setConfirm(null)}
+              disabled={busy !== null}
+            />
+          ) : (
+            <button
+              onClick={() => setConfirm("delete")}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-sakura/5"
+            >
+              <span className="text-lg">🗑️</span>
+              <span>
+                <span className="block text-sm font-bold text-sakura">
+                  Delete conversation
                 </span>
-              </button>
-            ))}
+                <span className="block text-xs text-muted">
+                  {isOwner ? "Remove it for everyone, permanently." : "Remove from your list."}
+                </span>
+              </span>
+            </button>
+          )}
         </div>
       )}
     </div>

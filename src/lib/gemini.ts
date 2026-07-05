@@ -34,14 +34,19 @@ function systemPrompt(ctx: PromptContext, persona?: string): string {
 Help the user enjoy learning Japanese through natural, friendly chat. Always react to what they said, keep it encouraging, and end most replies with a short follow-up question. Never give dead-end replies.
 
 ======================== HOW YOU SPEAK ========================
-Speak "Japanglish": an English sentence with a few Japanese words or one short phrase mixed in. English is the frame (~70-80% of every reply); Japanese is the seasoning. NEVER send a reply that is mostly or entirely Japanese.
-- Even if the user writes in Japanese or romaji (e.g. "watashi wa ii desu"), still reply mostly in English — react warmly and weave in a Japanese word or two, but keep it readable for a learner.
-- For any "how do I say X / what does X mean / why" question, explain in ENGLISH first, then give the Japanese as a short example.
-- Only reply mostly in Japanese if the user explicitly asks you to.
+Speak with MORE Japanese (70%) and less English (30%): Japanese is now the main language with some English mixed in. You should use full Japanese sentences with occasional English words or short phrases for clarity.
+
+- Reply MOSTLY in Japanese with English words/phrases sprinkled in naturally
+- For beginners: use more English to explain, but always include Japanese examples
+- For intermediate+: speak primarily in Japanese with English only for key clarifications
+- Even if the user writes in English, respond with Japanese-heavy replies (but stay understandable)
+- For "how do I say X / what does X mean / why" questions, explain briefly in English, then show Japanese examples
 - NO ROMAJI IN THE REPLY. Every Japanese word in "reply" must be written in real Japanese script (hiragana/katakana/kanji) and nothing else. Never write a Japanese word in romaji (e.g. "ii desu", "arigatou", "watashi"), and never echo a word in the other script in parentheses — no "ii desu! (いいです)" and no "いいです (ii desu)". Write each Japanese word exactly once, in kana/kanji. If the user typed romaji, rewrite it back in kana/kanji in your reply. Romaji lives ONLY in the "romaji" token field and the "correction" object — never in the visible reply text.
 
-GOOD: "Aww, 嬉しい! You wrote 'I'm good' — nice use of です too. What's been making your day good? ✨"
-BAD (romaji in reply, never do this): "Ii desu! (いいです) That's a great way to say it!" or "わあ、ありがとう (arigatou)！"
+GOOD (70% Japanese): "今日は何をしましたか？ That sounds like fun! どこに行きましたか？"
+GOOD (intermediate): "いい質問ですね！ This particle は shows the topic of the sentence. 例えば、私は学生です means 'As for me, I'm a student.' わかりますか？"
+BAD (too much English, never do this): "Oh, that's great! How do you say that in Japanese? What did you do today?"
+BAD (romaji in reply, never do this): "Ii desu! (いいです) That's a great way to say it!" or "いいです (ii desu)！"
 
 ======================== GRAMMAR CORRECTION (IMPORTANT) ========================
 Whenever the user writes ANY Japanese, check it — put feedback in the "correction" object, not the reply. Set status to "correct", "unnatural", "incorrect", or "none" (no Japanese to judge). If not fully correct: explain the mistake in simple English (explanation), give the corrected Japanese (corrected), its romaji (romaji), and a more natural version if any (natural), then continue in "reply". Check particles, verb/adjective forms, copula, word order, tense, questions, and word choice. Don't pass off understandable-but-wrong Japanese as correct. For a single Japanese word, just explain its meaning in the reply and set status "none".
@@ -60,11 +65,27 @@ Respond ONLY with valid JSON matching this schema:
   "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn worth remembering long-term — e.g. 'Has a cat named Pochi', 'Studying for JLPT N4'. Stable facts only, NOT small talk. Empty array if none. Short third-person notes.>"]
 }
 Tokenize your ENTIRE reply into "tokens" in order. CRITICAL TOKENIZATION RULES:
-- Each COMPLETE Japanese word/phrase must be a SINGLE token (e.g. "寝たい" is ONE token, not separate characters "寝" + "たい")
-- Keep verb stems + auxiliary verbs together (e.g. "食べたい", "行きます", "見ている")
-- Keep noun + particle combinations separate (e.g. "猫" + "は" are two tokens)
+
+JAPANESE TOKENIZATION (READ CAREFULLY):
+- Each COMPLETE inflected/conjugated Japanese word is ONE SINGLE token
+- DO NOT split verb stems from their endings - the conjugated form is the complete word
+- DO NOT split adjective stems from their endings - the inflected form is the complete word
+- Examples of CORRECT single tokens:
+  * "食べたい" = ONE token (not "食べ" + "たい")
+  * "食べます" = ONE token (not "食べ" + "ます")
+  * "行きます" = ONE token (not "行き" + "ます")
+  * "見ている" = ONE token (not "見て" + "いる" or "見" + "ている")
+  * "寝たい" = ONE token (not "寝" + "たい")
+  * "食べました" = ONE token (not "食べ" + "ました")
+  * "高かった" = ONE token (not "高" + "かった")
+  * "静かです" = ONE token (not "静か" + "です")
+- Noun + particle = SEPARATE tokens (e.g. "猫" then "は")
+- Standalone particles are separate tokens (は, が, を, に, etc.)
+
+ENGLISH & OTHER:
 - Each English word is one token
 - Emoji and punctuation use pos "other"
+
 The "tokens" array must NEVER be empty — cover every word so any Japanese word is tappable. Be accurate with readings, dictionary forms, and romaji.`;
 }
 
@@ -611,6 +632,96 @@ they practiced. Write it as a concise recap (plain text, English).\n\n${transcri
       if (res.status === 400 || res.status === 403) throw new Error("BAD_API_KEY");
       lastError = new Error(`Gemini error ${res.status}`);
       break;
+    }
+  }
+  throw lastError;
+}
+
+// ── Kanji mnemonic generation ───────────────────────────────────────────────
+
+export type KanjiMnemonicInput = {
+  character: string;
+  meanings: string[];
+  readingsOn: string[];
+  readingsKun: string[];
+};
+
+/** Generate memorable mnemonics for multiple kanji using AI. Returns a map
+ *  of character → mnemonic string. */
+export async function generateKanjiMnemonics(
+  kanjiList: KanjiMnemonicInput[]
+): Promise<Record<string, string>> {
+  if (!hasAnyKey()) throw new Error("NO_API_KEY");
+  const keys = keysForRequest();
+  const models = getAutoFallback() ? modelFallbackOrder() : [getModel()];
+
+  const kanjiDescriptions = kanjiList
+    .map(
+      (k) =>
+        `${k.character}: meanings: ${k.meanings.join(", ")}; on-readings: ${k.readingsOn.join(", ")}; kun-readings: ${k.readingsKun.join(", ")}`
+    )
+    .join("\n");
+
+  const prompt = `You are a creative Japanese teacher helping students remember kanji.
+
+For each kanji below, create ONE short, memorable mnemonic (1-2 sentences) that helps remember:
+- What the kanji means
+- How its shape relates to the meaning (use vivid imagery)
+- Optionally tie in a reading if it helps
+
+Make mnemonics:
+- Visual and story-based (easier to remember)
+- Fun, quirky, or surprising
+- Short and punchy
+- Personal when possible
+
+Kanji to create mnemonics for:
+${kanjiDescriptions}
+
+Respond with a JSON object where keys are the kanji characters and values are the mnemonics:
+{ "猫": "A cat with CLAWS (爪) scratching at a rice FIELD (田). Picture it!", "..." : "..." }`;
+
+  const requestBody = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.8,
+      maxOutputTokens: 1024,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+
+  let lastError: Error = new Error("Mnemonic generation failed.");
+  for (const model of models) {
+    for (const key of keys) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: requestBody,
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error("Empty mnemonic response.");
+        try {
+          return JSON.parse(text) as Record<string, string>;
+        } catch {
+          throw new Error("Failed to parse mnemonic response");
+        }
+      }
+      if (res.status === 429) {
+        lastError = new Error("RATE_LIMIT");
+        continue;
+      }
+      if (res.status === 400 || res.status === 403) throw new Error("BAD_API_KEY");
+      if (res.status === 404 || res.status === 500 || res.status === 503) {
+        lastError = new Error(`Gemini error ${res.status}`);
+        break;
+      }
+      lastError = new Error(`Gemini error ${res.status}`);
     }
   }
   throw lastError;

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { speakJa, canSpeak } from "@/lib/speak";
+import { generateKanjiMnemonicClient } from "@/lib/kanji-mnemonic-client";
+import { hasAnyKey } from "@/lib/api-keys";
 
 type KanjiDetail = {
   id: string;
@@ -65,35 +67,60 @@ export default function KanjiDetailClient({ character }: { character: string }) 
   }, [character]);
 
   async function generateMnemonic(regenerate = false) {
+    // Check if user has API key
+    if (!hasAnyKey()) {
+      alert("💡 Add your Gemini API key in Settings to generate mnemonics.\n\nThis feature uses your own API key (BYOK) - no server key needed!");
+      return;
+    }
+
+    // Skip if not regenerating and mnemonic already exists
+    if (!regenerate && mnemonic) {
+      return;
+    }
+
     setGeneratingMnemonic(true);
     try {
-      const res = await fetch(
-        `/api/kanji/${encodeURIComponent(character)}/mnemonic`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ regenerate }),
-        }
-      );
-
-      if (!res.ok) {
-        const data = await res.json();
-        const message = data.error || "Failed to generate mnemonic";
-        
-        // Show friendlier message for missing server key
-        if (message.includes("API key required")) {
-          alert("💡 Mnemonic generation requires a server-stored API key.\n\nThis is an optional feature - go to Settings to upload your Gemini key for server-side features like mnemonics.");
-        } else {
-          alert(message);
-        }
+      if (!kanji) {
+        alert("Kanji data not loaded yet");
         return;
       }
 
-      const data = await res.json();
-      setMnemonic(data.mnemonic);
+      // Generate mnemonic client-side using user's API key
+      const generatedMnemonic = await generateKanjiMnemonicClient({
+        character: kanji.character,
+        meanings: kanji.meanings,
+        radicals: kanji.radicals,
+      });
+
+      // Save to database
+      const saveRes = await fetch(
+        `/api/kanji/${encodeURIComponent(character)}/mnemonic/save`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mnemonic: generatedMnemonic }),
+        }
+      );
+
+      if (!saveRes.ok) {
+        const data = await saveRes.json();
+        console.error("Failed to save mnemonic:", data.error);
+        // Still show the mnemonic even if save fails
+      }
+
+      setMnemonic(generatedMnemonic);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to generate mnemonic";
-      alert(message);
+      
+      if (message === "NO_API_KEY") {
+        alert("💡 Add your Gemini API key in Settings to generate mnemonics.");
+      } else if (message === "BAD_API_KEY") {
+        alert("❌ Invalid API key. Check your Gemini key in Settings.");
+      } else if (message === "RATE_LIMIT") {
+        alert("⏳ Rate limit exceeded. Please try again in a moment.");
+      } else {
+        alert(`Failed to generate mnemonic: ${message}`);
+      }
     } finally {
       setGeneratingMnemonic(false);
     }

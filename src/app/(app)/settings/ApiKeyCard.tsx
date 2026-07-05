@@ -52,20 +52,44 @@ export default function ApiKeyCard() {
 
   return (
     <section className="rounded-3xl border-2 border-border bg-card p-5">
-      <h2 className="font-display text-lg font-bold">Kai&apos;s brain</h2>
+      <h2 className="font-display text-lg font-bold">Gemini API Keys</h2>
       <p className="mt-1 text-sm text-muted">
         KaiwaAI uses your own Google Gemini API key(s). They&apos;re stored only
-        on this device, never on our servers. Add more than one and Kai will
-        rotate to a spare if one hits its rate limit.{" "}
-        <a
-          href="https://aistudio.google.com/app/apikey"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-bold text-indigo-ai"
-        >
-          Get a free key →
-        </a>
+        on this device, never on our servers. Add multiple keys and Kai will
+        rotate to a spare if one hits its rate limit.
       </p>
+
+      {/* Tutorial/How to get key */}
+      <details className="mt-3 rounded-2xl border-2 border-indigo-ai/20 bg-indigo-ai/5 p-4">
+        <summary className="cursor-pointer text-sm font-bold text-indigo-ai">
+          📖 How to get a free Gemini API key
+        </summary>
+        <div className="mt-3 space-y-2 text-sm text-muted">
+          <p className="font-semibold text-foreground">Step-by-step guide:</p>
+          <ol className="ml-4 list-decimal space-y-1.5">
+            <li>
+              Visit{" "}
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-indigo-ai underline"
+              >
+                Google AI Studio
+              </a>
+            </li>
+            <li>Sign in with your Google account</li>
+            <li>Click &ldquo;Create API key&rdquo; button</li>
+            <li>Select a Google Cloud project (or create a new one)</li>
+            <li>Copy the generated key (starts with &ldquo;AIza...&rdquo;)</li>
+            <li>Paste it below</li>
+          </ol>
+          <p className="pt-2 text-xs">
+            💡 <strong>Tip:</strong> Gemini offers a generous free tier. Your key stays
+            on your device and is never sent to KaiwaAI servers.
+          </p>
+        </div>
+      </details>
 
       {keys.length > 0 && (
         <ul className="mt-4 flex flex-col gap-2">

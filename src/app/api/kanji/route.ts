@@ -84,23 +84,46 @@ export async function GET(req: Request) {
     })
   );
 
+  // Check which kanji are in the user's review queue and have mnemonics
+  const userKanjiRecords = await prisma.userKanji.findMany({
+    where: {
+      userId: user.id,
+      kanjiId: { in: kanjiWithStats.map((k) => k.id) },
+    },
+    select: { kanjiId: true, mnemonic: true },
+  });
+
+  const inReviewsSet = new Set(userKanjiRecords.map((uk) => uk.kanjiId));
+  const hasMnemonicMap = new Map(
+    userKanjiRecords
+      .filter((uk) => uk.mnemonic && uk.mnemonic.trim().length > 0)
+      .map((uk) => [uk.kanjiId, true])
+  );
+
+  // Add inReviews and hasMnemonic flags to each kanji
+  const kanjiWithReviewStatus = kanjiWithStats.map((k) => ({
+    ...k,
+    inReviews: inReviewsSet.has(k.id),
+    hasMnemonic: hasMnemonicMap.has(k.id),
+  }));
+
   // Sort
   if (sortBy === "mastery") {
-    kanjiWithStats.sort((a, b) => b.masteryPercent - a.masteryPercent);
+    kanjiWithReviewStatus.sort((a, b) => b.masteryPercent - a.masteryPercent);
   } else if (sortBy === "strokes") {
-    kanjiWithStats.sort((a, b) => a.strokes - b.strokes);
+    kanjiWithReviewStatus.sort((a, b) => a.strokes - b.strokes);
   } else if (sortBy === "frequency") {
     // Already sorted by vocabulary frequency from getUserKanji
     // But also consider kanji's own frequency rank
-    kanjiWithStats.sort((a, b) => {
+    kanjiWithReviewStatus.sort((a, b) => {
       const aFreq = a.frequency || 999999;
       const bFreq = b.frequency || 999999;
       return aFreq - bFreq;
     });
   }
 
-  const total = kanjiWithStats.length;
-  const paginatedKanji = kanjiWithStats.slice(offset, offset + limit);
+  const total = kanjiWithReviewStatus.length;
+  const paginatedKanji = kanjiWithReviewStatus.slice(offset, offset + limit);
 
   // Parse JSON strings
   const result = paginatedKanji.map((k) => ({

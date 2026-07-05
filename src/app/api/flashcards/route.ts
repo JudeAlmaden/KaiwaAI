@@ -130,6 +130,15 @@ export async function POST(req: Request) {
     },
   });
 
+  // Auto-add kanji from this word to the user's review queue
+  try {
+    const { autoAddKanjiFromWord } = await import("@/lib/auto-add-kanji");
+    await autoAddKanjiFromWord(user.id, entry.dictForm);
+  } catch (error) {
+    // Don't fail the flashcard creation if kanji auto-add fails
+    console.error("Failed to auto-add kanji:", error);
+  }
+
   return NextResponse.json({ 
     card, 
     alreadyExisted: Boolean(existing),
