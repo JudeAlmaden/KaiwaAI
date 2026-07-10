@@ -63,8 +63,13 @@ export async function GET(req: Request) {
   }
 
   // Fetch vocabulary cards
-  const vocabCards = await prisma.flashcard.findMany({
+  const vocabCards = await prisma.userFlashcard.findMany({
     where: vocabWhere,
+    include: {
+      word: true,
+      wordForm: true,
+      phrase: true,
+    },
     orderBy,
     take: Math.ceil(limit / 2), // Aim for roughly 50/50 split
   });
@@ -80,16 +85,50 @@ export async function GET(req: Request) {
   });
 
   // Transform vocabulary cards
-  const vocabTransformed = vocabCards.map((card) => ({
-    id: card.id,
-    type: "vocabulary" as const,
-    word: card.word,
-    reading: card.reading,
-    romaji: card.romaji,
-    meaning: card.meaning,
-    partOfSpeech: card.partOfSpeech,
-    status: card.status,
-  }));
+  const vocabTransformed = vocabCards.map((card) => {
+    let word: string;
+    let reading: string;
+    let meaning: string;
+    let partOfSpeech: string;
+
+    if (card.phrase) {
+      word = card.phrase.text;
+      reading = card.phrase.reading;
+      try {
+        const meanings = JSON.parse(card.phrase.meanings);
+        meaning = meanings.join("; ");
+      } catch {
+        meaning = card.phrase.meanings;
+      }
+      partOfSpeech = card.phrase.partOfSpeech;
+    } else if (card.word) {
+      word = card.wordForm?.form || card.word.dictionary;
+      reading = card.wordForm?.reading || card.word.reading;
+      try {
+        const meanings = JSON.parse(card.word.meanings);
+        meaning = meanings.join("; ");
+      } catch {
+        meaning = card.word.meanings;
+      }
+      partOfSpeech = card.word.partOfSpeech;
+    } else {
+      word = "Unknown";
+      reading = "Unknown";
+      meaning = "Unknown";
+      partOfSpeech = "unknown";
+    }
+
+    return {
+      id: card.id,
+      type: "vocabulary" as const,
+      word,
+      reading,
+      romaji: reading, // We don't store romaji separately anymore
+      meaning,
+      partOfSpeech,
+      status: card.status,
+    };
+  });
 
   // Transform kanji cards
   const kanjiTransformed = userKanji.map((uk) => ({

@@ -11,6 +11,9 @@ vi.mock("@/lib/prisma", () => ({
     flashcard: {
       count: vi.fn(),
     },
+    userFlashcard: {
+      count: vi.fn(),
+    },
     message: {
       count: vi.fn(),
     },
@@ -63,6 +66,12 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(5) // learning
       .mockResolvedValueOnce(3); // new
 
+    // UserFlashcard (new dictionary system) — 0 for this test
+    vi.mocked(prisma.userFlashcard.count)
+      .mockResolvedValueOnce(0) // uf known
+      .mockResolvedValueOnce(0) // uf learning
+      .mockResolvedValueOnce(0); // uf new
+
     const res = await GET();
     expect(res.status).toBe(200);
 
@@ -111,6 +120,11 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(2) // learning
       .mockResolvedValueOnce(1); // new
 
+    vi.mocked(prisma.userFlashcard.count)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+
     const res = await GET();
     const json = await res.json();
 
@@ -148,12 +162,17 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(10) // learning
       .mockResolvedValueOnce(5); // new
 
+    vi.mocked(prisma.userFlashcard.count)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+
     const res = await GET();
     const json = await res.json();
 
     expect(json.progressLevel).toBe("Intermediate");
     expect(json.masteredCount).toBe(200);
-    expect(json.progress).toBe(33); // (200-150)/(300-150) = 50/150 = 33%
+    expect(json.progress).toBe(33);
     expect(json.nextMilestone).toBe(300);
   });
 
@@ -185,12 +204,17 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(30) // learning
       .mockResolvedValueOnce(10); // new
 
+    vi.mocked(prisma.userFlashcard.count)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+
     const res = await GET();
     const json = await res.json();
 
     expect(json.progressLevel).toBe("Advanced");
     expect(json.masteredCount).toBe(700);
-    expect(json.progress).toBe(25); // (700-600)/(1000-600) = 100/400 = 25%
+    expect(json.progress).toBe(25);
     expect(json.nextMilestone).toBe(1000);
   });
 
@@ -221,6 +245,11 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(1000) // known
       .mockResolvedValueOnce(50) // learning
       .mockResolvedValueOnce(20); // new
+
+    vi.mocked(prisma.userFlashcard.count)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
 
     const res = await GET();
     const json = await res.json();

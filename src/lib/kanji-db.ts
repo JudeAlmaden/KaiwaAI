@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { Flashcard } from "@/generated/prisma/client";
+import type { UserFlashcard } from "@/generated/prisma/client";
 import { extractKanji } from "./kanji-utils";
 
 /**
@@ -8,15 +8,16 @@ import { extractKanji } from "./kanji-utils";
  * @returns Array of kanji characters sorted by frequency in vocabulary
  */
 export async function getUserKanji(userId: string): Promise<string[]> {
-  const flashcards = await prisma.flashcard.findMany({
+  const flashcards = await prisma.userFlashcard.findMany({
     where: { userId },
-    select: { word: true },
+    include: { word: true, phrase: true },
   });
 
   const kanjiCounts = new Map<string, number>();
   
   flashcards.forEach((card) => {
-    const kanji = extractKanji(card.word);
+    const text = card.phrase?.text || card.word?.dictionary || "";
+    const kanji = extractKanji(text);
     kanji.forEach((k) => {
       kanjiCounts.set(k, (kanjiCounts.get(k) || 0) + 1);
     });
@@ -28,6 +29,11 @@ export async function getUserKanji(userId: string): Promise<string[]> {
     .map(([kanji]) => kanji);
 }
 
+type FlashcardWithWordPhrase = UserFlashcard & {
+  word: { dictionary: string; reading: string; meanings: string; partOfSpeech: string } | null;
+  phrase: { text: string; reading: string; meanings: string; partOfSpeech: string } | null;
+};
+
 /**
  * Find vocabulary words containing a specific kanji
  * @param userId - User ID
@@ -37,13 +43,20 @@ export async function getUserKanji(userId: string): Promise<string[]> {
 export async function getVocabWithKanji(
   userId: string,
   kanji: string
-): Promise<Flashcard[]> {
-  const flashcards = await prisma.flashcard.findMany({
+): Promise<FlashcardWithWordPhrase[]> {
+  const flashcards = await prisma.userFlashcard.findMany({
     where: { userId },
+    include: {
+      word: { select: { dictionary: true, reading: true, meanings: true, partOfSpeech: true } },
+      phrase: { select: { text: true, reading: true, meanings: true, partOfSpeech: true } },
+    },
     orderBy: { status: "asc" }, // Show known words first
   });
 
-  return flashcards.filter((card) => card.word.includes(kanji));
+  return flashcards.filter((card) => {
+    const text = card.phrase?.text || card.word?.dictionary || "";
+    return text.includes(kanji);
+  });
 }
 
 /**

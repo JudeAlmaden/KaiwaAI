@@ -36,10 +36,10 @@ export async function GET(req: Request) {
       select: { content: true },
     }),
     prisma.message.findMany({
-      where: { userId: user.id },
+      where: { senderUserId: user.id },
       orderBy: { createdAt: "desc" },
       take: 6,
-      select: { role: true, content: true },
+      select: { senderKind: true, content: true },
     }),
   ]);
 
@@ -49,6 +49,6 @@ export async function GET(req: Request) {
     knownCount,
     reinforce: reinforceCards.map((c) => c.word),
     memories: memories.map((m) => m.content),
-    recentTurns: recent.reverse(),
+    recentTurns: recent.reverse().map((m) => ({ role: m.senderKind, content: m.content })),
   });
 }
