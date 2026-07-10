@@ -87,3 +87,56 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// Push Event Handler: Receive push messages sent by the server and display them
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  try {
+    const data = event.data.json();
+    const title = data.title || "KaiwaAI";
+    const options = {
+      body: data.body || "",
+      icon: data.icon || "/icons/icon-192x192.png",
+      badge: data.badge || "/icons/icon-192x192.png",
+      data: {
+        url: data.url || "/"
+      }
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(title, options)
+    );
+  } catch (err) {
+    console.error("Failed to parse or display push notification:", err);
+  }
+});
+
+// Notification Click Handler: Open the relevant chat or app screen when tapped
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const urlToOpen = new URL(event.notification.data?.url || "/", self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      // If there's an open window matching the origin, navigate and focus it
+      for (const client of windowClients) {
+        if ("focus" in client) {
+          // If already on the destination URL, just focus, otherwise navigate
+          if (client.url === urlToOpen) {
+            return client.focus();
+          } else if (client.navigate) {
+            client.navigate(urlToOpen);
+            return client.focus();
+          }
+        }
+      }
+      // Otherwise, open a new window
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(urlToOpen);
+      }
+    })
+  );
+});
+

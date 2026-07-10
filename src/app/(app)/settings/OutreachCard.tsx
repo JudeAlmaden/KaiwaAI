@@ -153,7 +153,157 @@ export default function OutreachCard() {
       )}
 
       <ProactiveToggle />
+      <PushNotificationToggle />
     </Surface>
+  );
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, "+")
+    .replace(/_/g, "/");
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+function PushNotificationToggle() {
+  const [supported, setSupported] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [permission, setPermission] = useState<NotificationPermission>("default");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isSupported = "Notification" in window && "serviceWorker" in navigator;
+    
+    // Defer state updates to avoid synchronous setState inside useEffect warning
+    const timer = setTimeout(() => {
+      setSupported(isSupported);
+      if (!isSupported) {
+        setLoading(false);
+        return;
+      }
+
+      setPermission(Notification.permission);
+
+      // Check if we have an active subscription
+      navigator.serviceWorker.ready.then(async (reg) => {
+        try {
+          const sub = await reg.pushManager.getSubscription();
+          setSubscribed(!!sub);
+        } catch (err) {
+          console.error("Error getting push subscription:", err);
+        } finally {
+          setLoading(false);
+        }
+      });
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  async function handleToggle() {
+    if (loading || !supported) return;
+    setLoading(true);
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+
+      if (subscribed) {
+        // Unsubscribe
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await sub.unsubscribe();
+          await fetch("/api/push/subscribe", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          });
+        }
+        setSubscribed(false);
+      } else {
+        // Subscribe
+        // Request permission if not already granted
+        let perm = Notification.permission;
+        if (perm === "default") {
+          perm = await Notification.requestPermission();
+          setPermission(perm);
+        }
+
+        if (perm !== "granted") {
+          alert("Notification permission is required to enable push notifications.");
+          setLoading(false);
+          return;
+        }
+
+        const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (!vapidPublicKey) {
+          throw new Error("VAPID public key is missing");
+        }
+
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+
+        const res = await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sub),
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to register subscription on server");
+        }
+
+        setSubscribed(true);
+      }
+    } catch (err) {
+      console.error("Failed to toggle push notifications:", err);
+      alert("Something went wrong while setting up notifications.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!supported) return null;
+
+  return (
+    <div className="mt-4 border-t-2 border-border pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-bold">Push Notifications</p>
+          <p className="text-xs text-muted">
+            {permission === "denied"
+              ? "Blocked. Please reset notification permissions in your browser settings to receive alerts."
+              : "Get alert notifications on this device when Kai sends a new message."}
+          </p>
+        </div>
+        <button
+          onClick={handleToggle}
+          role="switch"
+          aria-checked={subscribed}
+          aria-label="Toggle push notifications"
+          disabled={loading || permission === "denied"}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+            subscribed ? "bg-indigo-ai" : "bg-border"
+          } ${(loading || permission === "denied") ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+              subscribed ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </div>
+    </div>
   );
 }
 

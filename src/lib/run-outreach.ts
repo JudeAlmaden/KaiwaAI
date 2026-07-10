@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import { canReachOut, moodFor, MOOD_PROMPT } from "./outreach";
 import { generateWithStoredKey } from "./gemini-server";
 import { resolvePersonaId, ensurePersonaConversation } from "./personas-server";
+import { sendPushNotification } from "./push-server";
 
 function localParts(now: Date, tz: string) {
   const fmt = new Intl.DateTimeFormat("en-GB", {
@@ -50,26 +51,35 @@ export async function runOutreach(now = new Date()): Promise<OutreachOutcome[]> 
 
     const mood = moodFor(user.consecutiveIgnored);
 
-    const [memories, recentWords] = await Promise.all([
+    const [memories, recentFlashcards] = await Promise.all([
       prisma.memory.findMany({
         where: { userId: user.id },
         orderBy: [{ importance: "desc" }, { updatedAt: "desc" }],
         take: 5,
         select: { content: true },
       }),
-      prisma.flashcard.findMany({
+      prisma.userFlashcard.findMany({
         where: { userId: user.id, status: "learning" },
-        orderBy: { updatedAt: "desc" },
+        include: { word: true, phrase: true },
+        orderBy: { createdAt: "desc" },
         take: 5,
-        select: { word: true },
       }),
     ]);
+
+    const recentWordsText = (recentFlashcards as unknown as Array<{
+      word: { dictionary: string } | null;
+      phrase: { text: string } | null;
+    }>).map((uf) => {
+      if (uf.phrase) return uf.phrase.text;
+      if (uf.word) return uf.word.dictionary;
+      return "";
+    }).filter(Boolean);
 
     const prompt = `You are Kai, a warm Japanese tutor and friend, messaging the user FIRST (they haven't opened the app).
 ${MOOD_PROMPT[mood]}
 Write ONE short, natural opener (1-2 sentences). Mostly simple Japanese at their level with a short English gloss in parentheses if helpful. Be genuine, never naggy.
 ${memories.length ? `Things you remember: ${memories.map((m) => m.content).join("; ")}.` : ""}
-${recentWords.length ? `Words they're learning: ${recentWords.map((w) => w.word).join(", ")}.` : ""}
+${recentWordsText.length ? `Words they're learning: ${recentWordsText.join(", ")}.` : ""}
 Output just the message text.`;
 
     let text = "";
@@ -88,15 +98,15 @@ Output just the message text.`;
 
     // Deliver into the user's 1:1 Kai conversation (creating it if needed).
     const convId = await ensurePersonaConversation(user.id, kaiId, "Kai");
-    const personaMember = await prisma.groupMember.findFirst({
-      where: { groupId: convId, kind: "persona", personaId: kaiId },
+    const personaMember = await prisma.chatMember.findFirst({
+      where: { chatId: convId, kind: "persona", personaId: kaiId },
       select: { id: true },
     });
 
     await prisma.$transaction([
-      prisma.groupMessage.create({
+      prisma.message.create({
         data: {
-          groupId: convId,
+          chatId: convId,
           memberId: personaMember?.id ?? null,
           senderName: "Kai",
           senderKind: "persona",
@@ -111,6 +121,17 @@ Output just the message text.`;
         },
       }),
     ]);
+
+    // Deliver native Web Push notification to PWA devices
+    await sendPushNotification(user.id, {
+      title: "Kai 💬",
+      body: text,
+      url: `/groups/${convId}`, // deep link to the Kai conversation
+      icon: "/icons/icon-192x192.png",
+      badge: "/icons/icon-192x192.png",
+    }).catch((err) => {
+      console.error(`Failed to dispatch web push to user ${user.id}:`, err);
+    });
 
     results.push({ userId: user.id, sent: true });
   }

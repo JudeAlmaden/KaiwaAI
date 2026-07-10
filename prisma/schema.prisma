@@ -14,56 +14,60 @@ datasource db {
 // Prisma Migrate reads DATABASE_URL / DIRECT_URL from prisma.config.ts.
 
 model User {
-  id          String   @id @default(cuid())
-  email       String   @unique
-  name        String?
-  password    String
-  timezone    String   @default("UTC")
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String?
+  password           String
+  timezone           String    @default("UTC")
   // Opt-in: user's Gemini API key, encrypted at rest (AES-256-GCM). Enables
   // server-side features (scheduled messages, background summaries). Null = the
   // key stays client-side only (default BYOK behavior).
-  geminiKeyEnc String?
+  geminiKeyEnc       String?
   // learning prefs
-  maxNewWords Int      @default(1)
-  level       String   @default("N5")
+  maxNewWords        Int       @default(1)
+  level              String    @default("N5")
   // ── Kai outreach ("messages first") ──
-  outreachMode      String   @default("off") // off | scheduled | random
-  outreachTimes     String   @default("[]")  // JSON "HH:MM"[] for scheduled mode
-  quietStart        Int      @default(22)     // hour (0-23) — no pings at/after
-  quietEnd          Int      @default(8)      // hour (0-23) — no pings before
-  consecutiveIgnored Int     @default(0)      // outreach streak with no return
-  lastOutreachAt    DateTime?                  // when Kai last reached out
-  lastActiveAt      DateTime?                  // when the user last chatted/opened
+  outreachMode       String    @default("off") // off | scheduled | random
+  outreachTimes      String    @default("[]") // JSON "HH:MM"[] for scheduled mode
+  quietStart         Int       @default(22) // hour (0-23) — no pings at/after
+  quietEnd           Int       @default(8) // hour (0-23) — no pings before
+  consecutiveIgnored Int       @default(0) // outreach streak with no return
+  lastOutreachAt     DateTime? // when Kai last reached out
+  lastActiveAt       DateTime? // when the user last chatted/opened
   // ── Streak ──
-  streakCount    Int     @default(0)  // consecutive active days
-  streakBestCount Int    @default(0)  // longest streak achieved
-  lastStreakDay  String?              // dayKey of the last counted active day
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  streakCount        Int       @default(0) // consecutive active days
+  streakBestCount    Int       @default(0) // longest streak achieved
+  lastStreakDay      String? // dayKey of the last counted active day
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  messages     Message[]
-  flashcards   Flashcard[]
-  daySummaries DaySummary[]
-  memories     Memory[]
+  memories       Memory[]
   kanjiMnemonics KanjiMnemonic[]
-  userKanji    UserKanji[]
+  userKanji      UserKanji[]
 
-  // ── Social: friends, groups, personas ──
-  personas        Persona[]
-  ownedGroups     Group[]          @relation("GroupOwner")
-  groupMemberships GroupMember[]
-  groupMessages   GroupMessage[]
+  // ── Social: friends, chats, personas ──
+  personas               Persona[]
+  ownedChats             Chat[]       @relation("ChatOwner")
+  chatMemberships        ChatMember[]
+  messages               Message[]
   friendRequestsSent     Friendship[] @relation("FriendRequester")
   friendRequestsReceived Friendship[] @relation("FriendAddressee")
+
+  // ── Dictionary: new flashcard system ──
+  userFlashcards UserFlashcard[]
+  phrases        Phrase[]
+
+  // ── Push notifications ──
+  pushSubscriptions PushSubscription[]
 }
 
 // A reusable AI character. Kai ships as a built-in (seeded with a null userId);
 // users can also create their own personas to drop into group chats.
 model Persona {
-  id          String  @id @default(cuid())
+  id     String  @id @default(cuid())
   // Null userId = built-in/global persona (e.g. Kai). Otherwise the creator.
-  userId      String?
-  user        User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   name        String
   // Short tagline shown in pickers, e.g. "Cheerful Japanese tutor".
@@ -73,11 +77,11 @@ model Persona {
   avatar      String  @default("🤖") // emoji avatar for now
   builtin     Boolean @default(false)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  groupMembers GroupMember[]
-  memories     Memory[]
+  chatMembers ChatMember[]
+  memories    Memory[]
 
   @@index([userId])
 }
@@ -90,10 +94,10 @@ model Friendship {
   addresseeId String
   addressee   User   @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
 
-  status      String @default("pending") // pending | accepted
+  status String @default("pending") // pending | accepted
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([requesterId, addresseeId])
   @@index([addresseeId, status])
@@ -103,39 +107,39 @@ model Friendship {
 // A conversation. `kind` distinguishes a 1:1 persona chat, a user↔user DM, and
 // a multi-person group. AI-containing conversations get the rich learning
 // features (tokens/english/correction). The owner provides the API key.
-model Group {
-  id          String @id @default(cuid())
-  name        String
-  kind        String @default("group") // "persona" | "dm" | "group"
-  ownerId     String
-  owner       User   @relation("GroupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+model Chat {
+  id      String @id @default(cuid())
+  name    String
+  kind    String @default("group") // "persona" | "dm" | "group"
+  ownerId String
+  owner   User   @relation("ChatOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   // Owner's Gemini key(s) for this conversation, encrypted at rest
   // (AES-256-GCM). JSON array of keys. Null = no AI replies.
-  apiKeyEnc   String?
+  apiKeyEnc String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  members  GroupMember[]
-  messages GroupMessage[]
+  members  ChatMember[]
+  messages Message[]
 
   @@index([ownerId])
 }
 
 // A participant in a group: either a human user OR an AI persona.
-model GroupMember {
-  id        String @id @default(cuid())
-  groupId   String
-  group     Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+model ChatMember {
+  id     String @id @default(cuid())
+  chatId String
+  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
   // Exactly one of userId / personaId is set (kind disambiguates).
   kind      String // "user" | "persona"
   // Invite state for human members. Personas are always "accepted".
   // The group owner is auto-accepted on creation.
-  status    String  @default("accepted") // pending | accepted
+  status    String   @default("accepted") // pending | accepted
   // Whether this member has hidden the conversation from their chat list
-  hidden    Boolean @default(false)
+  hidden    Boolean  @default(false)
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   personaId String?
@@ -143,151 +147,57 @@ model GroupMember {
 
   createdAt DateTime @default(now())
 
-  messages GroupMessage[]
+  messages Message[]
 
-  @@unique([groupId, userId])
-  @@unique([groupId, personaId])
-  @@index([groupId])
-}
-
-model GroupMessage {
-  id        String @id @default(cuid())
-  groupId   String
-  group     Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  // The author. senderUserId set for humans, senderPersonaId for AI.
-  memberId      String?
-  member        GroupMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
-  senderUserId  String?
-  senderUser    User?        @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
-  senderName    String       // denormalized display name (human name or persona name)
-  senderKind    String       // "user" | "persona"
-
-  content   String
-  // Rich learning fields, populated for AI (persona) messages — same as Kai's
-  // 1:1 chat. JSON strings; null for human messages.
-  english    String?
-  tokens     String?
-  correction String?
-  // AI grammar correction for user's Japanese messages (JSON string). Generated
-  // client-side when user sends Japanese text.
-  userCorrection String?
-  createdAt DateTime @default(now())
-
-  @@index([groupId, createdAt])
+  @@unique([chatId, userId])
+  @@unique([chatId, personaId])
+  @@index([chatId])
 }
 
 model Message {
-  id      String @id @default(cuid())
-  userId  String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  chatId String
+  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
-  role    String // "kai" | "user"
-  content String
+  // The author. senderUserId set for humans, senderPersonaId for AI.
+  memberId     String?
+  member       ChatMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  senderUserId String?
+  senderUser   User?       @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderName   String // denormalized display name (human name or persona name)
+  senderKind   String // "user" | "persona"
 
-  // Natural English translation/gloss of a Japanese reply (Kai messages).
-  english String?
+  content        String
+  // Rich learning fields, populated for AI (persona) messages — same as Kai's
+  // 1:1 chat. JSON strings; null for human messages.
+  english        String?
+  tokens         String?
+  correction     String?
+  // AI grammar correction for user's Japanese messages (JSON string). Generated
+  // client-side when user sends Japanese text.
+  userCorrection String?
+  createdAt      DateTime @default(now())
 
-  // Cached tokenization for tap-to-translate (JSON string of CachedToken[]).
-  tokens  String?
-
-  // Grammar feedback on the user's Japanese, attached to Kai's reply for that
-  // turn (JSON string of Correction). Null when there's nothing to show.
-  correction String?
-
-  // Whether this Kai message was sent proactively (Kai messaging first, no
-  // preceding user turn) rather than as a direct reply.
-  proactive Boolean @default(false)
-
-  // Optional quote-reply: the earlier message this one is replying to.
-  replyToId String?
-  replyTo   Message?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies   Message[] @relation("MessageReplies")
-
-  // Day bucket, computed in the user's tz at insert time, e.g. "2026-06-27".
-  dayKey     String
-  summarized Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  capturedWords Flashcard[] @relation("WordSource")
-
-  @@index([userId, createdAt])
-  @@index([userId, dayKey])
-  @@index([replyToId])
-}
-
-model Flashcard {
-  id           String @id @default(cuid())
-  userId       String
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  word         String // dictionary/lemma form — dedupe key
-  reading      String
-  romaji       String
-  meaning      String // primary meaning, or comma-separated meanings
-  partOfSpeech String
-  jlptTier     String @default("unknown")
-  // JSON array of meaning contexts: [{ meaning: "to take", example: "物を取る" }]
-  meaningContexts String?
-
-  // SRS (SM-2). status drives usage policy.
-  status        String   @default("new") // new | learning | known
-  easeFactor    Float    @default(2.5)
-  interval      Int      @default(0)
-  repetitions   Int      @default(0)
-  timesReviewed Int      @default(0)
-  exposures     Int      @default(0)
-  nextReview    DateTime @default(now())
-  lastReviewedAt DateTime?
-
-  sourceMessageId String?
-  sourceMessage   Message? @relation("WordSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, word])
-  @@index([userId, status])
-  @@index([userId, nextReview])
-  @@index([userId, partOfSpeech])
-}
-
-model DaySummary {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  dayKey    String
-  summary   String
-  wordCount Int      @default(0)
-  partial   Boolean  @default(false)
-  monthKey  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, dayKey])
-  @@index([userId, dayKey])
+  @@index([chatId, createdAt])
 }
 
 model Memory {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Which persona this memory belongs to (scoped per user). Null = Kai, the
   // default tutor (preserves pre-persona memories without migration).
-  personaId  String?
-  persona    Persona? @relation(fields: [personaId], references: [id], onDelete: Cascade)
+  personaId String?
+  persona   Persona? @relation(fields: [personaId], references: [id], onDelete: Cascade)
 
-  content    String
-  category   String   @default("fact") // profile | preference | fact | goal | relationship
-  importance Int      @default(1) // 1..5
+  content      String
+  category     String  @default("fact") // profile | preference | fact | goal | relationship
+  importance   Int     @default(1) // 1..5
   sourceDayKey String?
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, category])
   @@index([userId, personaId])
@@ -295,26 +205,26 @@ model Memory {
 
 // User's kanji learning progress with SRS
 model UserKanji {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kanjiId       String
-  kanji         Kanji    @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kanjiId String
+  kanji   Kanji  @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
 
   // SRS (SM-2). Same as Flashcard
-  status        String   @default("new") // new | learning | known
-  easeFactor    Float    @default(2.5)
-  interval      Int      @default(0)
-  repetitions   Int      @default(0)
-  timesReviewed Int      @default(0)
-  nextReview    DateTime @default(now())
+  status         String    @default("new") // new | learning | known
+  easeFactor     Float     @default(2.5)
+  interval       Int       @default(0)
+  repetitions    Int       @default(0)
+  timesReviewed  Int       @default(0)
+  nextReview     DateTime  @default(now())
   lastReviewedAt DateTime?
 
   // User's custom mnemonic for remembering this kanji
-  mnemonic      String?
+  mnemonic String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, kanjiId])
   @@index([userId, status])
@@ -323,23 +233,23 @@ model UserKanji {
 
 // Kanji character information seeded from kanji-data.json
 model Kanji {
-  id            String   @id @default(cuid())
-  character     String   @unique  // The kanji itself, e.g., "勝"
-  strokes       Int                // Stroke count
-  grade         Int?               // School grade level (1-6 for kyouiku)
-  frequency     Int?               // Usage frequency rank (lower = more common)
-  jlptLevel     Int?               // JLPT level: 5=N5, 4=N4, 3=N3, 2=N2, 1=N1
-  meanings      String             // JSON array: ["Victory", "Win"]
-  readingsOn    String             // JSON array: ["しょう"]
-  readingsKun   String             // JSON array: ["か.つ", "まさ.る"]
-  radicals      String             // JSON array: ["Moon", "Gladiator", "Power"]
-  wkLevel       Int?               // WaniKani level (1-60)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(cuid())
+  character   String   @unique // The kanji itself, e.g., "勝"
+  strokes     Int // Stroke count
+  grade       Int? // School grade level (1-6 for kyouiku)
+  frequency   Int? // Usage frequency rank (lower = more common)
+  jlptLevel   Int? // JLPT level: 5=N5, 4=N4, 3=N3, 2=N2, 1=N1
+  meanings    String // JSON array: ["Victory", "Win"]
+  readingsOn  String // JSON array: ["しょう"]
+  readingsKun String // JSON array: ["か.つ", "まさ.る"]
+  radicals    String // JSON array: ["Moon", "Gladiator", "Power"]
+  wkLevel     Int? // WaniKani level (1-60)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  mnemonics     KanjiMnemonic[]
-  userKanji     UserKanji[]
-  
+  mnemonics KanjiMnemonic[]
+  userKanji UserKanji[]
+
   @@index([jlptLevel])
   @@index([grade])
   @@index([frequency])
@@ -348,15 +258,190 @@ model Kanji {
 
 // User-specific AI-generated mnemonics for kanji
 model KanjiMnemonic {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kanjiId    String
-  kanji      Kanji    @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
-  mnemonic   String   // AI-generated story
-  createdAt  DateTime @default(now())
-  
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kanjiId   String
+  kanji     Kanji    @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
+  mnemonic  String // AI-generated story
+  createdAt DateTime @default(now())
+
   @@unique([userId, kanjiId])
   @@index([userId])
   @@index([kanjiId])
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Dictionary & Vocabulary System
+// ════════════════════════════════════════════════════════════════════════════
+
+enum PartOfSpeech {
+  noun
+  verb
+  adjective
+  adverb
+  particle
+  conjunction
+  interjection
+  expression
+  phrase
+  pronoun
+  counter
+  suffix
+  prefix
+  auxiliary
+  copula
+  unclassified
+}
+
+enum VerbType {
+  godan
+  ichidan
+  suru
+  kuru
+  irregular
+}
+
+enum AdjectiveType {
+  i_adjective
+  na_adjective
+}
+
+enum FlashcardStatus {
+  new
+  learning
+  known
+}
+
+// Base dictionary word (lemma/citation form)
+model Word {
+  id            Int            @id // Use CSV integer IDs directly
+  dictionary    String         @unique // 飲む
+  reading       String // のむ
+  meanings      String // JSON array ["to drink", "to swallow"]
+  partOfSpeech  PartOfSpeech
+  verbType      VerbType?
+  adjectiveType AdjectiveType?
+  jlptLevel     String? // N5, N4, N3, N2, N1
+  frequency     Int? // Raw frequency rank (lower = more common)
+  aiGenerated   Boolean @default(false) // true = inserted by AI fallback, not JMdict
+
+  createdAt DateTime @default(now())
+
+  forms          WordForm[]
+  userFlashcards UserFlashcard[]
+
+  @@index([dictionary])
+  @@index([reading])
+  @@index([jlptLevel, frequency])
+  @@index([partOfSpeech])
+  @@index([frequency])
+}
+
+// Conjugated/inflected word forms
+model WordForm {
+  id     String @id @default(cuid())
+  wordId Int // Integer foreign key to match Word.id
+  word   Word   @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  form     String // 飲みます
+  reading  String // のみます
+  formType String // "masu", "te", "plain_negative", etc.
+
+  generated Boolean @default(true) // true = auto-generated, false = manual/irregular
+
+  userFlashcards UserFlashcard[]
+
+  @@unique([wordId, formType])
+  @@index([form])
+  @@index([reading])
+  @@index([wordId])
+  @@index([formType])
+}
+
+// User's flashcard for studying (can be base word OR specific conjugation OR custom phrase)
+model UserFlashcard {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Either a dictionary word OR a custom phrase (exactly one must be set)
+  wordId Int?
+  word   Word?   @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  phraseId String?
+  phrase   Phrase? @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+
+  // Optional: specific form being studied (only applies to wordId, null for phrases)
+  wordFormId String?
+  wordForm   WordForm? @relation(fields: [wordFormId], references: [id], onDelete: SetNull)
+
+  status         FlashcardStatus @default(new)
+  easeFactor     Float           @default(2.5)
+  interval       Int             @default(0)
+  repetitions    Int             @default(0)
+  timesReviewed  Int             @default(0)
+  exposures      Int             @default(0)
+  nextReview     DateTime        @default(now())
+  lastReviewedAt DateTime?
+
+  note      String? // User's personal notes
+  createdAt DateTime @default(now())
+
+  @@unique([userId, wordFormId]) // One flashcard per form
+  @@unique([userId, phraseId]) // One flashcard per phrase
+  @@index([userId, status])
+  @@index([userId, nextReview])
+  @@index([wordId])
+  @@index([phraseId])
+}
+
+// AI-generated or user-created custom phrases
+model Phrase {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The phrase itself
+  text     String // 今日はいい天気ですね
+  reading  String // きょうはいいてんきですね
+  meanings String // JSON array ["Today's weather is nice, isn't it?"]
+
+  // Metadata
+  partOfSpeech PartOfSpeech @default(phrase)
+  
+  // Source tracking
+  source   String  @default("ai_chat") // "ai_chat", "ai_lookup", "user_created"
+  sourceId String? // Chat message ID or conversation ID
+  context  String? // Conversation snippet where it appeared
+
+  // Quality/Review
+  verified Boolean @default(false) // User confirmed it's correct
+  reviewed Boolean @default(false) // User has seen/reviewed it
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userFlashcards UserFlashcard[]
+
+  @@unique([userId, text]) // User can't have duplicate phrases
+  @@index([userId])
+  @@index([text])
+  @@index([userId, verified])
+}
+
+// Web Push subscription for a user's device.
+// One user may have multiple devices (phone + laptop etc.).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint  String   @unique // the browser's push endpoint URL
+  p256dh    String   // client public key (base64url)
+  auth      String   // auth secret (base64url)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
