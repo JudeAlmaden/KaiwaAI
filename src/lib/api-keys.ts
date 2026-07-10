@@ -83,8 +83,8 @@ export function keysForRequest(): string[] {
 /** Validate API key format (basic check) */
 export function isValidKeyFormat(key: string): boolean {
   const trimmed = key.trim();
-  // Gemini API keys start with "AIza" and are typically 39 characters
-  return trimmed.startsWith("AIza") && trimmed.length > 30;
+  // Accept any non-empty key
+  return trimmed.length > 0;
 }
 
 /** Test API key with actual API call */

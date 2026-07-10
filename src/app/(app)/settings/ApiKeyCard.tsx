@@ -49,7 +49,7 @@ export default function ApiKeyCard() {
 
     // Validate format first
     if (!isValidKeyFormat(trimmed)) {
-      setError("Invalid format. Gemini API keys start with 'AIza'");
+      setError("Please enter a valid API key");
       return;
     }
 

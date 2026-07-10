@@ -28,9 +28,9 @@ export default function OnboardingClient({}: { email: string }) {
       return;
     }
 
-    // Basic validation - Gemini keys start with "AIza"
-    if (!trimmed.startsWith("AIza")) {
-      setError("Invalid format. Gemini API keys start with 'AIza'");
+    // Basic validation - just check it's not empty
+    if (trimmed.length === 0) {
+      setError("Please enter a valid API key");
       return;
     }
 
