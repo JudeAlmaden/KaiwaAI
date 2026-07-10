@@ -28,6 +28,13 @@ vi.mock("@/lib/prisma", () => ({
     message: {
       findUnique: (...a: unknown[]) => messageFindUnique(...a),
     },
+    kanji: {
+      findMany: vi.fn(() => []),
+    },
+    userKanji: {
+      findMany: vi.fn(() => []),
+      createMany: vi.fn(() => ({ count: 0 })),
+    },
   },
 }));
 

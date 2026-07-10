@@ -8,7 +8,7 @@ import { VerbType, AdjectiveType } from "@/generated/prisma/client";
 
 interface ConjugationRule {
   formType: string;
-  stemChange: (stem: string, lastChar: string) => string;
+  stemChange: (stem: string, lastChar?: string) => string;
   ending: string;
 }
 
@@ -16,42 +16,42 @@ interface ConjugationRule {
 const GODAN_RULES: ConjugationRule[] = [
   {
     formType: "masu",
-    stemChange: (stem, last) => stem + conjugateGodan(last, "i"),
+    stemChange: (stem, last) => stem + conjugateGodan(last || "", "i"),
     ending: "ます",
   },
   {
     formType: "masu_negative",
-    stemChange: (stem, last) => stem + conjugateGodan(last, "i"),
+    stemChange: (stem, last) => stem + conjugateGodan(last || "", "i"),
     ending: "ません",
   },
   {
     formType: "masu_past",
-    stemChange: (stem, last) => stem + conjugateGodan(last, "i"),
+    stemChange: (stem, last) => stem + conjugateGodan(last || "", "i"),
     ending: "ました",
   },
   {
     formType: "masu_past_negative",
-    stemChange: (stem, last) => stem + conjugateGodan(last, "i"),
+    stemChange: (stem, last) => stem + conjugateGodan(last || "", "i"),
     ending: "ませんでした",
   },
   {
     formType: "te",
-    stemChange: (stem, last) => stem + conjugateGodanTe(last),
+    stemChange: (stem, last) => stem + conjugateGodanTe(last || ""),
     ending: "",
   },
   {
     formType: "plain_negative",
-    stemChange: (stem, last) => stem + conjugateGodan(last, "a"),
+    stemChange: (stem, last) => stem + conjugateGodan(last || "", "a"),
     ending: "ない",
   },
   {
     formType: "plain_past",
-    stemChange: (stem, last) => stem + conjugateGodanTa(last),
+    stemChange: (stem, last) => stem + conjugateGodanTa(last || ""),
     ending: "",
   },
   {
     formType: "plain_past_negative",
-    stemChange: (stem, last) => stem + conjugateGodan(last, "a"),
+    stemChange: (stem, last) => stem + conjugateGodan(last || "", "a"),
     ending: "なかった",
   },
 ];

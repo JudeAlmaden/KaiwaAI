@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { applyReview, type ReviewGrade } from "@/lib/srs";
 
+import { FlashcardStatus, PartOfSpeech, Prisma } from "@/generated/prisma/client";
+
 // Cards for review with various study modes:
 //   ?studyMode=due         — cards with nextReview in the past (default)
 //   ?studyMode=all         — any cards (study ahead)
@@ -25,21 +27,7 @@ export async function GET(req: Request) {
   const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
 
   // Build base where clause
-  const where: {
-    userId: string;
-    nextReview?: { lte: Date } | { gte: Date };
-    createdAt?: { gte: Date };
-    status?: string;
-    easeFactor?: { lt: number };
-    AND?: Array<{
-      timesReviewed?: { gte: number };
-      interval?: { lt: number };
-    }>;
-    OR?: Array<{
-      word?: { partOfSpeech?: string; jlptLevel?: string };
-      phrase?: { partOfSpeech?: string };
-    }>;
-  } = { userId: user.id };
+  const where: Prisma.UserFlashcardWhereInput = { userId: user.id };
 
   // Apply study mode logic
   if (studyMode === "due") {
@@ -59,28 +47,27 @@ export async function GET(req: Request) {
 
   // Apply additional filters - more complex due to Word/Phrase split
   if (status && ["new", "learning", "known"].includes(status)) {
-    where.status = status;
+    where.status = status as FlashcardStatus;
   }
 
   // Part of speech and JLPT filters need to check both word and phrase
   if (pos || jlpt) {
-    where.OR = [];
-    
-    const wordFilter: { partOfSpeech?: string; jlptLevel?: string } = {};
-    const phraseFilter: { partOfSpeech?: string } = {};
-    
+    const wordFilter: Prisma.WordWhereInput = {};
+    const phraseFilter: Prisma.PhraseWhereInput = {};
+
     if (pos) {
-      wordFilter.partOfSpeech = pos;
-      phraseFilter.partOfSpeech = pos;
+      const posEnum = pos as PartOfSpeech;
+      wordFilter.partOfSpeech = { equals: posEnum };
+      phraseFilter.partOfSpeech = { equals: posEnum };
     }
     if (jlpt && ["N5", "N4", "N3", "N2", "N1"].includes(jlpt)) {
-      wordFilter.jlptLevel = jlpt;
+      wordFilter.jlptLevel = { equals: jlpt };
     }
-    
-    where.OR.push({ word: wordFilter });
-    if (Object.keys(phraseFilter).length > 0) {
-      where.OR.push({ phrase: phraseFilter });
-    }
+
+    where.OR = [
+      { word: { is: wordFilter } },
+      { phrase: { is: phraseFilter } }
+    ];
   }
 
   // Determine sort order based on study mode

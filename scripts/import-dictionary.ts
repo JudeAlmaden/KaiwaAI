@@ -4,12 +4,14 @@
  * Run with: npx tsx scripts/import-dictionary.ts
  */
 
-import { PrismaClient, PartOfSpeech } from "@prisma/client";
+import { PrismaClient } from "../src/generated/prisma/client";
+import { PartOfSpeech, VerbType, AdjectiveType } from "../src/generated/prisma/enums";
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 
-const prisma = new PrismaClient();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const prisma = new PrismaClient({} as any);
 
 const BATCH_SIZE = 1000; // Process 1000 rows at a time
 
@@ -118,8 +120,8 @@ async function processBatchWords(batch: WordRow[]) {
         reading: word.reading,
         meanings: word.meanings,
         partOfSpeech: word.partOfSpeech as PartOfSpeech,
-        verbType: word.verbType || null,
-        adjectiveType: word.adjectiveType || null,
+        verbType: (word.verbType as VerbType) || null,
+        adjectiveType: (word.adjectiveType as AdjectiveType) || null,
         jlptLevel: word.jlptLevel || null,
         frequency: word.frequency || null,
       })),
@@ -136,8 +138,8 @@ async function processBatchWords(batch: WordRow[]) {
             reading: word.reading,
             meanings: word.meanings,
             partOfSpeech: word.partOfSpeech as PartOfSpeech,
-            verbType: word.verbType || null,
-            adjectiveType: word.adjectiveType || null,
+            verbType: (word.verbType as VerbType) || null,
+            adjectiveType: (word.adjectiveType as AdjectiveType) || null,
             jlptLevel: word.jlptLevel || null,
             frequency: word.frequency || null,
           },

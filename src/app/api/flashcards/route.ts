@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { type CachedToken } from "@/lib/types";
 import { lookupWordBySurface } from "@/lib/conjugation-generator";
-import { FlashcardStatus, PartOfSpeech } from "@/generated/prisma/client";
+import { FlashcardStatus } from "@/generated/prisma/client";
 import { sanitizeString } from "@/lib/sanitize";
 import { flashcardLimiter } from "@/lib/rate-limiter";
 
@@ -149,7 +149,7 @@ export async function POST(req: Request) {
       reading: body.word.reading,
       romaji: body.word.romaji || "",
       meaning: body.word.meaning,
-      pos: body.word.pos as PartOfSpeech,
+      pos: body.word.pos as CachedToken["pos"],
       dictForm: body.word.word,
     };
   }

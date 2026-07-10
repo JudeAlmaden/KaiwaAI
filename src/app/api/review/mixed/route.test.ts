@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth-helpers";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    flashcard: { findMany: vi.fn() },
+    userFlashcard: { findMany: vi.fn() },
     userKanji: { findMany: vi.fn() },
   },
 }));
@@ -52,7 +52,7 @@ describe("/api/review/mixed GET", () => {
       },
     ];
 
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValue(mockVocab as never);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue(mockVocab as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValue(mockKanji as never);
 
     const req = new Request("http://localhost/api/review/mixed?studyMode=due&limit=20");
@@ -90,7 +90,7 @@ describe("/api/review/mixed GET", () => {
       status: "learning",
     }));
 
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValue(mockVocab as never);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue(mockVocab as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValue(mockKanji as never);
 
     const req = new Request("http://localhost/api/review/mixed?limit=10");
@@ -102,7 +102,7 @@ describe("/api/review/mixed GET", () => {
 
   it("handles empty results gracefully", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
 
     const req = new Request("http://localhost/api/review/mixed");
