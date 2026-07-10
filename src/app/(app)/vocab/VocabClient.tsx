@@ -13,7 +13,7 @@ type Card = {
   id: string;
   word: string;
   reading: string;
-  romaji: string;
+  romaji?: string;
   meaning: string;
   partOfSpeech: string;
   status: "new" | "learning" | "known";
@@ -66,7 +66,7 @@ export default function VocabClient() {
         (c) =>
           c.word.includes(q) ||
           c.reading.includes(q) ||
-          c.romaji.toLowerCase().includes(q) ||
+          (c.romaji && c.romaji.toLowerCase().includes(q)) ||
           c.meaning.toLowerCase().includes(q)
       );
     }
@@ -271,7 +271,7 @@ export default function VocabClient() {
               <div>
                 <p className="font-jp text-3xl font-bold">{selected.word}</p>
                 <p className="font-jp text-base text-indigo-ai">{selected.reading}</p>
-                <p className="text-sm text-muted">{selected.romaji}</p>
+                {selected.romaji && <p className="text-sm text-muted">{selected.romaji}</p>}
               </div>
               {canSpeak() && (
                 <button
