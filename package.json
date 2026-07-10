@@ -11,13 +11,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "ci": "npm run lint && npm run typecheck && npm run test"
+    "ci": "npm run lint && npm run typecheck && npm run test",
+    "import:dictionary": "npx tsx scripts/import-dictionary.ts",
+    "restore:flashcards": "npx tsx scripts/restore-flashcards.ts",
+    "migrate:phrases": "npx tsx scripts/migrate-to-phrases.ts"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
     "jose": "^6.2.3",
     "next": "16.2.9",
     "pg": "^8.22.0",
@@ -35,6 +39,7 @@
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
     "@vitest/coverage-v8": "^4.1.9",
+    "better-sqlite3": "^12.11.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
