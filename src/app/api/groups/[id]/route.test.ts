@@ -5,9 +5,9 @@ import * as authHelpers from "@/lib/auth-helpers";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    group: { findUnique: vi.fn() },
-    groupMember: { findFirst: vi.fn() },
-    groupMessage: { findMany: vi.fn(), findUnique: vi.fn() },
+    chat: { findUnique: vi.fn() },
+    chatMember: { findFirst: vi.fn() },
+    message: { findMany: vi.fn(), findUnique: vi.fn() },
   },
 }));
 
@@ -17,7 +17,7 @@ vi.mock("@/lib/auth-helpers", () => ({
 
 describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
   const mockUser = { id: "user1", email: "test@example.com", name: "Test User" };
-  const mockGroup = {
+  const mockChat = {
     id: "group1",
     name: "Test Group",
     kind: "dm",
@@ -41,8 +41,8 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
 
   it("should return new messages when 'after' parameter is provided", async () => {
     vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
-    vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
+    vi.mocked(prisma.chatMember.findFirst).mockResolvedValue({ id: "member1" } as never);
+    vi.mocked(prisma.chat.findUnique).mockResolvedValue(mockChat as never);
 
     const afterMessage = {
       id: "msg1",
@@ -52,7 +52,7 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
     const newMessages = [
       {
         id: "msg2",
-        groupId: "group1",
+        chatId: "group1",
         senderUserId: "user2",
         senderName: "User 2",
         senderKind: "user",
@@ -64,7 +64,7 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
       },
       {
         id: "msg3",
-        groupId: "group1",
+        chatId: "group1",
         senderUserId: "user2",
         senderName: "User 2",
         senderKind: "user",
@@ -76,8 +76,8 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
       },
     ];
 
-    vi.mocked(prisma.groupMessage.findUnique).mockResolvedValue(afterMessage as never);
-    vi.mocked(prisma.groupMessage.findMany).mockResolvedValue(newMessages as never);
+    vi.mocked(prisma.message.findUnique).mockResolvedValue(afterMessage as never);
+    vi.mocked(prisma.message.findMany).mockResolvedValue(newMessages as never);
 
     const req = new Request("http://localhost/api/groups/group1?after=msg1");
     const params = Promise.resolve({ id: "group1" });
@@ -92,9 +92,9 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
     expect(data.messages[0].isMe).toBe(false); // user2 sent it, not user1
 
     // Should query for messages after the specified ID
-    expect(prisma.groupMessage.findMany).toHaveBeenCalledWith({
+    expect(prisma.message.findMany).toHaveBeenCalledWith({
       where: {
-        groupId: "group1",
+        chatId: "group1",
         createdAt: { gt: afterMessage.createdAt },
       },
       orderBy: { createdAt: "asc" },
@@ -104,16 +104,16 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
 
   it("should return empty array when no new messages after specified ID", async () => {
     vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
-    vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
+    vi.mocked(prisma.chatMember.findFirst).mockResolvedValue({ id: "member1" } as never);
+    vi.mocked(prisma.chat.findUnique).mockResolvedValue(mockChat as never);
 
     const afterMessage = {
       id: "msg1",
       createdAt: new Date("2026-01-01T10:00:00Z"),
     };
 
-    vi.mocked(prisma.groupMessage.findUnique).mockResolvedValue(afterMessage as never);
-    vi.mocked(prisma.groupMessage.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.message.findUnique).mockResolvedValue(afterMessage as never);
+    vi.mocked(prisma.message.findMany).mockResolvedValue([]);
 
     const req = new Request("http://localhost/api/groups/group1?after=msg1");
     const params = Promise.resolve({ id: "group1" });
@@ -127,23 +127,23 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
 
   it("should limit new messages to 50 when polling", async () => {
     vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
-    vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
+    vi.mocked(prisma.chatMember.findFirst).mockResolvedValue({ id: "member1" } as never);
+    vi.mocked(prisma.chat.findUnique).mockResolvedValue(mockChat as never);
 
     const afterMessage = {
       id: "msg1",
       createdAt: new Date("2026-01-01T10:00:00Z"),
     };
 
-    vi.mocked(prisma.groupMessage.findUnique).mockResolvedValue(afterMessage as never);
-    vi.mocked(prisma.groupMessage.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.message.findUnique).mockResolvedValue(afterMessage as never);
+    vi.mocked(prisma.message.findMany).mockResolvedValue([]);
 
     const req = new Request("http://localhost/api/groups/group1?after=msg1");
     const params = Promise.resolve({ id: "group1" });
 
     await GET(req, { params });
 
-    expect(prisma.groupMessage.findMany).toHaveBeenCalledWith(
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         take: 50,
       })
@@ -152,16 +152,16 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
 
   it("should not return group details when 'after' is provided (only messages)", async () => {
     vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue({ id: "member1" } as never);
-    vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
+    vi.mocked(prisma.chatMember.findFirst).mockResolvedValue({ id: "member1" } as never);
+    vi.mocked(prisma.chat.findUnique).mockResolvedValue(mockChat as never);
 
     const afterMessage = {
       id: "msg1",
       createdAt: new Date("2026-01-01T10:00:00Z"),
     };
 
-    vi.mocked(prisma.groupMessage.findUnique).mockResolvedValue(afterMessage as never);
-    vi.mocked(prisma.groupMessage.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.message.findUnique).mockResolvedValue(afterMessage as never);
+    vi.mocked(prisma.message.findMany).mockResolvedValue([]);
 
     const req = new Request("http://localhost/api/groups/group1?after=msg1");
     const params = Promise.resolve({ id: "group1" });
@@ -189,8 +189,8 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
 
   it("should still require membership for polling", async () => {
     vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
-    vi.mocked(prisma.group.findUnique).mockResolvedValue(mockGroup as never);
-    vi.mocked(prisma.groupMember.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.chat.findUnique).mockResolvedValue(mockChat as never);
+    vi.mocked(prisma.chatMember.findFirst).mockResolvedValue(null);
 
     const req = new Request("http://localhost/api/groups/group1?after=msg1");
     const params = Promise.resolve({ id: "group1" });

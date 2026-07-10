@@ -46,6 +46,10 @@ export function addKey(key: string, label?: string) {
   if (!trimmed || list.some((e) => e.key === trimmed)) return;
   list.push({ label: label?.trim() || `Key ${list.length + 1}`, key: trimmed });
   write(list);
+  // Set as active if it's the first key
+  if (list.length === 1) {
+    setActiveIndex(0);
+  }
 }
 
 export function removeKey(index: number) {
@@ -74,4 +78,41 @@ export function keysForRequest(): string[] {
   const active = getActiveIndex();
   const ordered = [list[active], ...list.filter((_, i) => i !== active)];
   return ordered.map((e) => e.key);
+}
+
+/** Validate API key format (basic check) */
+export function isValidKeyFormat(key: string): boolean {
+  const trimmed = key.trim();
+  // Gemini API keys start with "AIza" and are typically 39 characters
+  return trimmed.startsWith("AIza") && trimmed.length > 30;
+}
+
+/** Test API key with actual API call */
+export async function validateApiKey(key: string): Promise<{
+  valid: boolean;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${key.trim()}`
+    );
+
+    if (response.ok) {
+      return { valid: true };
+    }
+
+    if (response.status === 400) {
+      return { valid: false, error: "Invalid API key format" };
+    }
+    if (response.status === 403) {
+      return { valid: false, error: "API key access denied" };
+    }
+    if (response.status === 429) {
+      return { valid: false, error: "Rate limit exceeded" };
+    }
+
+    return { valid: false, error: "Could not validate API key" };
+  } catch {
+    return { valid: false, error: "Network error - check your connection" };
+  }
 }

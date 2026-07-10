@@ -12,6 +12,7 @@ export type PartOfSpeech =
   | "adverb"
   | "pronoun"
   | "expression"
+  | "phrase"
   | "other";
 
 export type MemoryCategory =
@@ -29,6 +30,8 @@ export type CachedToken = {
   meaning: string; // context-appropriate English
   pos: PartOfSpeech;
   dictForm: string; // dictionary/lemma form — the Flashcard `word`
+  /** When pos=="phrase", the component words that make up this phrase. */
+  words?: CachedToken[];
 };
 
 /** Grammar feedback on the user's Japanese for the current turn. */
@@ -99,6 +102,7 @@ const LEXICAL_POS: PartOfSpeech[] = [
   "noun",
   "adverb",
   "expression",
+  "phrase",
 ];
 
 /** Whether a token is worth saving as a flashcard (skip particles/pronouns). */

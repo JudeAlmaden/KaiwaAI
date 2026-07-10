@@ -4,8 +4,8 @@ import { getCurrentUser } from "@/lib/auth-helpers";
 import { encryptSecret } from "@/lib/crypto";
 
 async function membership(userId: string, groupId: string) {
-  return prisma.groupMember.findFirst({
-    where: { groupId, userId, kind: "user", status: "accepted" },
+  return prisma.chatMember.findFirst({
+    where: { chatId: groupId, userId, kind: "user", status: "accepted" },
     select: { id: true },
   });
 }
@@ -20,7 +20,7 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const group = await prisma.group.findUnique({
+  const group = await prisma.chat.findUnique({
     where: { id },
     include: {
       members: {
@@ -41,10 +41,10 @@ export async function GET(
 
   // If "after" is provided, fetch messages newer than that ID (polling for new messages)
   if (after) {
-    const newMessages = await prisma.groupMessage.findMany({
+    const newMessages = await prisma.message.findMany({
       where: {
-        groupId: id,
-        createdAt: { gt: (await prisma.groupMessage.findUnique({ where: { id: after } }))?.createdAt },
+        chatId: id,
+        createdAt: { gt: (await prisma.message.findUnique({ where: { id: after } }))?.createdAt },
       },
       orderBy: { createdAt: "asc" },
       take: 50, // Limit to 50 new messages at once
@@ -68,8 +68,8 @@ export async function GET(
 
   // Pull newest-first so we always get the most recent window, then fetch one
   // extra to know whether older messages remain. `before` walks further back.
-  const rows = await prisma.groupMessage.findMany({
-    where: { groupId: id },
+  const rows = await prisma.message.findMany({
+    where: { chatId: id },
     orderBy: { createdAt: "desc" },
     take: PAGE_SIZE + 1,
     ...(before ? { cursor: { id: before }, skip: 1 } : {}),
@@ -135,7 +135,7 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const group = await prisma.group.findUnique({ where: { id } });
+  const group = await prisma.chat.findUnique({ where: { id } });
   if (!group) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (group.ownerId !== user.id)
     return NextResponse.json({ error: "Only the owner can do that." }, { status: 403 });
@@ -152,7 +152,7 @@ export async function PATCH(
     : [];
 
   const apiKeyEnc = keys.length > 0 ? encryptSecret(JSON.stringify(keys)) : null;
-  await prisma.group.update({ where: { id }, data: { apiKeyEnc } });
+  await prisma.chat.update({ where: { id }, data: { apiKeyEnc } });
 
   return NextResponse.json({ ok: true, hasKey: Boolean(apiKeyEnc) });
 }
@@ -166,11 +166,11 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const group = await prisma.group.findUnique({ where: { id } });
+  const group = await prisma.chat.findUnique({ where: { id } });
   if (!group) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (group.ownerId !== user.id)
     return NextResponse.json({ error: "Only the owner can delete." }, { status: 403 });
 
-  await prisma.group.delete({ where: { id } });
+  await prisma.chat.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

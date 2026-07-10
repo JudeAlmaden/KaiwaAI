@@ -14,13 +14,14 @@ export async function GET() {
   const yesterdayKey = previousDayKey(todayKey);
 
   const [known, learning, neww, dueNow, totalMessages, kanjiKnown, kanjiLearning, kanjiNew] = await Promise.all([
-    prisma.flashcard.count({ where: { userId: user.id, status: "known" } }),
-    prisma.flashcard.count({ where: { userId: user.id, status: "learning" } }),
-    prisma.flashcard.count({ where: { userId: user.id, status: "new" } }),
-    prisma.flashcard.count({
+    // Use UserFlashcard (new system only)
+    prisma.userFlashcard.count({ where: { userId: user.id, status: "known" } }),
+    prisma.userFlashcard.count({ where: { userId: user.id, status: "learning" } }),
+    prisma.userFlashcard.count({ where: { userId: user.id, status: "new" } }),
+    prisma.userFlashcard.count({
       where: { userId: user.id, nextReview: { lte: now } },
     }),
-    prisma.message.count({ where: { userId: user.id, role: "user" } }),
+    prisma.message.count({ where: { senderUserId: user.id, senderKind: "user" } }),
     prisma.userKanji.count({ where: { userId: user.id, status: "known" } }),
     prisma.userKanji.count({ where: { userId: user.id, status: "learning" } }),
     prisma.userKanji.count({ where: { userId: user.id, status: "new" } }),

@@ -61,7 +61,7 @@ export async function ensurePersonaConversation(
   personaId: string,
   personaName: string
 ): Promise<string> {
-  const existing = await prisma.group.findFirst({
+  const existing = await prisma.chat.findFirst({
     where: {
       kind: "persona",
       ownerId: userId,
@@ -71,7 +71,7 @@ export async function ensurePersonaConversation(
   });
   if (existing) return existing.id;
 
-  const group = await prisma.group.create({
+  const chat = await prisma.chat.create({
     data: {
       name: personaName,
       kind: "persona",
@@ -85,5 +85,5 @@ export async function ensurePersonaConversation(
     },
     select: { id: true },
   });
-  return group.id;
+  return chat.id;
 }

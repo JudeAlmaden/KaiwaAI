@@ -20,10 +20,12 @@ type Card = {
   repetitions: number;
   interval: number;
   nextReview: string;
+  isPhrase: boolean;
 };
 
 const FILTERS = ["All", "New", "Learning", "Known"] as const;
 type Filter = (typeof FILTERS)[number];
+type ContentTab = "words" | "phrases";
 
 function progressOf(c: Card): number {
   const rep = Math.min(c.repetitions / 3, 1);
@@ -34,6 +36,7 @@ function progressOf(c: Card): number {
 export default function VocabClient() {
   const router = useRouter();
   const [cards, setCards] = useState<Card[] | null>(null);
+  const [contentTab, setContentTab] = useState<ContentTab>("words");
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Card | null>(null);
@@ -49,9 +52,13 @@ export default function VocabClient() {
       .catch(() => setCards([]));
   }
 
+  const contentCards = useMemo(
+    () => cards?.filter((card) => card.isPhrase === (contentTab === "phrases")) ?? [],
+    [cards, contentTab]
+  );
+
   const filtered = useMemo(() => {
-    if (!cards) return [];
-    let list = cards;
+    let list = contentCards;
     if (filter !== "All") list = list.filter((c) => c.status === filter.toLowerCase());
     const q = query.trim().toLowerCase();
     if (q) {
@@ -64,7 +71,7 @@ export default function VocabClient() {
       );
     }
     return list;
-  }, [cards, filter, query]);
+  }, [contentCards, filter, query]);
 
   const groups = useMemo(() => {
     const m = new Map<string, Card[]>();
@@ -77,14 +84,14 @@ export default function VocabClient() {
   }, [filtered]);
 
   const counts = useMemo(() => {
-    const c = { known: 0, learning: 0, neww: 0, total: cards?.length ?? 0 };
-    cards?.forEach((x) => {
+    const c = { known: 0, learning: 0, neww: 0, total: contentCards.length };
+    contentCards.forEach((x) => {
       if (x.status === "known") c.known++;
       else if (x.status === "learning") c.learning++;
       else c.neww++;
     });
     return c;
-  }, [cards]);
+  }, [contentCards]);
 
   async function act(id: string, action: "reset" | "markKnown") {
     await fetch(`/api/flashcards/${id}`, {
@@ -107,10 +114,31 @@ export default function VocabClient() {
       <PageHeader
         title="Vocab"
         jp="単語"
-        subtitle={cards ? `${counts.total} words collected` : "Loading…"}
+        subtitle={cards ? `${counts.total} ${contentTab} collected` : "Loading…"}
       />
 
       <LookupBox onAdded={load} />
+
+      <div className="px-5 pt-3 sm:px-8">
+        <div className="mx-auto grid w-full max-w-3xl grid-cols-2 rounded-2xl bg-border/40 p-1">
+          <button
+            onClick={() => setContentTab("words")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+              contentTab === "words" ? "bg-card text-indigo-ai shadow-sm" : "text-muted"
+            }`}
+          >
+            Words
+          </button>
+          <button
+            onClick={() => setContentTab("phrases")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+              contentTab === "phrases" ? "bg-card text-indigo-ai shadow-sm" : "text-muted"
+            }`}
+          >
+            Phrases
+          </button>
+        </div>
+      </div>
 
       {/* overview bar */}
       {cards && cards.length > 0 && (
@@ -148,7 +176,7 @@ export default function VocabClient() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your words…"
+            placeholder={`Search your ${contentTab}…`}
             className="h-11 w-full rounded-2xl border-2 border-border bg-card pl-10 pr-4 text-sm outline-none focus:border-indigo-ai"
           />
         </div>
@@ -170,7 +198,9 @@ export default function VocabClient() {
             {query || filter !== "All" ? "No matches" : "Your deck is empty"}
           </h2>
           <p className="mt-1 max-w-xs text-sm text-muted">
-            Tap words while chatting with Kai to collect them here.
+            {contentTab === "phrases"
+              ? "Save phrases while chatting with Kai to collect them here."
+              : "Tap words while chatting with Kai to collect them here."}
           </p>
         </div>
       ) : (

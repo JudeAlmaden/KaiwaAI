@@ -76,10 +76,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [quotedMessage, setQuotedMessage] = useState<GMsg | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScroll = useRef(false);
   const loadingOlderRef = useRef(false);
+  const atBottomRef = useRef(true);
   // Proactivity bookkeeping (1:1 persona chats only).
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const followupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,6 +91,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const busyRef = useRef(false);
   const messagesRef = useRef<GMsg[]>([]);
   const pollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scrollToBottom(behavior: ScrollBehavior = "smooth") {
+    endRef.current?.scrollIntoView({ behavior });
+    setAtBottom(true);
+    atBottomRef.current = true;
+    setUnreadCount(0);
+  }
 
   const cacheKey = cacheKeys.conv(groupId);
 
@@ -114,7 +124,11 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         if (newMsgs.length > 0) {
           setMessages((m) => {
             const seen = new Set(m.map((x) => x.id));
-            return [...m, ...newMsgs.filter((x) => !seen.has(x.id))];
+            const toAdd = newMsgs.filter((x) => !seen.has(x.id));
+            if (!atBottomRef.current) {
+              setUnreadCount((c) => c + toAdd.length);
+            }
+            return [...m, ...toAdd];
           });
         }
       } catch {
@@ -199,8 +213,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     if (!didInitialScroll.current) {
       // First paint: jump straight to the latest message (no travel animation).
       endRef.current?.scrollIntoView();
-      if (messages.length > 0) didInitialScroll.current = true;
-    } else {
+      if (messages.length > 0) {
+        didInitialScroll.current = true;
+        atBottomRef.current = true;
+        setAtBottom(true);
+      }
+    } else if (atBottomRef.current) {
+      // Only auto-scroll if we're already at the bottom
       endRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
@@ -287,6 +306,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   );
 
   function stickToBottomProactive() {
+    if (!atBottomRef.current) return;
     requestAnimationFrame(() =>
       endRef.current?.scrollIntoView({ behavior: "smooth" })
     );
@@ -632,12 +652,18 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       )}
 
       {/* stream */}
+      <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
         onScroll={(e) => {
-          if (e.currentTarget.scrollTop < 80) loadOlder();
+          const el = e.currentTarget;
+          if (el.scrollTop < 80) loadOlder();
+          const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+          atBottomRef.current = near;
+          setAtBottom(near);
+          if (near) setUnreadCount(0);
         }}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
+        className="h-full overflow-y-auto px-4 py-5 sm:px-8"
       >
         <div className="mx-auto flex max-w-2xl flex-col">
           {loadingOlder && (
@@ -691,6 +717,23 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           )}
           <div ref={endRef} />
         </div>
+      </div>
+
+      {/* Scroll-to-bottom FAB */}
+      {!atBottom && (
+        <button
+          onClick={() => scrollToBottom()}
+          className="absolute bottom-4 right-4 z-10 flex items-center gap-1.5 rounded-full bg-indigo-ai px-3 py-2 text-xs font-bold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl"
+          aria-label="Scroll to latest"
+        >
+          {unreadCount > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sakura px-1 text-[10px]">
+              {unreadCount}
+            </span>
+          )}
+          <span>↓ Latest</span>
+        </button>
+      )}
       </div>
 
       {/* composer */}

@@ -11,7 +11,7 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const owned = await prisma.flashcard.findFirst({ where: { id, userId: user.id } });
+  const owned = await prisma.userFlashcard.findFirst({ where: { id, userId: user.id } });
   if (!owned) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   let body: { action?: string };
@@ -22,7 +22,7 @@ export async function PATCH(
   }
 
   if (body.action === "reset") {
-    const card = await prisma.flashcard.update({
+    const card = await prisma.userFlashcard.update({
       where: { id },
       data: {
         status: "new",
@@ -38,7 +38,7 @@ export async function PATCH(
   if (body.action === "markKnown") {
     const next = new Date();
     next.setDate(next.getDate() + 21);
-    const card = await prisma.flashcard.update({
+    const card = await prisma.userFlashcard.update({
       where: { id },
       data: { status: "known", repetitions: 3, interval: 21, nextReview: next },
     });
@@ -56,9 +56,9 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const owned = await prisma.flashcard.findFirst({ where: { id, userId: user.id } });
+  const owned = await prisma.userFlashcard.findFirst({ where: { id, userId: user.id } });
   if (!owned) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  await prisma.flashcard.delete({ where: { id } });
+  await prisma.userFlashcard.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

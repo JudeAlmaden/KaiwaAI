@@ -24,18 +24,20 @@ export async function GET(req: Request) {
   const jlpt = sp.get("jlpt");
   const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
 
+  // Build base where clause
   const where: {
     userId: string;
     nextReview?: { lte: Date } | { gte: Date };
     createdAt?: { gte: Date };
     status?: string;
-    partOfSpeech?: string;
-    jlptTier?: string;
     easeFactor?: { lt: number };
-    timesReviewed?: { gte: number };
     AND?: Array<{
       timesReviewed?: { gte: number };
       interval?: { lt: number };
+    }>;
+    OR?: Array<{
+      word?: { partOfSpeech?: string; jlptLevel?: string };
+      phrase?: { partOfSpeech?: string };
     }>;
   } = { userId: user.id };
 
@@ -47,21 +49,39 @@ export async function GET(req: Request) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     where.createdAt = { gte: sevenDaysAgo };
   } else if (studyMode === "struggling") {
-    // Cards with low ease factor OR many reviews
     where.easeFactor = { lt: 2.0 };
   } else if (studyMode === "leeches") {
-    // Cards reviewed many times but still short interval (not sticking)
     where.AND = [
       { timesReviewed: { gte: 8 } },
       { interval: { lt: 7 } }
     ];
   }
-  // "all" mode has no filters on nextReview/createdAt
 
-  // Apply additional filters
-  if (status && ["new", "learning", "known"].includes(status)) where.status = status;
-  if (pos) where.partOfSpeech = pos;
-  if (jlpt && ["N5", "N4", "N3", "N2", "N1"].includes(jlpt)) where.jlptTier = jlpt;
+  // Apply additional filters - more complex due to Word/Phrase split
+  if (status && ["new", "learning", "known"].includes(status)) {
+    where.status = status;
+  }
+
+  // Part of speech and JLPT filters need to check both word and phrase
+  if (pos || jlpt) {
+    where.OR = [];
+    
+    const wordFilter: { partOfSpeech?: string; jlptLevel?: string } = {};
+    const phraseFilter: { partOfSpeech?: string } = {};
+    
+    if (pos) {
+      wordFilter.partOfSpeech = pos;
+      phraseFilter.partOfSpeech = pos;
+    }
+    if (jlpt && ["N5", "N4", "N3", "N2", "N1"].includes(jlpt)) {
+      wordFilter.jlptLevel = jlpt;
+    }
+    
+    where.OR.push({ word: wordFilter });
+    if (Object.keys(phraseFilter).length > 0) {
+      where.OR.push({ phrase: phraseFilter });
+    }
+  }
 
   // Determine sort order based on study mode
   let orderBy: 
@@ -77,13 +97,74 @@ export async function GET(req: Request) {
     orderBy = { timesReviewed: "desc" };
   }
 
-  const cards = await prisma.flashcard.findMany({
+  const cards = await prisma.userFlashcard.findMany({
     where,
+    include: {
+      word: true,
+      wordForm: true,
+      phrase: true,
+    },
     orderBy,
     take: limit,
   });
 
-  return NextResponse.json({ cards });
+  // Format cards for compatibility with existing frontend
+  const formattedCards = cards.map((card) => {
+    let word: string;
+    let reading: string;
+    let meaning: string;
+    let partOfSpeech: string;
+    let jlptTier: string | null = null;
+
+    if (card.phrase) {
+      word = card.phrase.text;
+      reading = card.phrase.reading;
+      try {
+        const meanings = JSON.parse(card.phrase.meanings);
+        meaning = meanings.join("; ");
+      } catch {
+        meaning = card.phrase.meanings;
+      }
+      partOfSpeech = card.phrase.partOfSpeech;
+    } else if (card.word) {
+      word = card.wordForm?.form || card.word.dictionary;
+      reading = card.wordForm?.reading || card.word.reading;
+      try {
+        const meanings = JSON.parse(card.word.meanings);
+        meaning = meanings.join("; ");
+      } catch {
+        meaning = card.word.meanings;
+      }
+      partOfSpeech = card.word.partOfSpeech;
+      jlptTier = card.word.jlptLevel;
+    } else {
+      word = "Unknown";
+      reading = "Unknown";
+      meaning = "Unknown";
+      partOfSpeech = "unknown";
+    }
+
+    return {
+      id: card.id,
+      word,
+      reading,
+      romaji: reading, // Legacy field
+      meaning,
+      partOfSpeech,
+      jlptTier,
+      status: card.status,
+      easeFactor: card.easeFactor,
+      interval: card.interval,
+      repetitions: card.repetitions,
+      timesReviewed: card.timesReviewed,
+      exposures: card.exposures,
+      nextReview: card.nextReview,
+      lastReviewedAt: card.lastReviewedAt,
+      createdAt: card.createdAt,
+    };
+  });
+
+  return NextResponse.json({ cards: formattedCards });
 }
 
 // Grade a card and reschedule it via SM-2.
@@ -102,7 +183,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing cardId or grade." }, { status: 400 });
   }
 
-  const card = await prisma.flashcard.findFirst({
+  const card = await prisma.userFlashcard.findFirst({
     where: { id: body.cardId, userId: user.id },
   });
   if (!card) return NextResponse.json({ error: "Card not found." }, { status: 404 });
@@ -116,7 +197,7 @@ export async function POST(req: Request) {
     body.grade as ReviewGrade
   );
 
-  const updated = await prisma.flashcard.update({
+  const updated = await prisma.userFlashcard.update({
     where: { id: card.id },
     data: {
       easeFactor: result.easeFactor,

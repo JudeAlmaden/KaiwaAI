@@ -9,7 +9,7 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const memberships = await prisma.groupMember.findMany({
+  const memberships = await prisma.chatMember.findMany({
     where: { 
       userId: user.id, 
       kind: "user", 
@@ -17,7 +17,7 @@ export async function GET() {
       hidden: false, // Don't show hidden conversations
     },
     include: {
-      group: {
+      chat: {
         include: {
           members: {
             include: {
@@ -43,13 +43,13 @@ export async function GET() {
 
   const groups = memberships
     .map((m) => {
-      const last = m.group.messages[0];
+      const last = m.chat.messages[0];
       return {
-        id: m.group.id,
-        name: m.group.name,
-        kind: m.group.kind,
-        isOwner: m.group.ownerId === user.id,
-        hasKey: Boolean(m.group.apiKeyEnc),
+        id: m.chat.id,
+        name: m.chat.name,
+        kind: m.chat.kind,
+        isOwner: m.chat.ownerId === user.id,
+        hasKey: Boolean(m.chat.apiKeyEnc),
         lastMessage: last
           ? {
               content: last.content,
@@ -57,8 +57,8 @@ export async function GET() {
               fromMe: last.senderUserId === user.id,
             }
           : null,
-        lastAt: last?.createdAt ?? m.group.createdAt,
-        members: m.group.members.map((mem) => ({
+        lastAt: last?.createdAt ?? m.chat.createdAt,
+        members: m.chat.members.map((mem) => ({
           kind: mem.kind,
           name:
             mem.kind === "user"
@@ -149,7 +149,7 @@ export async function POST(req: Request) {
   try {
     // Reuse an existing solo persona/DM conversation instead of duplicating.
     if (kind === "persona" && validPersonaId) {
-      const existing = await prisma.group.findFirst({
+      const existing = await prisma.chat.findFirst({
         where: {
           kind: "persona",
           ownerId: user.id,
@@ -172,7 +172,7 @@ export async function POST(req: Request) {
       } else name = "Group chat";
     }
 
-    const group = await prisma.group.create({
+    const group = await prisma.chat.create({
       data: {
         name: name.slice(0, 60),
         kind,

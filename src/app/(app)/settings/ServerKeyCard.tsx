@@ -20,7 +20,7 @@ export default function ServerKeyCard() {
     setError(null);
     const keys = keysForRequest();
     if (keys.length === 0) {
-      setError("Add a Gemini key above first.");
+      setError("Add a Personal API key above first.");
       return;
     }
     setBusy(true);
@@ -44,35 +44,76 @@ export default function ServerKeyCard() {
   return (
     <Surface>
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="font-display text-lg font-bold">
-            Let Kai work in the background
-          </h2>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h2 className="font-display text-lg font-bold">
+              Server API Key (Optional)
+            </h2>
+            <span className="rounded-full bg-indigo-ai/15 px-2.5 py-1 text-[10px] font-bold uppercase text-indigo-ai">
+              Advanced
+            </span>
+          </div>
           <p className="mt-1 text-sm text-muted">
-            Stores your Gemini key(s) on the server (encrypted) so Kai can
-            message you first and prep summaries even when the app is closed. All
-            your keys are uploaded so the server can rotate them too. Off by
-            default — your keys normally stay on this device.
+            Enable server-side AI features by storing an encrypted copy of your key
           </p>
+          
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex items-start gap-2">
+              <span className="text-mint">✓</span>
+              <span className="text-muted">AI personas in group chats</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-mint">✓</span>
+              <span className="text-muted">Scheduled messages from Kai</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-mint">✓</span>
+              <span className="text-muted">Background summaries & prep</span>
+            </div>
+          </div>
         </div>
         <Toggle
           on={Boolean(stored)}
           onClick={() => (stored ? disable() : enable())}
+          disabled={busy}
         />
       </div>
 
-      {busy && <p className="mt-2 text-xs text-muted">Saving…</p>}
-      {error && <p className="mt-2 text-sm font-semibold text-sakura">{error}</p>}
+      {busy && <p className="mt-3 text-xs text-muted">Saving…</p>}
+      {error && <p className="mt-3 rounded-2xl border-2 border-sakura/20 bg-sakura/5 p-3 text-sm text-sakura">
+        <strong>⚠️ Error:</strong> {error}
+      </p>}
       {stored && !busy && (
-        <p className="mt-3 flex items-center gap-1 text-xs font-bold text-mint">
-          ✓ Background features enabled — your key is encrypted at rest.
-        </p>
+        <div className="mt-3 rounded-2xl border-2 border-mint/20 bg-mint/5 p-3">
+          <p className="flex items-center gap-1.5 text-sm font-bold text-mint">
+            <span>✓</span>
+            <span>Server features enabled</span>
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Your key is encrypted (AES-256-GCM) and automatically rotates like your personal keys.
+          </p>
+        </div>
       )}
-      <p className="mt-3 text-xs text-muted">
-        Heads up: this is a deliberate trade of some privacy for convenience. The
-        key is encrypted (AES-256-GCM), never logged, and never sent back to the
-        browser. Turn it off anytime to wipe it from the server.
-      </p>
+      
+      <details className="mt-3 rounded-2xl border-2 border-amber/20 bg-amber/5 p-3">
+        <summary className="cursor-pointer text-xs font-bold text-amber">
+          🔒 Privacy & Security Information
+        </summary>
+        <div className="mt-2 space-y-2 text-xs text-muted">
+          <p>
+            When enabled, your personal API key(s) are copied to our server and encrypted at rest using AES-256-GCM encryption.
+          </p>
+          <p>
+            <strong className="text-foreground">What we do:</strong> Encrypt your key, use it only for your AI features, automatically rotate through multiple keys.
+          </p>
+          <p>
+            <strong className="text-foreground">What we don't do:</strong> Log your key, send it back to your browser, or share it with third parties.
+          </p>
+          <p>
+            You can disable this anytime to immediately wipe your key from the server. Personal keys on your device are never affected.
+          </p>
+        </div>
+      </details>
     </Surface>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/group-chat";
 import { MAX_MESSAGE_CHARS, charLength, hasFeedback } from "@/lib/types";
 import { normalizeCorrection } from "@/lib/types";
+import { messageLimiter } from "@/lib/rate-limiter";
 
 // DELETE: clear all messages in the conversation (keeps the conversation).
 // Any accepted member may clear; this affects everyone in the conversation.
@@ -21,13 +22,13 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const me = await prisma.groupMember.findFirst({
-    where: { groupId: id, userId: user.id, kind: "user", status: "accepted" },
+  const me = await prisma.chatMember.findFirst({
+    where: { chatId: id, userId: user.id, kind: "user", status: "accepted" },
     select: { id: true },
   });
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
 
-  await prisma.groupMessage.deleteMany({ where: { groupId: id } });
+  await prisma.message.deleteMany({ where: { chatId: id } });
   return NextResponse.json({ ok: true });
 }
 
@@ -65,10 +66,18 @@ export async function POST(
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (messageLimiter.isRateLimited(user.id)) {
+    return NextResponse.json(
+      { error: "Too many messages. Please slow down." },
+      { status: 429 }
+    );
+  }
+
   const { id } = await params;
 
-  const me = await prisma.groupMember.findFirst({
-    where: { groupId: id, userId: user.id, kind: "user", status: "accepted" },
+  const me = await prisma.chatMember.findFirst({
+    where: { chatId: id, userId: user.id, kind: "user", status: "accepted" },
     select: { id: true },
   });
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
@@ -100,21 +109,21 @@ export async function POST(
   const senderName = user.name || user.email;
 
   // Unhide the conversation for all members who have it hidden when a new message arrives
-  const hiddenMembers = await prisma.groupMember.findMany({
-    where: { groupId: id, hidden: true, kind: "user" },
+  const hiddenMembers = await prisma.chatMember.findMany({
+    where: { chatId: id, hidden: true, kind: "user" },
     select: { id: true },
   });
   
   if (hiddenMembers.length > 0) {
-    await prisma.groupMember.updateMany({
+    await prisma.chatMember.updateMany({
       where: { id: { in: hiddenMembers.map((m) => m.id) } },
       data: { hidden: false },
     });
   }
 
-  const humanMsg = await prisma.groupMessage.create({
+  const humanMsg = await prisma.message.create({
     data: {
-      groupId: id,
+      chatId: id,
       memberId: me.id,
       senderUserId: user.id,
       senderName,
@@ -124,7 +133,7 @@ export async function POST(
     },
   });
 
-  const group = await prisma.group.findUnique({
+  const group = await prisma.chat.findUnique({
     where: { id },
     include: {
       members: { where: { kind: "persona" }, include: { persona: true } },
@@ -139,9 +148,9 @@ export async function POST(
   // Trust it only when this is a persona conversation and a persona exists.
   if (body.aiReply && body.aiReply.reply && personaMember?.persona) {
     const a = body.aiReply;
-    const saved = await prisma.groupMessage.create({
+    const saved = await prisma.message.create({
       data: {
-        groupId: id,
+        chatId: id,
         memberId: personaMember.id,
         senderName: personaMember.persona.name,
         senderKind: "persona",
@@ -176,8 +185,8 @@ export async function POST(
       avatar: personaMember.persona.avatar,
     };
 
-    const recent = await prisma.groupMessage.findMany({
-      where: { groupId: id },
+    const recent = await prisma.message.findMany({
+      where: { chatId: id },
       orderBy: { createdAt: "desc" },
       take: 12,
     });
@@ -186,8 +195,8 @@ export async function POST(
       .map((m) => ({ senderName: m.senderName, senderKind: m.senderKind, content: m.content }));
 
     // Other human speakers (so the persona knows who's in the room).
-    const humanNames = await prisma.groupMember.findMany({
-      where: { groupId: id, kind: "user" },
+    const humanNames = await prisma.chatMember.findMany({
+      where: { chatId: id, kind: "user" },
       include: { user: { select: { name: true, email: true } } },
     });
     const others = humanNames
@@ -203,9 +212,9 @@ export async function POST(
         level: user.level,
       });
       if (r && r.reply) {
-        const saved = await prisma.groupMessage.create({
+        const saved = await prisma.message.create({
           data: {
-            groupId: id,
+            chatId: id,
             memberId: persona.memberId,
             senderName: persona.name,
             senderKind: "persona",

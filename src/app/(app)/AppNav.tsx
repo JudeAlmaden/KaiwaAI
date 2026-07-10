@@ -6,6 +6,7 @@ import { Fire } from "@phosphor-icons/react/dist/ssr";
 import Kai from "../Kai";
 import LogoutButton from "../LogoutButton";
 import { NAV_ITEMS } from "./nav";
+import { useUnreadKaiMessages } from "@/hooks/useUnreadKaiMessages";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -20,6 +21,7 @@ function isConversationRoute(pathname: string) {
 /** Desktop sidebar (lg+). Hidden on mobile. */
 export function Sidebar({ email, streak }: { email: string; streak: number }) {
   const pathname = usePathname();
+  const hasUnreadKai = useUnreadKaiMessages();
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r-2 border-border bg-card/50 px-3 py-5 lg:flex">
@@ -35,11 +37,12 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
         {NAV_ITEMS.map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = item.icon;
+          const showBadge = item.href === "/chat" && hasUnreadKai && !active;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`group flex items-center gap-3 rounded-2xl px-3 py-2.5 font-display text-sm font-bold transition-colors ${
+              className={`group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 font-display text-sm font-bold transition-colors ${
                 active
                   ? "bg-indigo-ai text-white shadow-sm"
                   : "text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
@@ -51,6 +54,12 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
                 className={active ? "text-white" : "text-indigo-ai/70"}
               />
               <span>{item.label}</span>
+              {showBadge && (
+                <span
+                  className="absolute right-3 top-2 h-2.5 w-2.5 rounded-full bg-sakura animate-pulse"
+                  aria-label="Unread messages from Kai"
+                />
+              )}
               <span
                 className={`ml-auto font-jp text-xs ${
                   active ? "text-white/70" : "text-muted/50"
@@ -86,6 +95,7 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
 /** Mobile bottom tab bar. Hidden on lg+ and inside a conversation (full-screen). */
 export function BottomTabs() {
   const pathname = usePathname();
+  const hasUnreadKai = useUnreadKaiMessages();
   // A conversation takes over the screen on mobile — it has its own header/nav.
   if (isConversationRoute(pathname)) return null;
 
@@ -94,16 +104,23 @@ export function BottomTabs() {
       {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
+        const showBadge = item.href === "/chat" && hasUnreadKai && !active;
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold transition-colors ${
+            className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold transition-colors ${
               active ? "text-indigo-ai" : "text-muted"
             }`}
           >
             <Icon size={22} weight={active ? "fill" : "duotone"} />
             {item.label}
+            {showBadge && (
+              <span
+                className="absolute right-[calc(50%-16px)] top-1 h-2 w-2 rounded-full bg-sakura animate-pulse"
+                aria-label="Unread messages from Kai"
+              />
+            )}
           </Link>
         );
       })}
