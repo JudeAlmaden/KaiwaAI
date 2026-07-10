@@ -15,8 +15,8 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const me = await prisma.groupMember.findFirst({
-    where: { groupId: id, userId: user.id, kind: "user", status: "accepted" },
+  const me = await prisma.chatMember.findFirst({
+    where: { chatId: id, userId: user.id, kind: "user", status: "accepted" },
     select: { id: true },
   });
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
@@ -36,17 +36,17 @@ export async function POST(
   const reply = (body.reply ?? "").trim();
   if (!reply) return NextResponse.json({ error: "Empty reply." }, { status: 400 });
 
-  const personaMember = await prisma.groupMember.findFirst({
-    where: { groupId: id, kind: "persona" },
+  const personaMember = await prisma.chatMember.findFirst({
+    where: { chatId: id, kind: "persona" },
     include: { persona: { select: { name: true } } },
   });
   if (!personaMember?.persona) {
     return NextResponse.json({ error: "No persona here." }, { status: 400 });
   }
 
-  const saved = await prisma.groupMessage.create({
+  const saved = await prisma.message.create({
     data: {
-      groupId: id,
+      chatId: id,
       memberId: personaMember.id,
       senderName: personaMember.persona.name,
       senderKind: "persona",

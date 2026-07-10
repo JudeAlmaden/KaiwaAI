@@ -11,15 +11,15 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const member = await prisma.groupMember.findFirst({
-    where: { groupId: id, userId: user.id, kind: "user" },
+  const member = await prisma.chatMember.findFirst({
+    where: { chatId: id, userId: user.id, kind: "user" },
   });
 
   if (!member) {
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
 
-  await prisma.groupMember.update({
+  await prisma.chatMember.update({
     where: { id: member.id },
     data: { hidden: true },
   });
@@ -36,15 +36,15 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const member = await prisma.groupMember.findFirst({
-    where: { groupId: id, userId: user.id, kind: "user" },
+  const member = await prisma.chatMember.findFirst({
+    where: { chatId: id, userId: user.id, kind: "user" },
   });
 
   if (!member) {
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
 
-  await prisma.groupMember.update({
+  await prisma.chatMember.update({
     where: { id: member.id },
     data: { hidden: false },
   });

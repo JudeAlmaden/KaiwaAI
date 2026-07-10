@@ -108,6 +108,13 @@ export default function ChatHub() {
     { id: "friends", label: "Friends" },
   ];
 
+  // Quick-action suggestion chips shown at the top of the chat list (mobile-first UX)
+  const SUGGESTIONS = [
+    { label: "✨ New AI chat", action: () => setTab("ai") },
+    { label: "💬 New chat", action: () => setComposing(true) },
+    { label: "👥 Find friends", action: () => setTab("friends") },
+  ];
+
   const filteredConvos = useMemo(() => {
     if (!convos) return null;
     const q = query.trim().toLowerCase();
@@ -154,6 +161,20 @@ export default function ChatHub() {
 
       {tab === "chats" && (
         <div className="flex flex-col gap-3">
+          {/* Mobile suggestion chips — visible only when there are convos */}
+          {convos !== null && convos.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1 sm:hidden" style={{ scrollbarWidth: "none" }}>
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s.label}
+                  onClick={s.action}
+                  className="shrink-0 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai active:scale-95"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
           {/* search */}
           {convos && convos.length > 4 && (
             <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
@@ -383,7 +404,7 @@ function ConversationRow({
             e.stopPropagation();
             setMenuOpen(!menuOpen);
           }}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-muted opacity-0 transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai group-hover:opacity-100 sm:opacity-100"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai sm:opacity-0 sm:group-hover:opacity-100"
           aria-label="Conversation options"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
