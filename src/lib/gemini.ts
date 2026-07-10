@@ -60,7 +60,7 @@ Respond ONLY with valid JSON matching this schema:
   "reply": "<English-led Japanglish reply; Japanese in kana/kanji, no romaji shadows; playful, ends with something that keeps the chat going>",
   "correction": { "status": "correct|unnatural|incorrect|none", "explanation": "<empty if none>", "corrected": "<corrected Japanese, empty if none>", "romaji": "<romaji, empty if none>", "natural": "<more natural version, empty if none>" },
   "english": "<English gloss of any Japanese in your reply; empty string if already fully English>",
-  "tokens": [{ "surface": "<as written>", "reading": "<kana, or surface if not Japanese>", "romaji": "<romaji, or surface if not Japanese>", "meaning": "<English meaning, or surface if not Japanese>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|other", "dictForm": "<dictionary form>" }],
+  "tokens": [{ "surface": "<as written>", "reading": "<kana, or surface if not Japanese>", "romaji": "<romaji, or surface if not Japanese>", "meaning": "<English meaning, or surface if not Japanese>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|phrase|other", "dictForm": "<dictionary form>", "words": [<only for pos=phrase: array of the SAME token structure for each component word>] }],
   "newWords": ["<dictForm of any NEW Japanese words you introduced>"],
   "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn worth remembering long-term — e.g. 'Has a cat named Pochi', 'Studying for JLPT N4'. Stable facts only, NOT small talk. Empty array if none. Short third-person notes.>"]
 }
@@ -82,12 +82,47 @@ JAPANESE TOKENIZATION (READ CAREFULLY):
 - Noun + particle = SEPARATE tokens (e.g. "猫" then "は")
 - Standalone particles are separate tokens (は, が, を, に, etc.)
 
+PHRASES (TWO-LAYER TOKENS):
+- Fixed multi-word expressions (e.g. こんにちは, ありがとうございます, という, お願いします, どういたしまして) should be tokenized as ONE phrase token with pos="phrase"
+- For each phrase token, populate "words" with the component words: each entry has the SAME structure (surface, reading, romaji, meaning, pos, dictForm, no nested words)
+- Example: こんにちは → { surface: "こんにちは", reading: "こんにちは", romaji: "konnichiwa", meaning: "hello / good afternoon", pos: "phrase", dictForm: "こんにちは", words: [ { surface: "今", reading: "こん", romaji: "kon", meaning: "this", pos: "noun", dictForm: "今" }, { surface: "日", reading: "にち", romaji: "nichi", meaning: "day", pos: "noun", dictForm: "日" }, { surface: "は", reading: "は", romaji: "wa", meaning: "(topic particle)", pos: "particle", dictForm: "は" } ] }
+- If the phrase cannot be meaningfully broken down, "words" may be an empty array
+
 ENGLISH & OTHER:
 - Each English word is one token
 - Emoji and punctuation use pos "other"
 
 The "tokens" array must NEVER be empty — cover every word so any Japanese word is tappable. Be accurate with readings, dictionary forms, and romaji.`;
 }
+
+const TOKEN_ITEM_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    surface: { type: "string" as const },
+    reading: { type: "string" as const },
+    romaji: { type: "string" as const },
+    meaning: { type: "string" as const },
+    pos: { type: "string" as const },
+    dictForm: { type: "string" as const },
+    // words is populated only for phrase tokens
+    words: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        properties: {
+          surface: { type: "string" as const },
+          reading: { type: "string" as const },
+          romaji: { type: "string" as const },
+          meaning: { type: "string" as const },
+          pos: { type: "string" as const },
+          dictForm: { type: "string" as const },
+        },
+        required: ["surface", "reading", "romaji", "meaning", "pos", "dictForm"],
+      },
+    },
+  },
+  required: ["surface", "reading", "romaji", "meaning", "pos", "dictForm"],
+};
 
 const RESPONSE_SCHEMA = {
   type: "object",
@@ -107,18 +142,7 @@ const RESPONSE_SCHEMA = {
     english: { type: "string" },
     tokens: {
       type: "array",
-      items: {
-        type: "object",
-        properties: {
-          surface: { type: "string" },
-          reading: { type: "string" },
-          romaji: { type: "string" },
-          meaning: { type: "string" },
-          pos: { type: "string" },
-          dictForm: { type: "string" },
-        },
-        required: ["surface", "reading", "romaji", "meaning", "pos", "dictForm"],
-      },
+      items: TOKEN_ITEM_SCHEMA,
     },
     newWords: { type: "array", items: { type: "string" } },
     memorySuggestions: { type: "array", items: { type: "string" } },
