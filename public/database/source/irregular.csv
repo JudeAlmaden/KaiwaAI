@@ -1,0 +1,13 @@
+type,word,reading,dictionary,masu,negative,past,past_negative,te_form,potential,passive,causative,causative_passive,volitional,imperative,conditional_ba,conditional_tara,notes
+verb,する,する,する,します,しない,した,しなかった,して,できる,される,させる,させられる,しよう,しろ / せよ,すれば,したら,True irregular
+verb,来る,くる,来る,来ます,来ない,来た,来なかった,来て,来られる,来られる,来させる,来させられる,来よう,来い,来れば,来たら,True irregular
+verb,ある,ある,ある,あります,ない,あった,なかった,あって,ありえる / あり得る,,,,あろう,,あれば,あったら,Negative is irregular
+verb,いらっしゃる,いらっしゃる,いらっしゃる,いらっしゃいます,いらっしゃらない,いらっしゃった,いらっしゃらなかった,いらっしゃって,,,,,いらっしゃろう,いらっしゃい,いらっしゃれば,いらっしゃったら,Honorific irregular
+verb,くださる,くださる,くださる,くださいます,くださらない,くださった,くださらなかった,くださって,,,,,くださろう,ください,くだされば,くださったら,Honorific irregular
+verb,なさる,なさる,なさる,なさいます,なさらない,なさった,なさらなかった,なさって,,,,,なさろう,なさい,なされば,なさったら,Honorific irregular
+verb,おっしゃる,おっしゃる,おっしゃる,おっしゃいます,おっしゃらない,おっしゃった,おっしゃらなかった,おっしゃって,,,,,おっしゃろう,おっしゃい,おっしゃれば,おっしゃったら,Honorific irregular
+verb,ござる,ござる,ござる,ございます,ございません,ございました,ございませんでした,ございまして,,,,,ござろう,,ござれば,ございましたら,Formal irregular
+adjective,いい,いい,いい,,よくない,よかった,よくなかった,よくて,,,,,,,よければ,よかったら,Stem changes to よ-
+verb,行く,いく,行く,,,,,行って,,,,,,,,行った,Only te-form and past are irregular
+verb,問う,とう,問う,,,,,問うて,,,,,,,,問うた,Classical pattern
+verb,恋う,こう,恋う,,,,,恋うて,,,,,,,,恋うた,Classical pattern

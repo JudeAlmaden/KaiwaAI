@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import PageHeader from "../PageHeader";
 import LookupBox from "./LookupBox";
 import { Chip, StatusBadge, STATUS_STYLE } from "../ui";
 import { speakJa, canSpeak } from "@/lib/speak";
-import { hasKanji, extractKanji } from "@/lib/kanji-utils";
 import KanjiBreakdown from "../chat/KanjiBreakdown";
+import { formLabel } from "@/lib/form-label";
 
 type Card = {
   id: string;
   word: string;
   reading: string;
-  romaji: string;
+  romaji?: string;
   meaning: string;
   partOfSpeech: string;
   status: "new" | "learning" | "known";
@@ -21,7 +20,12 @@ type Card = {
   interval: number;
   nextReview: string;
   isPhrase: boolean;
+  formType?: string | null;
+  wordId?: number | null;
+  dictionary?: string | null;
 };
+
+type WordForm = { id: string; form: string; reading: string; formType: string; saved: boolean };
 
 const FILTERS = ["All", "New", "Learning", "Known"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -34,12 +38,17 @@ function progressOf(c: Card): number {
 }
 
 export default function VocabClient() {
-  const router = useRouter();
   const [cards, setCards] = useState<Card[] | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("words");
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Card | null>(null);
+  const [forms, setForms] = useState<WordForm[]>([]);
+  const [formsLoading, setFormsLoading] = useState(false);
+  const [addingAllForms, setAddingAllForms] = useState(false);
+  const [addingFormId, setAddingFormId] = useState<string | null>(null);
+  const [usingBaseOnly, setUsingBaseOnly] = useState(false);
+  const [showConjugations, setShowConjugations] = useState(false);
 
   useEffect(() => {
     load();
@@ -50,6 +59,79 @@ export default function VocabClient() {
       .then((r) => r.json())
       .then((d) => setCards(d.cards ?? []))
       .catch(() => setCards([]));
+  }
+
+  function openCard(card: Card) {
+    setForms([]);
+    setShowConjugations(false);
+    setFormsLoading(Boolean(card.wordId && card.dictionary));
+    setSelected(card);
+  }
+
+  useEffect(() => {
+    if (!selected?.wordId || !selected.dictionary) {
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/dictionary/lookup?dictForm=${encodeURIComponent(selected.dictionary)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!cancelled) setForms(data?.type === "word" ? data.forms : []);
+      })
+      .catch(() => !cancelled && setForms([]))
+      .finally(() => !cancelled && setFormsLoading(false));
+    return () => { cancelled = true; };
+  }, [selected?.wordId, selected?.dictionary]);
+
+  async function addAllConjugations() {
+    if (!selected?.wordId) return;
+    const unsavedFormIds = forms
+      .filter((form) => form.formType !== "dictionary" && !form.saved)
+      .map((form) => form.id);
+    if (!unsavedFormIds.length) return;
+    setAddingAllForms(true);
+    const res = await fetch("/api/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wordId: selected.wordId, wordFormIds: unsavedFormIds }),
+    });
+    if (res.ok) {
+      setForms((current) => current.map((form) => ({ ...form, saved: true })));
+      load();
+    }
+    setAddingAllForms(false);
+  }
+
+  async function addConjugation(form: WordForm) {
+    if (!selected?.wordId || form.saved) return;
+    setAddingFormId(form.id);
+    const res = await fetch("/api/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wordId: selected.wordId, wordFormId: form.id }),
+    });
+    if (res.ok) {
+      setForms((current) => current.map((item) =>
+        item.id === form.id ? { ...item, saved: true } : item
+      ));
+      load();
+    }
+    setAddingFormId(null);
+  }
+
+  async function useBaseOnly() {
+    if (!selected?.wordId) return;
+    setUsingBaseOnly(true);
+    const res = await fetch("/api/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wordId: selected.wordId, baseOnly: true }),
+    });
+    if (res.ok) {
+      setSelected(null);
+      load();
+    }
+    setUsingBaseOnly(false);
   }
 
   const contentCards = useMemo(
@@ -66,7 +148,7 @@ export default function VocabClient() {
         (c) =>
           c.word.includes(q) ||
           c.reading.includes(q) ||
-          c.romaji.toLowerCase().includes(q) ||
+          (c.romaji && c.romaji.toLowerCase().includes(q)) ||
           c.meaning.toLowerCase().includes(q)
       );
     }
@@ -218,7 +300,7 @@ export default function VocabClient() {
                   {items.map((c) => (
                     <div
                       key={c.id}
-                      onClick={() => setSelected(c)}
+                      onClick={() => openCard(c)}
                       className="group flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-soft hover:shadow-md hover:shadow-indigo-ai/5"
                     >
                       <Ring pct={progressOf(c)} />
@@ -264,14 +346,14 @@ export default function VocabClient() {
           onClick={() => setSelected(null)}
         >
           <div
-            className="w-full max-w-md rounded-t-3xl border-2 border-border bg-card p-6 sm:rounded-3xl"
+            className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-t-3xl border-2 border-border bg-card p-6 sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-jp text-3xl font-bold">{selected.word}</p>
                 <p className="font-jp text-base text-indigo-ai">{selected.reading}</p>
-                <p className="text-sm text-muted">{selected.romaji}</p>
+                {selected.romaji && <p className="text-sm text-muted">{selected.romaji}</p>}
               </div>
               {canSpeak() && (
                 <button
@@ -284,11 +366,19 @@ export default function VocabClient() {
               )}
             </div>
 
-            <p className="mt-3 text-lg font-semibold">{selected.meaning}</p>
+            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Meaning</p>
+              <p className="mt-1 text-base font-semibold leading-6">{selected.meaning}</p>
+            </div>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-border/60 px-2.5 py-1 font-bold uppercase text-muted">
                 {selected.partOfSpeech}
               </span>
+              {formLabel(selected.formType) && (
+                <span className="rounded-full bg-indigo-ai/10 px-2.5 py-1 font-bold uppercase text-indigo-ai">
+                  {formLabel(selected.formType)}
+                </span>
+              )}
               <span
                 className={`rounded-full px-2.5 py-1 font-bold uppercase ${STATUS_STYLE[selected.status]}`}
               >
@@ -307,26 +397,70 @@ export default function VocabClient() {
               })}
             </p>
 
-            <KanjiBreakdown word={selected.word} />
-
-            {/* Learn Kanji Button */}
-            {hasKanji(selected.word) && (
-              <button
-                onClick={() => {
-                  const kanjiChars = extractKanji(selected.word);
-                  console.log("Extracted kanji from", selected.word, ":", kanjiChars);
-                  if (kanjiChars.length > 0) {
-                    router.push(`/kanji/${encodeURIComponent(kanjiChars[0])}`);
-                  }
-                }}
-                className="mt-3 rounded-full border-2 border-indigo-ai bg-indigo-ai/5 px-4 py-2 text-sm font-bold text-indigo-ai transition-colors hover:bg-indigo-ai hover:text-white"
-              >
-                📚 Learn Kanji
-                {extractKanji(selected.word).length > 0 && (
-                  <span className="ml-2 font-jp">({extractKanji(selected.word)[0]})</span>
+            {formsLoading ? (
+              <p className="mt-4 text-xs text-muted">Loading conjugations…</p>
+            ) : forms.length > 1 && (
+              <section className="mt-4 border-t border-border pt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted">Conjugations</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {forms.filter((form) => form.formType !== "dictionary").length} forms available
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowConjugations((show) => !show)}
+                    className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+                  >
+                    {showConjugations ? "Hide forms" : "View forms"}
+                  </button>
+                </div>
+                {showConjugations && forms.some((form) => form.formType !== "dictionary" && !form.saved) && (
+                  <button
+                    onClick={addAllConjugations}
+                    disabled={addingAllForms}
+                    className="mt-3 w-full rounded-full border border-indigo-ai/30 px-3 py-2 text-xs font-bold text-indigo-ai transition-colors hover:bg-indigo-ai/10 disabled:opacity-60"
+                  >
+                    {addingAllForms ? "Adding…" : `+ Add all ${forms.filter((form) => form.formType !== "dictionary" && !form.saved).length} conjugations`}
+                  </button>
                 )}
-              </button>
+                {showConjugations && (
+                  <button
+                    onClick={useBaseOnly}
+                    disabled={usingBaseOnly}
+                    className="mt-2 w-full rounded-full border border-border px-3 py-2 text-xs font-bold text-muted transition-colors hover:border-sakura/50 hover:bg-sakura/5 hover:text-sakura disabled:opacity-60"
+                  >
+                    {usingBaseOnly ? "Updating…" : "Use base form only (remove conjugation cards)"}
+                  </button>
+                )}
+                {showConjugations && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {forms.map((form) => (
+                      <div key={form.id} className={`rounded-xl border px-3 py-2 ${form.saved ? "border-mint/30 bg-mint/5" : "border-border bg-card"}`}>
+                        <p className="font-jp text-base font-bold">{form.form}</p>
+                        <p className="font-jp text-xs text-indigo-ai">{form.reading}</p>
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-muted">{formLabel(form.formType) ?? "Dictionary form"}</p>
+                        {form.formType !== "dictionary" && (
+                          form.saved ? (
+                            <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-mint">In deck</p>
+                          ) : (
+                            <button
+                              onClick={() => addConjugation(form)}
+                              disabled={addingFormId === form.id}
+                              className="mt-2 rounded-full border border-indigo-ai/30 px-2 py-1 text-[10px] font-bold text-indigo-ai transition-colors hover:bg-indigo-ai/10 disabled:opacity-60"
+                            >
+                              {addingFormId === form.id ? "Adding…" : "+ Add this form"}
+                            </button>
+                          )
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             )}
+
+            <KanjiBreakdown word={selected.word} />
 
             <div className="mt-5 flex flex-wrap gap-2">
               {selected.status !== "known" && (

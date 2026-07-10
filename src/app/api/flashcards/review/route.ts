@@ -141,9 +141,10 @@ export async function GET(req: Request) {
       id: card.id,
       word,
       reading,
-      romaji: reading, // Legacy field
       meaning,
       partOfSpeech,
+      formType: card.wordForm?.formType ?? null,
+      dictionary: card.word?.dictionary ?? null,
       jlptTier,
       status: card.status,
       easeFactor: card.easeFactor,

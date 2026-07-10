@@ -8,6 +8,7 @@ import { Chip } from "../ui";
 import { PopButton } from "../../PopButton";
 import { speakJa, canSpeak } from "@/lib/speak";
 import KanjiBreakdown from "../chat/KanjiBreakdown";
+import { formLabel } from "@/lib/form-label";
 
 type Card = {
   id: string;
@@ -18,6 +19,8 @@ type Card = {
   romaji?: string;
   meaning?: string;
   partOfSpeech?: string;
+  formType?: string | null;
+  dictionary?: string | null;
   // Kanji fields
   character?: string;
   meanings?: string[];
@@ -421,12 +424,12 @@ export default function ReviewClient() {
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6">
-        <button
+        <div
           onClick={() => setFlipped((f) => !f)}
-          className="relative flex aspect-[3/2] w-full max-w-md flex-col items-center justify-center rounded-3xl border-2 border-border bg-card p-6 text-center shadow-sm transition-transform active:scale-[0.99]"
+          className="relative flex min-h-[280px] w-full max-w-md cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-border bg-card p-6 text-center shadow-md transition-all hover:border-indigo-ai/30 hover:shadow-lg active:scale-[0.99] sm:min-h-[300px]"
         >
           {canSpeak() && isJpToEn && (
-            <span
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 speakJa(backContent.japanese || "");
@@ -435,13 +438,18 @@ export default function ReviewClient() {
               title="Hear it"
             >
               🔊
-            </span>
+            </button>
           )}
           <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
             {frontContent}
           </span>
+          {isVocab && formLabel(card.formType) && (
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai">
+              {formLabel(card.formType)}
+            </p>
+          )}
           {flipped ? (
-            <div className="mt-5 w-full">
+            <div className="mt-5 w-full" onClick={(e) => e.stopPropagation()}>
               {isJpToEn ? (
                 <>
                   {backContent.reading && (
@@ -454,6 +462,11 @@ export default function ReviewClient() {
                   <p className="mt-1 text-xs uppercase tracking-wide text-muted">
                     {backContent.meta}
                   </p>
+                  {isVocab && formLabel(card.formType) && card.dictionary && (
+                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
+                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
+                    </p>
+                  )}
                   {isVocab && card.word && <KanjiBreakdown word={card.word} />}
                   {!isVocab && backContent.mnemonic && (
                     <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
@@ -471,6 +484,11 @@ export default function ReviewClient() {
                   </p>
                   {backContent.reading && (
                     <p className="mt-2 text-sm text-muted">{backContent.reading}</p>
+                  )}
+                  {isVocab && formLabel(card.formType) && card.dictionary && (
+                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
+                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
+                    </p>
                   )}
                   {!isVocab && backContent.mnemonic && (
                     <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
@@ -507,7 +525,7 @@ export default function ReviewClient() {
               )}
             </>
           )}
-        </button>
+        </div>
 
         {flipped ? (
           <div className="grid w-full max-w-md grid-cols-4 gap-2">
@@ -515,10 +533,10 @@ export default function ReviewClient() {
               <button
                 key={g.grade}
                 onClick={() => grade(g.grade)}
-                className={`flex flex-col items-center rounded-2xl border-2 py-3 text-sm font-bold transition-transform active:scale-95 ${g.color}`}
+                className={`flex flex-col items-center rounded-2xl border-2 py-3 text-sm font-bold transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${g.color}`}
               >
                 {g.label}
-                <span className="mt-0.5 text-[10px] opacity-60">{g.key}</span>
+                <span className="mt-0.5 text-[10px] opacity-70">{g.key}</span>
               </button>
             ))}
           </div>
