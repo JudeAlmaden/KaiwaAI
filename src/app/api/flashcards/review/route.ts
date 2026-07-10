@@ -143,6 +143,8 @@ export async function GET(req: Request) {
       reading,
       meaning,
       partOfSpeech,
+      formType: card.wordForm?.formType ?? null,
+      dictionary: card.word?.dictionary ?? null,
       jlptTier,
       status: card.status,
       easeFactor: card.easeFactor,

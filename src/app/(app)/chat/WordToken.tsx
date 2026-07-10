@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { type CachedToken } from "@/lib/types";
 import KanjiBreakdown from "./KanjiBreakdown";
+import { formLabel } from "@/lib/form-label";
 
 type SaveState = "idle" | "saving" | "saved" | "exists" | "merged";
 
@@ -62,19 +63,31 @@ type WordLookupResult =
 const POPUP_W = 340;
 const GAP = 8;
 const EDGE = 12;
+const POPUP_MAX_H = 440;
 
 interface PopupPos {
-  bottom: number;
   left: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
 }
 
 function calcPos(anchor: HTMLElement): PopupPos {
   const r = anchor.getBoundingClientRect();
   const vw = window.innerWidth;
-  const bottom = window.innerHeight - r.top + GAP;
+  const spaceAbove = Math.max(0, r.top - GAP - EDGE);
+  const spaceBelow = Math.max(0, window.innerHeight - r.bottom - GAP - EDGE);
+  const openBelow = spaceBelow >= POPUP_MAX_H || spaceBelow > spaceAbove;
+  const availableHeight = openBelow ? spaceBelow : spaceAbove;
   let left = r.left + r.width / 2 - POPUP_W / 2;
   left = Math.max(EDGE, Math.min(left, vw - POPUP_W - EDGE));
-  return { bottom, left };
+  return openBelow
+    ? { top: r.bottom + GAP, left, maxHeight: Math.min(POPUP_MAX_H, availableHeight) }
+    : {
+        bottom: window.innerHeight - r.top + GAP,
+        left,
+        maxHeight: Math.min(POPUP_MAX_H, availableHeight),
+      };
 }
 
 // ── Portal wrapper ────────────────────────────────────────────────────────────
@@ -106,10 +119,11 @@ function PopupPortal({
       ref={ref}
       style={{
         position: "fixed",
+        top: pos.top,
         bottom: pos.bottom,
         left: pos.left,
         width: POPUP_W,
-        maxHeight: "min(440px, 70vh)",
+        maxHeight: pos.maxHeight,
         zIndex: 9999,
         overflowY: "auto",
       }}
@@ -239,6 +253,14 @@ function WordTokenBody({
     state === "exists" ||
     state === "merged";
 
+  const wordLookup = lookupResult?.type === "word" ? lookupResult : null;
+  const tappedForm = wordLookup
+    ? wordLookup.forms.find(
+        (form) => form.form === token.surface || form.reading === token.reading
+      )
+    : undefined;
+  const tappedFormLabel = formLabel(tappedForm?.formType);
+
   async function addQuick() {
     setState("saving");
     const res = await fetch("/api/flashcards", {
@@ -250,6 +272,53 @@ function WordTokenBody({
       const data = await res.json();
       setState(data.alreadyExisted ? "exists" : "saved");
       onSaved(token.dictForm);
+    } else {
+      setState("idle");
+    }
+  }
+
+  async function studyForm() {
+    if (!wordLookup || !tappedForm) return;
+    setState("saving");
+    const res = await fetch("/api/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wordId: wordLookup.word.id, wordFormId: tappedForm.id }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setState(data.alreadyExisted ? "exists" : "saved");
+      setLookupResult((current) => current?.type === "word"
+        ? {
+            ...current,
+            forms: current.forms.map((form) =>
+              form.id === tappedForm.id ? { ...form, saved: true } : form
+            ),
+          }
+        : current);
+    } else {
+      setState("idle");
+    }
+  }
+
+  async function studyAllForms() {
+    if (!wordLookup) return;
+    const unsavedFormIds = wordLookup.forms
+      .filter((form) => form.formType !== "dictionary" && !form.saved)
+      .map((form) => form.id);
+    if (!unsavedFormIds.length) return;
+
+    setState("saving");
+    const res = await fetch("/api/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wordId: wordLookup.word.id, wordFormIds: unsavedFormIds }),
+    });
+    if (res.ok) {
+      setLookupResult((current) => current?.type === "word"
+        ? { ...current, forms: current.forms.map((form) => ({ ...form, saved: true })) }
+        : current);
+      setState("idle");
     } else {
       setState("idle");
     }
@@ -267,6 +336,11 @@ function WordTokenBody({
 
       {lookupResult && (
         <div className={compact ? "" : "mt-3 border-t border-border pt-2"}>
+          {tappedFormLabel && (
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-ai">
+              {tappedFormLabel}
+            </div>
+          )}
           {!compact && <div className="text-xs font-bold text-muted mb-1">Dictionary entry</div>}
           <div className="text-sm">
             <span className="font-jp font-bold">
@@ -313,7 +387,32 @@ function WordTokenBody({
       {!compact && <KanjiBreakdown word={token.dictForm} />}
 
       <div className="mt-2">
-        {alreadySaved ? (
+        {tappedForm && tappedFormLabel ? (
+          <div className="space-y-2">
+            {tappedForm.saved || state === "saved" || state === "exists" ? (
+              <div className="flex items-center gap-1 text-xs font-bold text-mint">
+                âœ“ this form is in your review deck
+              </div>
+            ) : (
+              <button
+                onClick={studyForm}
+                disabled={state === "saving"}
+                className="w-full rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
+              >
+                {state === "saving" ? "Addingâ€¦" : `+ Study this form (${tappedFormLabel})`}
+              </button>
+            )}
+            {wordLookup && wordLookup.forms.some((form) => form.formType !== "dictionary" && !form.saved) && (
+              <button
+                onClick={studyAllForms}
+                disabled={state === "saving"}
+                className="w-full rounded-full border border-indigo-ai/30 px-3 py-1.5 text-xs font-bold text-indigo-ai transition-colors hover:bg-indigo-ai/10 disabled:opacity-60"
+              >
+                {state === "saving" ? "Addingâ€¦" : `+ Add all ${wordLookup.forms.filter((form) => form.formType !== "dictionary" && !form.saved).length} conjugations`}
+              </button>
+            )}
+          </div>
+        ) : alreadySaved ? (
           <div className="flex items-center gap-1 text-xs font-bold text-mint">
             ✓ in your review deck
           </div>

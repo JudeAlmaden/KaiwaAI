@@ -101,6 +101,9 @@ export async function GET(req: Request) {
       createdAt: card.createdAt,
       note: card.note,
       isPhrase: Boolean(card.phrase),
+      formType: card.wordForm?.formType ?? null,
+      wordId: card.wordId ?? null,
+      dictionary: card.word?.dictionary ?? null,
     };
   });
 
@@ -134,6 +137,8 @@ export async function POST(req: Request) {
     };
     wordId?: number;
     wordFormId?: string | null;
+    wordFormIds?: string[];
+    baseOnly?: boolean;
     sourceMessageId?: string;
   };
   try {
@@ -156,6 +161,79 @@ export async function POST(req: Request) {
 
   let wordId: number | null = null;
   let wordFormId: string | null = null;
+
+  // Keep only the dictionary/base card for a word and remove all of its
+  // conjugation cards.
+  if (body.baseOnly) {
+    if (!Number.isInteger(body.wordId)) {
+      return NextResponse.json({ error: "Invalid word" }, { status: 400 });
+    }
+
+    const word = await prisma.word.findUnique({ where: { id: body.wordId } });
+    if (!word) {
+      return NextResponse.json({ error: "Word not found" }, { status: 404 });
+    }
+
+    await prisma.userFlashcard.deleteMany({
+      where: { userId: user.id, wordId: body.wordId, wordFormId: { not: null } },
+    });
+
+    const baseCard = await prisma.userFlashcard.findFirst({
+      where: { userId: user.id, wordId: body.wordId, wordFormId: null },
+    });
+    if (!baseCard) {
+      await prisma.userFlashcard.create({
+        data: { userId: user.id, wordId: body.wordId, status: FlashcardStatus.learning },
+      });
+    }
+
+    return NextResponse.json({ baseOnly: true });
+  }
+
+  // Batch-add every available form for a word. This is one request so adding a
+  // full conjugation set does not trip the per-card rate limit.
+  if (body.wordFormIds !== undefined) {
+    if (
+      !Number.isInteger(body.wordId) ||
+      !Array.isArray(body.wordFormIds) ||
+      body.wordFormIds.length === 0 ||
+      body.wordFormIds.length > 20 ||
+      body.wordFormIds.some((id) => typeof id !== "string" || id.length > 50)
+    ) {
+      return NextResponse.json({ error: "Invalid word forms" }, { status: 400 });
+    }
+
+    const formIds = [...new Set(body.wordFormIds)];
+    const forms = await prisma.wordForm.findMany({
+      where: { wordId: body.wordId, id: { in: formIds } },
+      select: { id: true },
+    });
+    if (forms.length !== formIds.length) {
+      return NextResponse.json({ error: "One or more forms were not found" }, { status: 404 });
+    }
+
+    const result = await prisma.userFlashcard.createMany({
+      data: forms.map((form) => ({
+        userId: user.id,
+        wordId: body.wordId!,
+        wordFormId: form.id,
+        status: FlashcardStatus.learning,
+      })),
+      skipDuplicates: true,
+    });
+
+    const word = await prisma.word.findUnique({ where: { id: body.wordId } });
+    if (word) {
+      try {
+        const { autoAddKanjiFromWord } = await import("@/lib/auto-add-kanji");
+        await autoAddKanjiFromWord(user.id, word.dictionary);
+      } catch (error) {
+        console.error("Failed to auto-add kanji:", error);
+      }
+    }
+
+    return NextResponse.json({ added: result.count, formIds });
+  }
 
   // Case 1: Adding from a token (chat tap-to-add or normalized LookupBox)
   if (body.token) {
