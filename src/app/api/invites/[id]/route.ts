@@ -11,16 +11,16 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const member = await prisma.groupMember.findUnique({ where: { id } });
+  const member = await prisma.chatMember.findUnique({ where: { id } });
   if (!member || member.userId !== user.id || member.status !== "pending") {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  const updated = await prisma.groupMember.update({
+  const updated = await prisma.chatMember.update({
     where: { id },
     data: { status: "accepted" },
   });
-  return NextResponse.json({ ok: true, groupId: updated.groupId });
+  return NextResponse.json({ ok: true, groupId: updated.chatId });
 }
 
 // DELETE: decline an invite (removes the pending membership).
@@ -32,11 +32,11 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const member = await prisma.groupMember.findUnique({ where: { id } });
+  const member = await prisma.chatMember.findUnique({ where: { id } });
   if (!member || member.userId !== user.id || member.status !== "pending") {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  await prisma.groupMember.delete({ where: { id } });
+  await prisma.chatMember.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
