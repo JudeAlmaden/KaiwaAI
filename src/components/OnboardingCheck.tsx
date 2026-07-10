@@ -21,7 +21,7 @@ export default function OnboardingCheck() {
     if (!isExempt && !hasAnyKey()) {
       router.push("/onboarding");
     } else {
-      setIsChecking(false);
+      setTimeout(() => setIsChecking(false), 0);
     }
   }, [router, pathname]);
 

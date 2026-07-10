@@ -107,7 +107,7 @@ export default function ServerKeyCard() {
             <strong className="text-foreground">What we do:</strong> Encrypt your key, use it only for your AI features, automatically rotate through multiple keys.
           </p>
           <p>
-            <strong className="text-foreground">What we don't do:</strong> Log your key, send it back to your browser, or share it with third parties.
+            <strong className="text-foreground">What we don&apos;t do:</strong> Log your key, send it back to your browser, or share it with third parties.
           </p>
           <p>
             You can disable this anytime to immediately wipe your key from the server. Personal keys on your device are never affected.
