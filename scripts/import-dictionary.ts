@@ -4,7 +4,7 @@
  * Run with: npx tsx scripts/import-dictionary.ts
  */
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, PartOfSpeech } from "@prisma/client";
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
@@ -117,7 +117,7 @@ async function processBatchWords(batch: WordRow[]) {
         dictionary: word.dictionary,
         reading: word.reading,
         meanings: word.meanings,
-        partOfSpeech: word.partOfSpeech as any,
+        partOfSpeech: word.partOfSpeech as PartOfSpeech,
         verbType: word.verbType || null,
         adjectiveType: word.adjectiveType || null,
         jlptLevel: word.jlptLevel || null,
@@ -125,7 +125,7 @@ async function processBatchWords(batch: WordRow[]) {
       })),
       skipDuplicates: true, // Skip if already exists
     });
-  } catch (err) {
+  } catch {
     console.error("  Batch failed, trying individually...");
     for (const word of batch) {
       try {
@@ -135,7 +135,7 @@ async function processBatchWords(batch: WordRow[]) {
             dictionary: word.dictionary,
             reading: word.reading,
             meanings: word.meanings,
-            partOfSpeech: word.partOfSpeech as any,
+            partOfSpeech: word.partOfSpeech as PartOfSpeech,
             verbType: word.verbType || null,
             adjectiveType: word.adjectiveType || null,
             jlptLevel: word.jlptLevel || null,
