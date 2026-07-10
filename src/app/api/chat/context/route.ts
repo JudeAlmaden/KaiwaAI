@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const now = new Date();
 
   const [reinforceCards, knownCount, memories, recent] = await Promise.all([
-    prisma.flashcard.findMany({
+    prisma.userFlashcard.findMany({
       where: {
         userId: user.id,
         OR: [
@@ -26,9 +26,12 @@ export async function GET(req: Request) {
       },
       orderBy: { nextReview: "asc" },
       take: 5,
-      select: { word: true },
+      include: {
+        word: true,
+        phrase: true,
+      },
     }),
-    prisma.flashcard.count({ where: { userId: user.id, status: "known" } }),
+    prisma.userFlashcard.count({ where: { userId: user.id, status: "known" } }),
     prisma.memory.findMany({
       where: { userId: user.id, personaId },
       orderBy: [{ importance: "desc" }, { updatedAt: "desc" }],
@@ -47,7 +50,7 @@ export async function GET(req: Request) {
     level: user.level,
     newWordBudget: user.maxNewWords,
     knownCount,
-    reinforce: reinforceCards.map((c) => c.word),
+    reinforce: reinforceCards.map((c) => c.phrase?.text || c.word?.dictionary || ""),
     memories: memories.map((m) => m.content),
     recentTurns: recent.reverse().map((m) => ({ role: m.senderKind, content: m.content })),
   });

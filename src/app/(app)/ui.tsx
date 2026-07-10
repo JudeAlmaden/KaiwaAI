@@ -46,16 +46,19 @@ export function StatusBadge({ status }: { status: CardStatus }) {
 export function Toggle({
   on,
   onClick,
+  disabled = false,
 }: {
   on: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       role="switch"
       aria-checked={on}
-      className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors ${
+      className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
         on ? "bg-indigo-ai" : "bg-border"
       }`}
     >

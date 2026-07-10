@@ -74,7 +74,14 @@ export default function ServerKeyCard() {
         </div>
         <Toggle
           on={Boolean(stored)}
-          onClick={() => (stored ? disable() : enable())}
+          onClick={() => {
+            if (busy) return;
+            if (stored) {
+              disable();
+            } else {
+              enable();
+            }
+          }}
           disabled={busy}
         />
       </div>

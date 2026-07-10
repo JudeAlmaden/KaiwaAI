@@ -87,14 +87,45 @@ export async function GET(
         wkLevel: kanji.wkLevel,
       },
       mnemonic: mnemonic?.mnemonic || null,
-      vocabularyExamples: vocabularyExamples.map((v) => ({
-        id: v.id,
-        word: v.word,
-        reading: v.reading,
-        romaji: v.romaji,
-        meaning: v.meaning,
-        status: v.status,
-      })),
+      vocabularyExamples: vocabularyExamples.map((v) => {
+        let word: string;
+        let reading: string;
+        let meaning: string;
+        const romaji = ""; // We don't store romaji separately anymore
+
+        if (v.phrase) {
+          word = v.phrase.text;
+          reading = v.phrase.reading;
+          try {
+            const meanings = JSON.parse(v.phrase.meanings);
+            meaning = Array.isArray(meanings) ? meanings.join("; ") : String(meanings);
+          } catch {
+            meaning = v.phrase.meanings;
+          }
+        } else if (v.word) {
+          word = v.word.dictionary;
+          reading = v.word.reading;
+          try {
+            const meanings = JSON.parse(v.word.meanings);
+            meaning = Array.isArray(meanings) ? meanings.join("; ") : String(meanings);
+          } catch {
+            meaning = v.word.meanings;
+          }
+        } else {
+          word = "Unknown";
+          reading = "Unknown";
+          meaning = "Unknown";
+        }
+
+        return {
+          id: v.id,
+          word,
+          reading,
+          romaji,
+          meaning,
+          status: v.status,
+        };
+      }),
     });
   } catch (error) {
     console.error("[Kanji API] Fatal error:", error);

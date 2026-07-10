@@ -8,9 +8,6 @@ vi.mock("@/lib/streak");
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    flashcard: {
-      count: vi.fn(),
-    },
     userFlashcard: {
       count: vi.fn(),
     },
@@ -53,7 +50,7 @@ describe("/api/stats", () => {
     // Mock counts: 30 known words, 10 learning words, 5 new words
     // 20 known kanji, 5 learning kanji, 3 new kanji
     // Total mastered: 30 + 20 = 50 (should be "Elementary" level at 0% progress)
-    vi.mocked(prisma.flashcard.count)
+    vi.mocked(prisma.userFlashcard.count)
       .mockResolvedValueOnce(30) // known
       .mockResolvedValueOnce(10) // learning
       .mockResolvedValueOnce(5) // new
@@ -107,7 +104,7 @@ describe("/api/stats", () => {
     vi.mocked(currentStreak).mockReturnValue(0);
 
     // 10 known words, 5 known kanji = 15 total (Beginner: 0-50)
-    vi.mocked(prisma.flashcard.count)
+    vi.mocked(prisma.userFlashcard.count)
       .mockResolvedValueOnce(10) // known
       .mockResolvedValueOnce(5) // learning
       .mockResolvedValueOnce(2) // new
@@ -149,7 +146,7 @@ describe("/api/stats", () => {
     vi.mocked(currentStreak).mockReturnValue(0);
 
     // 150 known words, 50 known kanji = 200 total (Intermediate: 150-300)
-    vi.mocked(prisma.flashcard.count)
+    vi.mocked(prisma.userFlashcard.count)
       .mockResolvedValueOnce(150) // known
       .mockResolvedValueOnce(20) // learning
       .mockResolvedValueOnce(10) // new
@@ -191,7 +188,7 @@ describe("/api/stats", () => {
     vi.mocked(currentStreak).mockReturnValue(0);
 
     // 500 known words, 200 known kanji = 700 total (Advanced: 600-1000)
-    vi.mocked(prisma.flashcard.count)
+    vi.mocked(prisma.userFlashcard.count)
       .mockResolvedValueOnce(500) // known
       .mockResolvedValueOnce(50) // learning
       .mockResolvedValueOnce(20) // new
@@ -233,7 +230,7 @@ describe("/api/stats", () => {
     vi.mocked(currentStreak).mockReturnValue(0);
 
     // 2000 known words, 1000 known kanji = 3000 total (Native-like: 2500+)
-    vi.mocked(prisma.flashcard.count)
+    vi.mocked(prisma.userFlashcard.count)
       .mockResolvedValueOnce(2000) // known
       .mockResolvedValueOnce(100) // learning
       .mockResolvedValueOnce(50) // new

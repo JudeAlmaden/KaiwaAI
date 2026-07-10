@@ -4,7 +4,7 @@ import { GET, POST } from "./route";
 // Mock dependencies
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    flashcard: {
+    userFlashcard: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
@@ -44,7 +44,7 @@ describe("Review API - GET", () => {
 
   it("should fetch due cards by default", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([
       { id: "1", word: "猫", userId: "user-123" } as never,
     ]);
 
@@ -53,7 +53,7 @@ describe("Review API - GET", () => {
     const data = await response.json();
 
     expect(data.cards).toHaveLength(1);
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
@@ -65,12 +65,12 @@ describe("Review API - GET", () => {
 
   it("should fetch cards with 'all' study mode (no nextReview filter)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=all");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           userId: "user-123",
@@ -82,12 +82,12 @@ describe("Review API - GET", () => {
 
   it("should fetch 'recent' cards (last 7 days)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=recent");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
@@ -100,12 +100,12 @@ describe("Review API - GET", () => {
 
   it("should fetch 'struggling' cards (low ease factor)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=struggling");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
@@ -118,12 +118,12 @@ describe("Review API - GET", () => {
 
   it("should fetch 'leeches' cards (many reviews, short interval)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?studyMode=leeches");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
@@ -139,12 +139,12 @@ describe("Review API - GET", () => {
 
   it("should apply status filter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?status=learning");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
@@ -156,16 +156,19 @@ describe("Review API - GET", () => {
 
   it("should apply part of speech filter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?pos=verb");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
-          partOfSpeech: "verb",
+          OR: [
+            { word: { is: { partOfSpeech: { equals: "verb" } } } },
+            { phrase: { is: { partOfSpeech: { equals: "verb" } } } },
+          ],
         }),
       })
     );
@@ -173,16 +176,19 @@ describe("Review API - GET", () => {
 
   it("should apply JLPT level filter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?jlpt=N5");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
-          jlptTier: "N5",
+          OR: [
+            { word: { is: { jlptLevel: { equals: "N5" } } } },
+            { phrase: { is: {} } },
+          ],
         }),
       })
     );
@@ -190,29 +196,33 @@ describe("Review API - GET", () => {
 
   it("should ignore invalid JLPT levels", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?jlpt=N99");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
+        where: expect.objectContaining({
           userId: "user-123",
           nextReview: { lte: expect.any(Date) },
-        },
+          OR: [
+            { word: { is: {} } },
+            { phrase: { is: {} } },
+          ],
+        }),
       })
     );
   });
 
   it("should ignore invalid status values", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?status=invalid");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           userId: "user-123",
@@ -224,21 +234,36 @@ describe("Review API - GET", () => {
 
   it("should combine multiple filters", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request(
       "http://localhost/api/flashcards/review?studyMode=due&status=learning&pos=verb&jlpt=N5"
     );
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
           nextReview: { lte: expect.any(Date) },
           status: "learning",
-          partOfSpeech: "verb",
-          jlptTier: "N5",
+          OR: [
+            {
+              word: {
+                is: {
+                  partOfSpeech: { equals: "verb" },
+                  jlptLevel: { equals: "N5" },
+                },
+              },
+            },
+            {
+              phrase: {
+                is: {
+                  partOfSpeech: { equals: "verb" },
+                },
+              },
+            },
+          ],
         }),
       })
     );
@@ -246,12 +271,12 @@ describe("Review API - GET", () => {
 
   it("should respect limit parameter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?limit=10");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         take: 10,
       })
@@ -260,12 +285,12 @@ describe("Review API - GET", () => {
 
   it("should cap limit at 200", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?limit=999");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         take: 200,
       })
@@ -274,12 +299,12 @@ describe("Review API - GET", () => {
 
   it("should enforce minimum limit of 1", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review?limit=-5");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         take: 1,
       })
@@ -288,12 +313,12 @@ describe("Review API - GET", () => {
 
   it("should use default limit of 50 if not specified", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findMany).mockResolvedValueOnce([]);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
 
     const req = new Request("http://localhost/api/flashcards/review");
     await GET(req);
 
-    expect(prisma.flashcard.findMany).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         take: 50,
       })
@@ -402,7 +427,7 @@ describe("Review API - POST", () => {
 
   it("should return 404 if card not found", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(null);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -417,7 +442,7 @@ describe("Review API - POST", () => {
 
   it("should successfully grade a card", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
+    vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.6,
       interval: 6,
@@ -425,7 +450,7 @@ describe("Review API - POST", () => {
       status: "learning",
       nextReview: new Date(),
     });
-    vi.mocked(prisma.flashcard.update).mockResolvedValueOnce({
+    vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce({
       ...mockCard,
       easeFactor: 2.6,
       interval: 6,
@@ -449,7 +474,7 @@ describe("Review API - POST", () => {
       },
       2
     );
-    expect(prisma.flashcard.update).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "card-1" },
         data: expect.objectContaining({
@@ -465,7 +490,7 @@ describe("Review API - POST", () => {
 
   it("should handle grade 0 (again)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
+    vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.5,
       interval: 0,
@@ -473,7 +498,7 @@ describe("Review API - POST", () => {
       status: "learning",
       nextReview: new Date(Date.now() + 10 * 60 * 1000),
     });
-    vi.mocked(prisma.flashcard.update).mockResolvedValueOnce(mockCard as never);
+    vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce(mockCard as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -487,7 +512,7 @@ describe("Review API - POST", () => {
 
   it("should handle grade 3 (easy)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
+    vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.8,
       interval: 6,
@@ -495,7 +520,7 @@ describe("Review API - POST", () => {
       status: "learning",
       nextReview: new Date(),
     });
-    vi.mocked(prisma.flashcard.update).mockResolvedValueOnce(mockCard as never);
+    vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce(mockCard as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -509,7 +534,7 @@ describe("Review API - POST", () => {
 
   it("should increment timesReviewed counter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(mockCard as never);
+    vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
     vi.mocked(applyReview).mockReturnValueOnce({
       easeFactor: 2.6,
       interval: 6,
@@ -517,7 +542,7 @@ describe("Review API - POST", () => {
       status: "learning",
       nextReview: new Date(),
     });
-    vi.mocked(prisma.flashcard.update).mockResolvedValueOnce(mockCard as never);
+    vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce(mockCard as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -525,7 +550,7 @@ describe("Review API - POST", () => {
     });
     await POST(req);
 
-    expect(prisma.flashcard.update).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           timesReviewed: { increment: 1 },
@@ -537,7 +562,7 @@ describe("Review API - POST", () => {
 
   it("should prevent grading cards from other users", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.flashcard.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(null);
 
     const req = new Request("http://localhost/api/flashcards/review", {
       method: "POST",
@@ -548,7 +573,7 @@ describe("Review API - POST", () => {
 
     expect(response.status).toBe(404);
     expect(data.error).toBe("Card not found.");
-    expect(prisma.flashcard.findFirst).toHaveBeenCalledWith(
+    expect(prisma.userFlashcard.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "other-user-card", userId: "user-123" },
       })
