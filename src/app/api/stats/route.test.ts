@@ -24,7 +24,7 @@ import { prisma } from "@/lib/prisma";
 
 describe("/api/stats", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("returns 401 when not authenticated", async () => {
@@ -62,12 +62,6 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(20) // known
       .mockResolvedValueOnce(5) // learning
       .mockResolvedValueOnce(3); // new
-
-    // UserFlashcard (new dictionary system) — 0 for this test
-    vi.mocked(prisma.userFlashcard.count)
-      .mockResolvedValueOnce(0) // uf known
-      .mockResolvedValueOnce(0) // uf learning
-      .mockResolvedValueOnce(0); // uf new
 
     const res = await GET();
     expect(res.status).toBe(200);
@@ -117,11 +111,6 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(2) // learning
       .mockResolvedValueOnce(1); // new
 
-    vi.mocked(prisma.userFlashcard.count)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
-
     const res = await GET();
     const json = await res.json();
 
@@ -158,11 +147,6 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(50) // known
       .mockResolvedValueOnce(10) // learning
       .mockResolvedValueOnce(5); // new
-
-    vi.mocked(prisma.userFlashcard.count)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
 
     const res = await GET();
     const json = await res.json();
@@ -201,11 +185,6 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(30) // learning
       .mockResolvedValueOnce(10); // new
 
-    vi.mocked(prisma.userFlashcard.count)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
-
     const res = await GET();
     const json = await res.json();
 
@@ -242,11 +221,6 @@ describe("/api/stats", () => {
       .mockResolvedValueOnce(1000) // known
       .mockResolvedValueOnce(50) // learning
       .mockResolvedValueOnce(20); // new
-
-    vi.mocked(prisma.userFlashcard.count)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
 
     const res = await GET();
     const json = await res.json();

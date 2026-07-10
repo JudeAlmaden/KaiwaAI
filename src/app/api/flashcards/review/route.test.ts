@@ -187,7 +187,6 @@ describe("Review API - GET", () => {
           userId: "user-123",
           OR: [
             { word: { is: { jlptLevel: { equals: "N5" } } } },
-            { phrase: { is: {} } },
           ],
         }),
       })
@@ -206,10 +205,6 @@ describe("Review API - GET", () => {
         where: expect.objectContaining({
           userId: "user-123",
           nextReview: { lte: expect.any(Date) },
-          OR: [
-            { word: { is: {} } },
-            { phrase: { is: {} } },
-          ],
         }),
       })
     );
