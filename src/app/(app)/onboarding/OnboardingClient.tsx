@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PopButton } from "../../PopButton";
 import { addKey, hasAnyKey } from "@/lib/api-keys";
 
-export default function OnboardingClient({ email }: { email: string }) {
+export default function OnboardingClient({}: { email: string }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
@@ -67,7 +67,7 @@ export default function OnboardingClient({ email }: { email: string }) {
       setTimeout(() => {
         router.push("/chat");
       }, 500);
-    } catch (err) {
+    } catch {
       setError("Network error. Please check your connection and try again.");
       setIsValidating(false);
     }
@@ -218,7 +218,7 @@ export default function OnboardingClient({ email }: { email: string }) {
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-ai font-bold text-white">
                       3
                     </span>
-                    <span>Click "Create API key" button</span>
+                     <span>Click &quot;Create API key&quot; button</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-ai font-bold text-white">
@@ -232,7 +232,7 @@ export default function OnboardingClient({ email }: { email: string }) {
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-ai font-bold text-white">
                       5
                     </span>
-                    <span>Copy the key (starts with "AIza...")</span>
+                     <span>Copy the key (starts with &quot;AIza...&quot;)</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-ai font-bold text-white">

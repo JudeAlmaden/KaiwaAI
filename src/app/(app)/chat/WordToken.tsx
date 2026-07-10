@@ -213,7 +213,7 @@ function WordTokenBody({
 
   useEffect(() => {
     if (lookupResult || loading || lookupFailed) return;
-    setLoading(true);
+    setTimeout(() => setLoading(true), 0);
     const params = new URLSearchParams({ dictForm: token.dictForm });
     params.set(
       "metadata",
@@ -335,7 +335,6 @@ function WordTokenBody({
 
 export default function WordToken({
   token,
-  sourceMessageId: _sourceMessageId,
   savedWords,
   onSaved,
   isOpen,

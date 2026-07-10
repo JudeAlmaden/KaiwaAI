@@ -216,7 +216,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       if (messages.length > 0) {
         didInitialScroll.current = true;
         atBottomRef.current = true;
-        setAtBottom(true);
+        setTimeout(() => setAtBottom(true), 0);
       }
     } else if (atBottomRef.current) {
       // Only auto-scroll if we're already at the bottom

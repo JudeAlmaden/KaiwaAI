@@ -12,7 +12,7 @@ export default function NoApiKeyBanner() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    setShow(!hasAnyKey());
+    setTimeout(() => setShow(!hasAnyKey()), 0);
   }, []);
 
   if (!show) return null;
