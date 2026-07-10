@@ -1,6 +1,6 @@
 {
   "name": "kaiwaai",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,6 +13,7 @@
     "test:coverage": "vitest run --coverage",
     "ci": "npm run lint && npm run typecheck && npm run test",
     "import:dictionary": "npx tsx scripts/import-dictionary.ts",
+    "regenerate:words": "node scripts/regenerate-word-csvs.mjs",
     "restore:flashcards": "npx tsx scripts/restore-flashcards.ts",
     "migrate:phrases": "npx tsx scripts/migrate-to-phrases.ts"
   },

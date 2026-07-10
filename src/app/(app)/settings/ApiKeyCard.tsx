@@ -142,7 +142,7 @@ export default function ApiKeyCard() {
             <li>Sign in with your Google account</li>
             <li>Click &ldquo;Create API key&rdquo; button</li>
             <li>Select a Google Cloud project (or create a new one)</li>
-            <li>Copy the generated key (starts with &ldquo;AIza...&rdquo;)</li>
+            <li>Copy the generated key</li>
             <li>Paste it below</li>
           </ol>
           <p className="pt-2 text-xs">
@@ -245,7 +245,7 @@ export default function ApiKeyCard() {
               setError("");
             }}
             onKeyDown={(e) => e.key === "Enter" && !isValidating && add()}
-            placeholder="Paste a Gemini API key (AIza...)"
+            placeholder="Paste a Gemini API key"
             disabled={isValidating}
             className="h-11 flex-1 rounded-2xl border-2 border-border bg-card px-4 text-sm outline-none focus:border-indigo-ai disabled:opacity-50"
           />
