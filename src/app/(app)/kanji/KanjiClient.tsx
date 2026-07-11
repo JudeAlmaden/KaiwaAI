@@ -106,6 +106,7 @@ export default function KanjiClient() {
     // Try to load from cache first
     const cached = loadFromCache();
     if (cached) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setKanji(cached);
       setLoading(false);
     }
@@ -145,6 +146,7 @@ export default function KanjiClient() {
 
   // Reset display count when filters change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDisplayCount(ITEMS_PER_PAGE);
   }, [jlptFilter, reviewFilter, search]);
 

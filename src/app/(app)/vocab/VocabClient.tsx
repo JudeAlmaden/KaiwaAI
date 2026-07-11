@@ -105,6 +105,7 @@ export default function VocabClient() {
     // Try to load from cache first
     const cached = loadFromCache();
     if (cached) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCards(cached);
     }
     
@@ -155,6 +156,7 @@ export default function VocabClient() {
 
   // Reset display count when filters change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDisplayCount(ITEMS_PER_PAGE);
   }, [contentTab, filter, query]);
 
@@ -697,7 +699,7 @@ export default function VocabClient() {
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{selected.note}</p>
                 </div>
               ) : (
-                <p className="text-xs text-muted italic">No note yet. Click "+ Add note" to create one.</p>
+                <p className="text-xs text-muted italic">No note yet. Click &quot;+ Add note&quot; to create one.</p>
               )}
             </div>
 

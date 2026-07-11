@@ -19,6 +19,7 @@ export default function ReviewNotificationCard() {
   useEffect(() => {
     // Check browser support
     if (typeof window !== "undefined" && "Notification" in window) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSupported(true);
       setPermission(Notification.permission);
     }
@@ -107,7 +108,7 @@ export default function ReviewNotificationCard() {
             Notification Schedule
           </p>
           <p className="mt-1 text-sm">
-            You'll receive up to 3 reminders at: <strong>4 hours</strong>,{" "}
+            You&apos;ll receive up to 3 reminders at: <strong>4 hours</strong>,{" "}
             <strong>8 hours</strong>, and <strong>12 hours</strong> after opening the app
             (only if you have cards due).
           </p>

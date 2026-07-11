@@ -167,6 +167,20 @@ export default function ReviewClient() {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, flipped, grade]);
 
+  // Reschedule notifications after completing review
+  useEffect(() => {
+    if (phase !== "done") return;
+    // Fetch updated due count and reschedule notifications
+    fetch("/api/stats")
+      .then((res) => res.json())
+      .then((data) => {
+        void scheduleReviewNotifications(data.dueCount || 0);
+      })
+      .catch(() => {
+        // Silently fail - not critical
+      });
+  }, [phase]);
+
   // ── SETUP ──────────────────────────────────────────────────────────────
   if (phase === "setup") {
     return (
@@ -337,19 +351,6 @@ export default function ReviewClient() {
   // ── DONE ───────────────────────────────────────────────────────────────
   if (phase === "done") {
     const reviewed = tally.again + tally.good;
-    
-    // Reschedule notifications after completing review
-    useEffect(() => {
-      // Fetch updated due count and reschedule notifications
-      fetch("/api/stats")
-        .then((res) => res.json())
-        .then((data) => {
-          void scheduleReviewNotifications(data.dueCount || 0);
-        })
-        .catch(() => {
-          // Silently fail - not critical
-        });
-    }, []);
     
     return (
       <div className="flex flex-1 flex-col">
