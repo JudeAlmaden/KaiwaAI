@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { extractKanji } from "@/lib/kanji-utils";
 import { speakJa, canSpeak } from "@/lib/speak";
+import { generateKanjiMnemonicClient } from "@/lib/kanji-mnemonic-client";
 
 type KanjiDetail = {
   id: string;
@@ -25,6 +27,8 @@ export default function KanjiBreakdown({ word }: { word: string }) {
   const [selectedKanji, setSelectedKanji] = useState<string | null>(null);
   const [kanjiData, setKanjiData] = useState<KanjiDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
+  const [mnemonicError, setMnemonicError] = useState<string | null>(null);
 
   const loadKanjiDetail = useCallback(async (kanji: string) => {
     setLoading(true);
@@ -49,7 +53,45 @@ export default function KanjiBreakdown({ word }: { word: string }) {
   const handleClose = useCallback(() => {
     setSelectedKanji(null);
     setKanjiData(null);
+    setMnemonicError(null);
   }, []);
+
+  const handleGenerateMnemonic = useCallback(async () => {
+    if (!kanjiData) return;
+    
+    setGeneratingMnemonic(true);
+    setMnemonicError(null);
+    
+    try {
+      const mnemonic = await generateKanjiMnemonicClient({
+        character: kanjiData.character,
+        meanings: kanjiData.meanings,
+        radicals: kanjiData.radicals,
+      });
+      
+      // Update the kanji data with the generated mnemonic
+      setKanjiData({ ...kanjiData, mnemonic });
+      
+      // Save the mnemonic to the server
+      await fetch(`/api/kanji/${encodeURIComponent(kanjiData.character)}/mnemonic`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mnemonic }),
+      });
+    } catch (err) {
+      console.error("Failed to generate mnemonic:", err);
+      const errorMsg = err instanceof Error ? err.message : "Failed to generate mnemonic";
+      if (errorMsg === "NO_API_KEY") {
+        setMnemonicError("Add your API key in Settings to generate mnemonics");
+      } else if (errorMsg === "BAD_API_KEY") {
+        setMnemonicError("Invalid API key. Check your Settings.");
+      } else {
+        setMnemonicError("Failed to generate mnemonic. Try again.");
+      }
+    } finally {
+      setGeneratingMnemonic(false);
+    }
+  }, [kanjiData]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -85,9 +127,9 @@ export default function KanjiBreakdown({ word }: { word: string }) {
           ))}
         </div>
       </div>
-      {selectedKanji && (
+      {selectedKanji && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 py-6 sm:items-center"
+          className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/40 px-4 py-6 sm:items-center"
           onClick={handleClose}
         >
           <div
@@ -105,7 +147,10 @@ export default function KanjiBreakdown({ word }: { word: string }) {
                 </div>
               </div>
               <button
-                onClick={handleClose}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClose();
+                }}
                 className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-border text-muted hover:border-indigo-ai hover:text-indigo-ai"
               >
                 ✕
@@ -175,6 +220,39 @@ export default function KanjiBreakdown({ word }: { word: string }) {
                       </div>
                     )}
                   </div>
+                  {kanjiData.mnemonic ? (
+                    <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-mint">
+                        💡 Mnemonic
+                      </p>
+                      <p className="mt-2 text-sm leading-relaxed text-foreground">
+                        {kanjiData.mnemonic}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <button
+                        onClick={handleGenerateMnemonic}
+                        disabled={generatingMnemonic}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-mint/30 bg-mint/5 px-4 py-3 text-sm font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50"
+                      >
+                        {generatingMnemonic ? (
+                          <>
+                            <span className="animate-pulse">⏳</span>
+                            <span>Generating mnemonic...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>✨</span>
+                            <span>Generate mnemonic</span>
+                          </>
+                        )}
+                      </button>
+                      {mnemonicError && (
+                        <p className="text-xs text-sakura">{mnemonicError}</p>
+                      )}
+                    </div>
+                  )}
                   <Link
                     href={`/kanji/${encodeURIComponent(selectedKanji)}`}
                     className="flex w-full items-center justify-center rounded-full bg-indigo-ai px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-indigo-soft"
@@ -189,7 +267,8 @@ export default function KanjiBreakdown({ word }: { word: string }) {
                 </div>
               )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

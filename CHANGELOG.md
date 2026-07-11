@@ -2,6 +2,14 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.2.1] - 2026-07-11
+
+### Fixed
+
+- Kanji detail modal in chat now displays user mnemonics correctly
+- Kanji detail modal close button now works properly (rendered as portal to prevent click conflicts)
+- Added ability to generate AI mnemonics directly from the kanji detail modal
+
 ## [1.2.0] - 2026-07-11
 
 ### Added
