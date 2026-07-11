@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "../PageHeader";
 import { Chip } from "../ui";
@@ -28,6 +28,45 @@ type ReviewFilter = (typeof REVIEW_FILTERS)[number];
 const SORT_OPTIONS = ["Frequency", "Mastery", "Strokes"] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
 
+const STORAGE_KEY = "kaiwa_kanji_cache";
+const ITEMS_PER_PAGE = 50;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+type CachedData = {
+  kanji: KanjiCard[];
+  timestamp: number;
+};
+
+function saveToCache(kanji: KanjiCard[]): void {
+  try {
+    const data: CachedData = { kanji, timestamp: Date.now() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage quota exceeded or unavailable
+  }
+}
+
+function loadFromCache(): KanjiCard[] | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return null;
+    
+    const data: CachedData = JSON.parse(stored);
+    const age = Date.now() - data.timestamp;
+    
+    // Return cached data if less than TTL old
+    if (age < CACHE_TTL) {
+      return data.kanji;
+    }
+    
+    // Cache expired
+    localStorage.removeItem(STORAGE_KEY);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function KanjiClient() {
   const router = useRouter();
   const [kanji, setKanji] = useState<KanjiCard[] | null>(null);
@@ -36,6 +75,11 @@ export default function KanjiClient() {
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("All");
   const [sortBy, setSortBy] = useState<SortOption>("Frequency");
   const [loading, setLoading] = useState(true);
+  
+  // Infinite scroll state
+  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const loadKanji = async () => {
     setLoading(true);
@@ -47,7 +91,9 @@ export default function KanjiClient() {
 
       const res = await fetch(`/api/kanji?${params}`);
       const data = await res.json();
-      setKanji(data.kanji || []);
+      const fetchedKanji = data.kanji || [];
+      setKanji(fetchedKanji);
+      saveToCache(fetchedKanji);
     } catch (error) {
       console.error("Failed to load kanji:", error);
       setKanji([]);
@@ -57,10 +103,50 @@ export default function KanjiClient() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Try to load from cache first
+    const cached = loadFromCache();
+    if (cached) {
+      setKanji(cached);
+      setLoading(false);
+    }
+    
+    // Then fetch fresh data
     loadKanji();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Infinite scroll observer
+  const loadMore = useCallback(() => {
+    if (loading) return;
+    setDisplayCount((prev) => prev + ITEMS_PER_PAGE);
+  }, [loading]);
+
+  useEffect(() => {
+    // Set up intersection observer for infinite scroll
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1, rootMargin: "100px" }
+    );
+
+    if (sentinelRef.current) {
+      observerRef.current.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [loadMore]);
+
+  // Reset display count when filters change
+  useEffect(() => {
+    setDisplayCount(ITEMS_PER_PAGE);
+  }, [jlptFilter, reviewFilter, search]);
 
   const filtered = useMemo(() => {
     if (!kanji) return [];
@@ -95,7 +181,16 @@ export default function KanjiClient() {
     return list;
   }, [kanji, jlptFilter, reviewFilter, search]);
 
-  if (loading) {
+  // Visible kanji with infinite scroll limit
+  const visible = useMemo(() => {
+    return filtered.slice(0, displayCount);
+  }, [filtered, displayCount]);
+
+  const hasMore = useMemo(() => {
+    return displayCount < filtered.length;
+  }, [displayCount, filtered.length]);
+
+  if (loading && !kanji) { // Only show loading if we have no data at all
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <div className="relative">
@@ -233,24 +328,40 @@ export default function KanjiClient() {
       ) : (
         <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-8">
           <div className="mx-auto grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {filtered.map((k) => (
+            {visible.map((k) => (
               <KanjiCardItem
                 key={k.id}
                 kanji={k}
                 onClick={() => router.push(`/kanji/${encodeURIComponent(k.character)}`)}
                 onToggleReview={(character, nowInReviews) => {
                   // Update local state
-                  setKanji((prev) =>
-                    prev?.map((item) =>
+                  setKanji((prev) => {
+                    const updated = prev?.map((item) =>
                       item.character === character
                         ? { ...item, inReviews: nowInReviews }
                         : item
-                    ) ?? null
-                  );
+                    ) ?? null;
+                    if (updated) saveToCache(updated);
+                    return updated;
+                  });
                 }}
               />
             ))}
           </div>
+          
+          {/* Infinite scroll sentinel */}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex items-center justify-center py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-ai border-t-transparent" />
+            </div>
+          )}
+          
+          {/* Show total when done loading */}
+          {!hasMore && filtered.length > 0 && (
+            <div className="py-6 text-center text-sm text-muted">
+              All {filtered.length} kanji loaded
+            </div>
+          )}
         </div>
       )}
     </div>

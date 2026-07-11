@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import PageHeader from "../PageHeader";
 import LookupBox from "./LookupBox";
 import { Chip, StatusBadge, STATUS_STYLE } from "../ui";
@@ -23,6 +23,7 @@ type Card = {
   formType?: string | null;
   wordId?: number | null;
   dictionary?: string | null;
+  note?: string | null; // User's custom note
 };
 
 type WordForm = { id: string; form: string; reading: string; formType: string; saved: boolean };
@@ -30,6 +31,45 @@ type WordForm = { id: string; form: string; reading: string; formType: string; s
 const FILTERS = ["All", "New", "Learning", "Known"] as const;
 type Filter = (typeof FILTERS)[number];
 type ContentTab = "words" | "phrases";
+
+const STORAGE_KEY = "kaiwa_vocab_cache";
+const ITEMS_PER_PAGE = 50;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+type CachedData = {
+  cards: Card[];
+  timestamp: number;
+};
+
+function saveToCache(cards: Card[]): void {
+  try {
+    const data: CachedData = { cards, timestamp: Date.now() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage quota exceeded or unavailable
+  }
+}
+
+function loadFromCache(): Card[] | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return null;
+    
+    const data: CachedData = JSON.parse(stored);
+    const age = Date.now() - data.timestamp;
+    
+    // Return cached data if less than TTL old
+    if (age < CACHE_TTL) {
+      return data.cards;
+    }
+    
+    // Cache expired
+    localStorage.removeItem(STORAGE_KEY);
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function progressOf(c: Card): number {
   const rep = Math.min(c.repetitions / 3, 1);
@@ -49,23 +89,82 @@ export default function VocabClient() {
   const [addingFormId, setAddingFormId] = useState<string | null>(null);
   const [usingBaseOnly, setUsingBaseOnly] = useState(false);
   const [showConjugations, setShowConjugations] = useState(false);
+  
+  // Note editing state
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  
+  // Infinite scroll state
+  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
+  const [loading, setLoading] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    // Try to load from cache first
+    const cached = loadFromCache();
+    if (cached) {
+      setCards(cached);
+    }
+    
+    // Then fetch fresh data
     load();
   }, []);
 
   function load() {
+    setLoading(true);
     fetch("/api/flashcards")
       .then((r) => r.json())
-      .then((d) => setCards(d.cards ?? []))
-      .catch(() => setCards([]));
+      .then((d) => {
+        const fetchedCards = d.cards ?? [];
+        setCards(fetchedCards);
+        saveToCache(fetchedCards);
+      })
+      .catch(() => setCards([]))
+      .finally(() => setLoading(false));
   }
+
+  // Infinite scroll observer
+  const loadMore = useCallback(() => {
+    if (loading) return;
+    setDisplayCount((prev) => prev + ITEMS_PER_PAGE);
+  }, [loading]);
+
+  useEffect(() => {
+    // Set up intersection observer for infinite scroll
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1, rootMargin: "100px" }
+    );
+
+    if (sentinelRef.current) {
+      observerRef.current.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [loadMore]);
+
+  // Reset display count when filters change
+  useEffect(() => {
+    setDisplayCount(ITEMS_PER_PAGE);
+  }, [contentTab, filter, query]);
 
   function openCard(card: Card) {
     setForms([]);
     setShowConjugations(false);
     setFormsLoading(Boolean(card.wordId && card.dictionary));
     setSelected(card);
+    setEditingNote(false);
+    setNoteText(card.note || "");
   }
 
   useEffect(() => {
@@ -135,7 +234,12 @@ export default function VocabClient() {
   }
 
   const contentCards = useMemo(
-    () => cards?.filter((card) => card.isPhrase === (contentTab === "phrases")) ?? [],
+    () => {
+      if (!cards) return [];
+      const filtered = cards.filter((card) => card.isPhrase === (contentTab === "phrases"));
+      console.log(`ContentTab: ${contentTab}, Total cards: ${cards.length}, Filtered: ${filtered.length}`);
+      return filtered;
+    },
     [cards, contentTab]
   );
 
@@ -165,6 +269,32 @@ export default function VocabClient() {
     return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [filtered]);
 
+  // Visible groups with infinite scroll limit
+  const visibleGroups = useMemo(() => {
+    let count = 0;
+    const result: [string, Card[]][] = [];
+    
+    for (const [pos, items] of groups) {
+      if (count >= displayCount) break;
+      
+      const remaining = displayCount - count;
+      if (remaining >= items.length) {
+        result.push([pos, items]);
+        count += items.length;
+      } else {
+        result.push([pos, items.slice(0, remaining)]);
+        count += remaining;
+      }
+    }
+    
+    return result;
+  }, [groups, displayCount]);
+
+  const hasMore = useMemo(() => {
+    const totalFiltered = filtered.length;
+    return displayCount < totalFiltered;
+  }, [filtered.length, displayCount]);
+
   const counts = useMemo(() => {
     const c = { known: 0, learning: 0, neww: 0, total: contentCards.length };
     contentCards.forEach((x) => {
@@ -186,9 +316,41 @@ export default function VocabClient() {
   }
 
   async function remove(id: string) {
-    setCards((cs) => cs?.filter((c) => c.id !== id) ?? null);
+    setCards((cs) => {
+      const updated = cs?.filter((c) => c.id !== id) ?? null;
+      if (updated) saveToCache(updated);
+      return updated;
+    });
     setSelected(null);
     await fetch(`/api/flashcards/${id}`, { method: "DELETE" });
+  }
+
+  async function saveNote() {
+    if (!selected) return;
+    
+    setSavingNote(true);
+    try {
+      const res = await fetch(`/api/flashcards/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "updateNote", note: noteText.trim() || null }),
+      });
+      
+      if (res.ok) {
+        // Update local state
+        setCards((cs) => {
+          const updated = cs?.map((c) =>
+            c.id === selected.id ? { ...c, note: noteText.trim() || null } : c
+          ) ?? null;
+          if (updated) saveToCache(updated);
+          return updated;
+        });
+        setSelected((s) => s ? { ...s, note: noteText.trim() || null } : null);
+        setEditingNote(false);
+      }
+    } finally {
+      setSavingNote(false);
+    }
   }
 
   return (
@@ -258,9 +420,17 @@ export default function VocabClient() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search your ${contentTab}…`}
+            placeholder={`Filter your ${contentTab}...`}
             className="h-11 w-full rounded-2xl border-2 border-border bg-card pl-10 pr-4 text-sm outline-none focus:border-indigo-ai"
           />
+          {query && (
+            <button
+              onClick={() => setQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-border/50 text-xs text-muted hover:bg-border"
+            >
+              ✕
+            </button>
+          )}
         </div>
         <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto">
           {FILTERS.map((f) => (
@@ -288,7 +458,7 @@ export default function VocabClient() {
       ) : (
         <div className="flex-1 overflow-y-auto px-5 py-2 sm:px-8">
           <div className="mx-auto max-w-3xl">
-            {groups.map(([pos, items]) => (
+            {visibleGroups.map(([pos, items]) => (
               <div key={pos} className="mb-6">
                 <h3 className="mb-2.5 flex items-center gap-2 font-display text-xs font-bold uppercase tracking-wide text-muted">
                   {pos}
@@ -312,6 +482,9 @@ export default function VocabClient() {
                           <p className="truncate font-jp text-xs text-indigo-ai/70">
                             {c.reading}
                           </p>
+                          {c.note && (
+                            <span className="text-xs" title="Has note">📝</span>
+                          )}
                         </div>
                         <p className="truncate text-xs text-muted">
                           {c.meaning}
@@ -335,6 +508,20 @@ export default function VocabClient() {
                 </div>
               </div>
             ))}
+            
+            {/* Infinite scroll sentinel */}
+            {hasMore && (
+              <div ref={sentinelRef} className="flex items-center justify-center py-8">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-ai border-t-transparent" />
+              </div>
+            )}
+            
+            {/* Show total when done loading */}
+            {!hasMore && filtered.length > 0 && (
+              <div className="py-6 text-center text-sm text-muted">
+                All {filtered.length} {contentTab} loaded
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -461,6 +648,58 @@ export default function VocabClient() {
             )}
 
             <KanjiBreakdown word={selected.word} />
+
+            {/* Custom Note Section */}
+            <div className="mt-4 border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted">Personal Note</p>
+                {!editingNote && (
+                  <button
+                    onClick={() => setEditingNote(true)}
+                    className="text-xs font-bold text-indigo-ai hover:underline"
+                  >
+                    {selected.note ? "Edit" : "+ Add note"}
+                  </button>
+                )}
+              </div>
+              
+              {editingNote ? (
+                <div>
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    placeholder="Add examples, mnemonics, or anything to help you remember..."
+                    className="w-full rounded-lg border-2 border-border bg-surface px-3 py-2 text-sm outline-none focus:border-indigo-ai"
+                    rows={4}
+                    autoFocus
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={saveNote}
+                      disabled={savingNote}
+                      className="rounded-full bg-indigo-ai px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
+                    >
+                      {savingNote ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingNote(false);
+                        setNoteText(selected.note || "");
+                      }}
+                      className="rounded-full border-2 border-border px-4 py-1.5 text-xs font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : selected.note ? (
+                <div className="rounded-lg bg-amber/5 border border-amber/20 px-3 py-2">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selected.note}</p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted italic">No note yet. Click "+ Add note" to create one.</p>
+              )}
+            </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
               {selected.status !== "known" && (
