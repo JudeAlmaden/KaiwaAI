@@ -2,6 +2,29 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.2.0] - 2026-07-11
+
+### Added
+
+- **Client-side local storage caching** for vocabulary and kanji data to improve performance and reduce API calls
+- **Review notification system** with configurable browser notifications to remind users about due flashcards
+  - Notifications scheduled at 4, 8, and 12 hours after app launch or review completion
+  - Settings panel to enable/disable notifications and configure preferences
+  - Automatic rescheduling after completing reviews
+- Word token click-to-add feature in chat for quickly adding vocabulary to flashcards
+
+### Changed
+
+- Flashcard API routes now return proper status codes for better error handling
+- Vocabulary and kanji lists now use pagination with local caching for improved performance
+- Review notifications state persists in localStorage across sessions
+
+### Fixed
+
+- React Hooks violations: moved all useEffect hooks before conditional returns
+- ESLint warnings for setState in effects (suppressed legitimate cases)
+- Unescaped quotes and apostrophes in JSX
+
 ## [1.1.0] - 2026-07-11
 
 ### Added

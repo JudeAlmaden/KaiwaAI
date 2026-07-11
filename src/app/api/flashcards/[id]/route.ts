@@ -14,7 +14,7 @@ export async function PATCH(
   const owned = await prisma.userFlashcard.findFirst({ where: { id, userId: user.id } });
   if (!owned) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  let body: { action?: string };
+  let body: { action?: string; note?: string | null };
   try {
     body = await req.json();
   } catch {
@@ -41,6 +41,14 @@ export async function PATCH(
     const card = await prisma.userFlashcard.update({
       where: { id },
       data: { status: "known", repetitions: 3, interval: 21, nextReview: next },
+    });
+    return NextResponse.json({ card });
+  }
+
+  if (body.action === "updateNote") {
+    const card = await prisma.userFlashcard.update({
+      where: { id },
+      data: { note: body.note },
     });
     return NextResponse.json({ card });
   }

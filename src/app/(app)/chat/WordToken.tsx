@@ -341,6 +341,11 @@ function WordTokenBody({
               {tappedFormLabel}
             </div>
           )}
+          {!tappedFormLabel && token.surface !== token.dictForm && (
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-amber">
+              Form: {token.surface} (base: {token.dictForm})
+            </div>
+          )}
           {!compact && <div className="text-xs font-bold text-muted mb-1">Dictionary entry</div>}
           <div className="text-sm">
             <span className="font-jp font-bold">
@@ -501,6 +506,11 @@ export default function WordToken({
             <div className="font-jp text-lg font-bold text-foreground leading-tight">
               {token.reading}
             </div>
+            {token.surface !== token.dictForm && (
+              <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-amber">
+                Using: {token.surface} → Base form: {token.dictForm}
+              </div>
+            )}
             <div className="text-xs text-muted mt-0.5">{token.romaji}</div>
             <div className="mt-1.5 text-sm font-semibold text-indigo-ai">{token.meaning}</div>
             <div className="mt-0.5 text-[10px] uppercase tracking-widest text-muted">

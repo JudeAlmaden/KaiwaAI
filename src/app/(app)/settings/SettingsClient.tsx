@@ -5,6 +5,7 @@ import ApiKeyCard from "./ApiKeyCard";
 import ServerKeyCard from "./ServerKeyCard";
 import ModelCard from "./ModelCard";
 import OutreachCard from "./OutreachCard";
+import ReviewNotificationCard from "./ReviewNotificationCard";
 import UserSettingsTab from "./UserSettingsTab";
 
 type Tab = "user" | "ai" | "learning";
@@ -90,6 +91,7 @@ export default function SettingsClient({ email }: { email: string }) {
         <div className="flex flex-col gap-5">
           <ModelCard />
           <OutreachCard />
+          <ReviewNotificationCard />
         </div>
       )}
     </div>
