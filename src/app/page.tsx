@@ -2,8 +2,16 @@ import Kai from "./Kai";
 import { PopLink } from "./PopButton";
 import HeroDemo from "./HeroDemo";
 import Petals from "./Petals";
+import { getCurrentUser } from "@/lib/auth-helpers";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentUser();
+  
+  // If already logged in, redirect to chat
+  if (user) {
+    redirect("/chat");
+  }
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
       <Petals />

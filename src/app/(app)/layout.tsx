@@ -4,6 +4,7 @@ import { dayKeyFor, previousDayKey } from "@/lib/day";
 import { currentStreak } from "@/lib/streak";
 import { Sidebar, BottomTabs, MobileTopBar } from "./AppNav";
 import OnboardingCheck from "@/components/OnboardingCheck";
+import ReviewNotificationManager from "@/components/ReviewNotificationManager";
 
 export default async function AppLayout({
   children,
@@ -29,6 +30,7 @@ export default async function AppLayout({
   return (
     <div className="flex h-dvh overflow-hidden">
       <OnboardingCheck />
+      <ReviewNotificationManager />
       <Sidebar email={user.email} streak={streak} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

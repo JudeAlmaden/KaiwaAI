@@ -62,9 +62,9 @@ export default function LookupBox({ onAdded }: { onAdded: () => void }) {
       <div className="px-5 pt-3 sm:px-8">
         <button
           onClick={() => setOpen(true)}
-          className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-2xl border-2 border-dashed border-border px-4 py-2.5 text-sm font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+          className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-indigo-ai/30 bg-indigo-ai/5 px-4 py-3 text-sm font-bold text-indigo-ai transition-all hover:border-indigo-ai hover:bg-indigo-ai/10 hover:scale-[1.01]"
         >
-          🔍 Look up a word to learn…
+          ➕ Add a new word from dictionary
         </button>
       </div>
     );
