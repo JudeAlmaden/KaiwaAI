@@ -85,7 +85,7 @@ describe("kanji-mnemonic-client", () => {
 
       const callArgs = vi.mocked(global.fetch).mock.calls[0];
       const body = JSON.parse(callArgs[1]?.body as string);
-      expect(body.contents[0].parts[0].text).toContain("radicals: 木");
+      expect(body.contents[0].parts[0].text).toContain("Components: 木");
     });
 
     it("should retry with next key on 429 rate limit", async () => {

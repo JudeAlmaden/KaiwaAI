@@ -20,20 +20,20 @@ export async function generateKanjiMnemonicClient(
 ): Promise<string> {
   if (!hasAnyKey()) throw new Error("NO_API_KEY");
   
-  const prompt = `Create a memorable story to help remember the Japanese kanji "${kanji.character}".
+  const prompt = `Create a Heisig-style mnemonic for the kanji "${kanji.character}" (keyword: ${kanji.meanings[0]}).
 
-The kanji means: ${kanji.meanings.join(", ")}
-${kanji.radicals.length > 0 ? `It is composed of these radicals: ${kanji.radicals.join(", ")}` : ""}
+${kanji.radicals.length > 0 ? `Components: ${kanji.radicals.join(", ")}` : ""}
 
-Create a SHORT (2-3 sentences) vivid story that:
-1. ${kanji.radicals.length > 0 ? "Uses the radical meanings to build the story" : "Creates a visual image of the kanji"}
-2. Connects to the kanji's meaning
-3. Is memorable and a bit silly/unusual
-4. Helps visualize the character
+Format your response EXACTLY like this:
 
-Example format: "Imagine a ${kanji.radicals[0] || "shape"} next to a ${kanji.radicals[1] || "symbol"}. When they come together, they create ${kanji.meanings[0]}..."
+**Components:** [Describe what each component looks like or represents]
+**Story:** [2-3 sentence vivid story combining the components to create the keyword]
 
-Output ONLY the story, no preamble or explanation.`;
+Example format:
+**Components:** 禾 (grain/plant) + ム (katakana mu, looks like a fence)
+**Story:** A stalk of grain is hidden behind a fence-like shape. You're protecting your grain privately. This represents Private.
+
+Keep it SHORT, VISUAL, and make the connection to "${kanji.meanings[0]}" obvious.`;
 
   const keys = keysForRequest();
   const models = getAutoFallback() ? modelFallbackOrder() : [getModel()];

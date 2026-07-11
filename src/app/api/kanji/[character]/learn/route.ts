@@ -32,7 +32,7 @@ export async function POST(
   });
 
   if (existing) {
-    return NextResponse.json({ already: true, userKanji: existing });
+    return NextResponse.json({ already: true, userKanji: existing }, { status: 409 });
   }
 
   // Add to review queue

@@ -27,6 +27,7 @@ type Card = {
   meanings?: string[];
   readingsOn?: string[];
   readingsKun?: string[];
+  radicals?: string[];
   mnemonic?: string; // User's mnemonic for this kanji
   // Common
   status: "new" | "learning" | "known";
@@ -74,6 +75,80 @@ export default function ReviewClient() {
   const [flipped, setFlipped] = useState(false);
   const [tally, setTally] = useState({ again: 0, good: 0 });
   const [showHint, setShowHint] = useState(false);
+  const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
+
+  const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
+    if (isRegenerate) {
+      const confirmed = window.confirm(
+        "⚠️ Are you sure you want to regenerate the mnemonic?\n\nThis will replace the existing mnemonic with a new one."
+      );
+      if (!confirmed) return;
+    }
+
+    setGeneratingMnemonic(true);
+    try {
+      const { generateKanjiMnemonicClient } = await import("@/lib/kanji-mnemonic-client");
+      
+      const mnemonic = await generateKanjiMnemonicClient({
+        character: kanjiChar,
+        meanings,
+        radicals,
+      });
+
+      // Save to server
+      await fetch(`/api/kanji/${encodeURIComponent(kanjiChar)}/mnemonic`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mnemonic }),
+      });
+
+      // Update the current card in queue
+      setQueue(prev => {
+        const updated = [...prev];
+        if (updated[0]) {
+          updated[0] = { ...updated[0], mnemonic };
+        }
+        return updated;
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to generate mnemonic";
+      if (errorMsg === "NO_API_KEY") {
+        alert("💡 Add your Gemini API key in Settings to generate mnemonics.\n\nThis feature uses your own API key (BYOK).");
+      } else if (errorMsg === "BAD_API_KEY") {
+        alert("❌ Invalid API key. Check your Gemini key in Settings.");
+      } else if (errorMsg === "RATE_LIMIT") {
+        alert("⏳ Rate limit exceeded. Please try again in a moment.");
+      } else {
+        alert(`Failed to generate mnemonic: ${errorMsg}`);
+      }
+    } finally {
+      setGeneratingMnemonic(false);
+    }
+  }, []);
+
+  const handleShowHint = useCallback(async () => {
+    const card = queue[0];
+    if (!card) return;
+    
+    // Only for kanji cards
+    const cardType = card.type || setup.reviewType;
+    if (cardType === "vocabulary") return;
+
+    // If mnemonic already exists, just show it
+    if (card.mnemonic) {
+      setShowHint(true);
+      return;
+    }
+
+    // Otherwise, generate it
+    await handleGenerateMnemonic(
+      card.character!,
+      card.meanings!,
+      card.radicals || [],
+      false
+    );
+    setShowHint(true);
+  }, [queue, setup.reviewType, handleGenerateMnemonic]);
 
   useEffect(() => {
     const endpoint = `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review?studyMode=due&limit=200`;
@@ -464,6 +539,26 @@ export default function ReviewClient() {
               {formLabel(card.formType)}
             </p>
           )}
+          {!isVocab && !flipped && card.radicals && card.radicals.length > 0 && (
+            <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Radicals</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                {card.radicals.map((radical, i) => (
+                  <button
+                    key={i}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`/kanji?search=${encodeURIComponent(radical)}`, '_blank');
+                    }}
+                    className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                    title={`Search for ${radical}`}
+                  >
+                    {radical}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {flipped ? (
             <div className="mt-5 w-full" onClick={(e) => e.stopPropagation()}>
               {isJpToEn ? (
@@ -484,6 +579,27 @@ export default function ReviewClient() {
                     </p>
                   )}
                   {isVocab && card.word && <KanjiBreakdown word={card.word} />}
+                  {!isVocab && card.radicals && card.radicals.length > 0 && (
+                    <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Radicals</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {card.radicals.map((radical, i) => (
+                          <button
+                            key={i}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Try to navigate to the radical as a kanji
+                              window.open(`/kanji/${encodeURIComponent(radical)}`, '_blank');
+                            }}
+                            className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                            title={`Open ${radical}`}
+                          >
+                            {radical}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {!isVocab && backContent.mnemonic && (
                     <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
                       <p className="text-xs font-bold uppercase tracking-wide text-mint">
@@ -520,23 +636,44 @@ export default function ReviewClient() {
           ) : (
             <>
               <p className="mt-5 text-sm text-muted">Tap or press Space to flip</p>
-              {!isVocab && card.mnemonic && (
+              {!isVocab && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setShowHint(!showHint);
+                    if (showHint && card.mnemonic) {
+                      setShowHint(false);
+                    } else {
+                      handleShowHint();
+                    }
                   }}
-                  className="mt-3 rounded-full border-2 border-mint/30 bg-mint/5 px-4 py-1.5 text-xs font-bold text-mint transition-colors hover:bg-mint/10"
+                  disabled={generatingMnemonic}
+                  className="mt-3 rounded-full border-2 border-mint/30 bg-mint/5 px-4 py-2 text-xs font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50"
                 >
-                  {showHint ? "Hide hint" : "💡 Show hint"}
+                  {generatingMnemonic ? "✨ Generating..." : showHint ? "Hide hint" : "💡 Show hint"}
                 </button>
               )}
               {showHint && !isVocab && card.mnemonic && (
-                <div className="mt-3 w-full rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
-                  <p className="text-xs font-bold uppercase tracking-wide text-mint">
-                    Mnemonic
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">{card.mnemonic}</p>
+                <div className="mt-3 w-full space-y-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
+                    <p className="text-xs font-bold uppercase tracking-wide text-mint">
+                      💡 Mnemonic
+                    </p>
+                    <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{card.mnemonic}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleGenerateMnemonic(
+                        card.character!,
+                        card.meanings!,
+                        card.radicals || [],
+                        true
+                      );
+                    }}
+                    disabled={generatingMnemonic}
+                    className="w-full rounded-full border-2 border-mint/30 bg-mint/10 px-3 py-1.5 text-xs font-bold text-mint transition-all hover:bg-mint/20 disabled:opacity-50"
+                  >
+                    {generatingMnemonic ? "⏳ Regenerating..." : "🔄 Regenerate"}
+                  </button>
                 </div>
               )}
             </>

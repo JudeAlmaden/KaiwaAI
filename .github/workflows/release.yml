@@ -34,8 +34,19 @@ jobs:
             echo "Created and pushed $TAG"
           fi
 
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          # Extract the section for this version from CHANGELOG.md
+          CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '$d' | tail -n +2)
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ steps.ver.outputs.version }}"
+          body: ${{ steps.changelog.outputs.content }}
           generate_release_notes: true
