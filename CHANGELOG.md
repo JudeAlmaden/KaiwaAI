@@ -2,13 +2,28 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
-## [1.2.1] - 2026-07-11
+## [1.2.1] - 2026-07-12
+
+### Added
+
+- **Kanji mnemonic generation on review cards** - Generate or regenerate Heisig-style mnemonics directly during review sessions
+- **"Show hint" button on kanji cards** - Reveals mnemonic or generates it on-demand without cluttering the card
+- **Radicals display on kanji review cards** - Shows component radicals with clickable links to search
+- **Improved mnemonic format** - AI now generates structured mnemonics with "Components" breakdown and "Story" sections
+- **Mnemonic regeneration with confirmation** - Warns before replacing existing mnemonics
+
+### Changed
+
+- **Mnemonic generation prompt** - Now follows Heisig's "Remembering the Kanji" method more closely with emphasis on primitives/components
+- **Kanji detail page radicals** - Changed from "add to study list" to "search for similar kanji" functionality
+- **Review card UX** - Mnemonics hidden by default behind hint button for cleaner interface
 
 ### Fixed
 
 - Kanji detail modal in chat now displays user mnemonics correctly
 - Kanji detail modal close button now works properly (rendered as portal to prevent click conflicts)
-- Added ability to generate AI mnemonics directly from the kanji detail modal
+- Removed duplicate mnemonic displays on review cards
+- Fixed React Hooks violations in review component
 
 ## [1.2.0] - 2026-07-11
 

@@ -276,18 +276,26 @@ export default function KanjiDetailClient({ character }: { character: string }) 
 
           {/* Radicals */}
           {kanji.radicals.length > 0 && (
-            <Section title="Radicals" subtitle="Components that make up this kanji">
+            <Section title="Radicals" subtitle="Component meanings · Click to search for radical kanji">
               <div className="rounded-2xl bg-mint/5 p-4">
                 <div className="flex flex-wrap gap-2">
                   {kanji.radicals.map((radical, i) => (
-                    <span
+                    <button
                       key={i}
+                      onClick={() => {
+                        // Navigate to kanji list and search for this radical meaning
+                        router.push(`/kanji?search=${encodeURIComponent(radical)}`);
+                      }}
                       className="group relative rounded-xl bg-mint/20 px-4 py-2.5 text-sm font-semibold text-mint shadow-sm transition-all hover:scale-105 hover:bg-mint/30"
+                      title={`Search for kanji with meaning "${radical}"`}
                     >
                       {radical}
-                    </span>
+                    </button>
                   ))}
                 </div>
+                <p className="mt-3 text-xs text-muted/70">
+                  💡 Tip: Click any radical to search for kanji with that meaning
+                </p>
               </div>
             </Section>
           )}

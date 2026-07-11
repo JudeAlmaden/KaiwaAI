@@ -220,6 +220,21 @@ export default function KanjiBreakdown({ word }: { word: string }) {
                       </div>
                     )}
                   </div>
+                  {kanjiData.radicals && kanjiData.radicals.length > 0 && (
+                    <div className="rounded-2xl bg-surface p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted mb-2">Radicals</p>
+                      <div className="flex flex-wrap gap-2">
+                        {kanjiData.radicals.map((radical, i) => (
+                          <span
+                            key={i}
+                            className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai"
+                          >
+                            {radical}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {kanjiData.mnemonic ? (
                     <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 p-4">
                       <p className="text-xs font-bold uppercase tracking-wide text-mint">
