@@ -30,13 +30,26 @@ export default function KanjiBreakdown({ word }: { word: string }) {
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
   const [mnemonicError, setMnemonicError] = useState<string | null>(null);
 
+  useEffect(() => {
+    console.log("[KanjiBreakdown] Component mounted/updated", { 
+      selectedKanji, 
+      hasKanjiData: !!kanjiData,
+      generatingMnemonic,
+      mnemonicError 
+    });
+  }, [selectedKanji, kanjiData, generatingMnemonic, mnemonicError]);
+
   const loadKanjiDetail = useCallback(async (kanji: string) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/kanji/${encodeURIComponent(kanji)}`);
       if (res.ok) {
         const data = await res.json();
-        setKanjiData(data.kanji);
+        // Merge the mnemonic from the API response into the kanji data
+        setKanjiData({
+          ...data.kanji,
+          mnemonic: data.mnemonic || data.kanji.mnemonic,
+        });
       }
     } catch (err) {
       console.error(err);
@@ -51,35 +64,53 @@ export default function KanjiBreakdown({ word }: { word: string }) {
   }, [loadKanjiDetail]);
 
   const handleClose = useCallback(() => {
+    console.log("[KanjiBreakdown] handleClose called");
     setSelectedKanji(null);
     setKanjiData(null);
     setMnemonicError(null);
   }, []);
 
   const handleGenerateMnemonic = useCallback(async () => {
-    if (!kanjiData) return;
+    console.log("[KanjiBreakdown] handleGenerateMnemonic called");
+    if (!kanjiData) {
+      console.log("[KanjiBreakdown] No kanjiData, returning");
+      return;
+    }
     
+    console.log("[KanjiBreakdown] Starting mnemonic generation for:", kanjiData.character);
     setGeneratingMnemonic(true);
     setMnemonicError(null);
     
     try {
+      console.log("[KanjiBreakdown] Calling generateKanjiMnemonicClient...");
       const mnemonic = await generateKanjiMnemonicClient({
         character: kanjiData.character,
         meanings: kanjiData.meanings,
         radicals: kanjiData.radicals,
       });
       
+      console.log("[KanjiBreakdown] Mnemonic generated:", mnemonic.substring(0, 50) + "...");
+      
       // Update the kanji data with the generated mnemonic
       setKanjiData({ ...kanjiData, mnemonic });
       
       // Save the mnemonic to the server
-      await fetch(`/api/kanji/${encodeURIComponent(kanjiData.character)}/mnemonic`, {
-        method: "PATCH",
+      console.log("[KanjiBreakdown] Saving mnemonic to server...");
+      const saveRes = await fetch(`/api/kanji/${encodeURIComponent(kanjiData.character)}/mnemonic/save`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mnemonic }),
       });
+
+      if (!saveRes.ok) {
+        const data = await saveRes.json();
+        console.error("[KanjiBreakdown] Failed to save mnemonic:", data.error);
+        // Still show the mnemonic even if save fails
+      } else {
+        console.log("[KanjiBreakdown] Mnemonic saved successfully");
+      }
     } catch (err) {
-      console.error("Failed to generate mnemonic:", err);
+      console.error("[KanjiBreakdown] Failed to generate mnemonic:", err);
       const errorMsg = err instanceof Error ? err.message : "Failed to generate mnemonic";
       if (errorMsg === "NO_API_KEY") {
         setMnemonicError("Add your API key in Settings to generate mnemonics");
@@ -89,6 +120,7 @@ export default function KanjiBreakdown({ word }: { word: string }) {
         setMnemonicError("Failed to generate mnemonic. Try again.");
       }
     } finally {
+      console.log("[KanjiBreakdown] Mnemonic generation complete");
       setGeneratingMnemonic(false);
     }
   }, [kanjiData]);
@@ -129,16 +161,34 @@ export default function KanjiBreakdown({ word }: { word: string }) {
       </div>
       {selectedKanji && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/40 px-4 py-6 sm:items-center"
-          onClick={handleClose}
+          className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/40 px-4 py-6 sm:items-center"
+          onTouchEnd={(e) => {
+            console.log("[KanjiBreakdown] Backdrop TOUCHEND", e.target === e.currentTarget);
+            if (e.target === e.currentTarget) {
+              handleClose();
+            }
+          }}
+          onClick={(e) => {
+            console.log("[KanjiBreakdown] Backdrop clicked", e.target === e.currentTarget);
+            if (e.target === e.currentTarget) {
+              handleClose();
+            }
+          }}
         >
           <div
-            className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-border bg-card p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="relative z-[99999] max-h-[80vh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-border bg-card p-5 shadow-2xl pointer-events-auto"
+            onTouchEnd={(e) => {
+              console.log("[KanjiBreakdown] Modal content TOUCHEND");
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              console.log("[KanjiBreakdown] Modal content clicked");
+              e.stopPropagation();
+            }}
           >
             <div className="mb-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-ai/10 font-jp text-3xl font-bold text-indigo-ai">
+              <div className="flex items-center gap-4">
+                <div className="font-jp text-6xl font-bold leading-none text-foreground sm:text-7xl">
                   {selectedKanji}
                 </div>
                 <div>
@@ -167,7 +217,10 @@ export default function KanjiBreakdown({ word }: { word: string }) {
                 <div className="space-y-5">
                   {canSpeak() && (
                     <button
-                      onClick={() => speakJa(selectedKanji)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        speakJa(selectedKanji);
+                      }}
                       className="flex items-center justify-center gap-2 rounded-full border-2 border-sky/30 bg-sky/10 px-4 py-2 text-sm font-bold text-sky transition-colors hover:bg-sky/20"
                     >
                       <span>🔊</span>
@@ -247,9 +300,26 @@ export default function KanjiBreakdown({ word }: { word: string }) {
                   ) : (
                     <div className="space-y-2">
                       <button
-                        onClick={handleGenerateMnemonic}
+                        onTouchEnd={(e) => {
+                          console.log("[KanjiBreakdown] Generate mnemonic TOUCHEND");
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleGenerateMnemonic();
+                        }}
+                        onMouseDown={(e) => {
+                          console.log("[KanjiBreakdown] Generate mnemonic MOUSEDOWN");
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleGenerateMnemonic();
+                        }}
+                        onClick={(e) => {
+                          console.log("[KanjiBreakdown] Generate mnemonic button clicked");
+                          e.stopPropagation();
+                          console.log("[KanjiBreakdown] stopPropagation called");
+                        }}
                         disabled={generatingMnemonic}
-                        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-mint/30 bg-mint/5 px-4 py-3 text-sm font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-mint/30 bg-mint/5 px-4 py-3 text-sm font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50 touch-none"
+                        type="button"
                       >
                         {generatingMnemonic ? (
                           <>
@@ -270,6 +340,7 @@ export default function KanjiBreakdown({ word }: { word: string }) {
                   )}
                   <Link
                     href={`/kanji/${encodeURIComponent(selectedKanji)}`}
+                    onClick={(e) => e.stopPropagation()}
                     className="flex w-full items-center justify-center rounded-full bg-indigo-ai px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-indigo-soft"
                   >
                     Open kanji lesson
