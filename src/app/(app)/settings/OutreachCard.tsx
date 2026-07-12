@@ -181,32 +181,67 @@ function PushNotificationToggle() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const isSupported = "Notification" in window && "serviceWorker" in navigator;
+    
+    console.log("[PushNotification] Initializing...");
+    
+    // Shorter fallback timeout to ensure we don't stay in loading state
+    const fallbackTimeout = setTimeout(() => {
+      console.warn("[PushNotification] Check timed out after 2s, clearing loading state");
+      setLoading(false);
+    }, 2000); // Reduced to 2 seconds
+    
+    // Check support more carefully for mobile
+    const isSupported = 
+      "Notification" in window && 
+      "serviceWorker" in navigator &&
+      "PushManager" in window;
+    
+    console.log("[PushNotification] Support check:", { isSupported });
     
     // Defer state updates to avoid synchronous setState inside useEffect warning
     const timer = setTimeout(() => {
       setSupported(isSupported);
       if (!isSupported) {
+        console.log("[PushNotification] Not supported:", {
+          hasNotification: "Notification" in window,
+          hasServiceWorker: "serviceWorker" in navigator,
+          hasPushManager: "PushManager" in window,
+        });
+        clearTimeout(fallbackTimeout);
         setLoading(false);
         return;
       }
 
       setPermission(Notification.permission);
+      console.log("[PushNotification] Permission:", Notification.permission);
 
       // Check if we have an active subscription
-      navigator.serviceWorker.ready.then(async (reg) => {
-        try {
-          const sub = await reg.pushManager.getSubscription();
-          setSubscribed(!!sub);
-        } catch (err) {
-          console.error("Error getting push subscription:", err);
-        } finally {
+      console.log("[PushNotification] Waiting for service worker...");
+      navigator.serviceWorker.ready
+        .then(async (reg) => {
+          console.log("[PushNotification] Service worker ready");
+          try {
+            const sub = await reg.pushManager.getSubscription();
+            console.log("[PushNotification] Subscription:", !!sub);
+            setSubscribed(!!sub);
+          } catch (err) {
+            console.error("[PushNotification] Error getting push subscription:", err);
+          } finally {
+            clearTimeout(fallbackTimeout);
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.error("[PushNotification] Service worker not ready:", err);
+          clearTimeout(fallbackTimeout);
           setLoading(false);
-        }
-      });
+        });
     }, 0);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(fallbackTimeout);
+    };
   }, []);
 
   async function handleToggle() {
@@ -214,6 +249,11 @@ function PushNotificationToggle() {
     setLoading(true);
 
     try {
+      // Check if service worker is available
+      if (!navigator.serviceWorker) {
+        throw new Error("Service Worker not supported");
+      }
+
       const reg = await navigator.serviceWorker.ready;
 
       if (subscribed) {
@@ -233,8 +273,15 @@ function PushNotificationToggle() {
         // Request permission if not already granted
         let perm = Notification.permission;
         if (perm === "default") {
-          perm = await Notification.requestPermission();
-          setPermission(perm);
+          try {
+            perm = await Notification.requestPermission();
+            setPermission(perm);
+          } catch (err) {
+            console.error("Permission request failed:", err);
+            alert("Could not request notification permission. Your browser may not support this feature.");
+            setLoading(false);
+            return;
+          }
         }
 
         if (perm !== "granted") {
@@ -245,13 +292,24 @@ function PushNotificationToggle() {
 
         const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
         if (!vapidPublicKey) {
-          throw new Error("VAPID public key is missing");
+          console.error("VAPID public key is missing");
+          alert("Push notifications are not configured. Please contact support.");
+          setLoading(false);
+          return;
         }
 
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-        });
+        let sub;
+        try {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+          });
+        } catch (err) {
+          console.error("Push subscription failed:", err);
+          alert("Failed to subscribe to push notifications. This feature may not be supported on your device.");
+          setLoading(false);
+          return;
+        }
 
         const res = await fetch("/api/push/subscribe", {
           method: "POST",
@@ -267,13 +325,16 @@ function PushNotificationToggle() {
       }
     } catch (err) {
       console.error("Failed to toggle push notifications:", err);
-      alert("Something went wrong while setting up notifications.");
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      alert(`Something went wrong while setting up notifications: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
   }
 
   if (!supported) return null;
+
+  console.log("[PushNotification] Render state:", { supported, subscribed, permission, loading });
 
   return (
     <div className="mt-4 border-t-2 border-border pt-3">
@@ -283,15 +344,37 @@ function PushNotificationToggle() {
           <p className="text-xs text-muted">
             {permission === "denied"
               ? "Blocked. Please reset notification permissions in your browser settings to receive alerts."
+              : loading
+              ? "Checking notification status..."
               : "Get alert notifications on this device when Kai sends a new message."}
+          </p>
+          {/* Debug info - remove after fixing */}
+          <p className="text-xs text-red-500 mt-1">
+            Debug: loading={String(loading)}, permission={permission}, supported={String(supported)}
           </p>
         </div>
         <button
-          onClick={handleToggle}
+          onTouchEnd={(e) => {
+            console.log("[Push] Touch event fired");
+            e.preventDefault();
+            e.stopPropagation();
+            if (loading || permission === "denied") {
+              console.log("[Push] Blocked by state check");
+              return;
+            }
+            handleToggle();
+          }}
+          onClick={() => {
+            console.log("[Push] Click event fired", { loading, permission, subscribed });
+            if (loading || permission === "denied") {
+              console.log("[Push] Blocked by state check");
+              return;
+            }
+            handleToggle();
+          }}
           role="switch"
           aria-checked={subscribed}
           aria-label="Toggle push notifications"
-          disabled={loading || permission === "denied"}
           className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
             subscribed ? "bg-indigo-ai" : "bg-border"
           } ${(loading || permission === "denied") ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
@@ -331,6 +414,11 @@ function ProactiveToggle() {
           </p>
         </div>
         <button
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggle();
+          }}
           onClick={toggle}
           role="switch"
           aria-checked={on}

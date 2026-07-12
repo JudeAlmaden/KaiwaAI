@@ -2,6 +2,31 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.2.2] - 2026-07-12
+
+### Fixed
+
+- **Mobile touch event support** - Fixed interactive elements (buttons, toggles) not responding to touch on mobile devices
+  - Kanji breakdown modal buttons (Generate mnemonic, Listen, Open kanji lesson) now work on mobile
+  - Push notification toggle now responds to touch events
+  - Added proper touch event handlers with stopPropagation to prevent modal closures
+- **Kanji mnemonic persistence** - Fixed mnemonic not displaying after generation in chat kanji modal
+  - Properly merges mnemonic from API response into kanji data
+  - Mnemonic now persists when closing and reopening the modal
+- **Kanji modal display** - Improved kanji character display to match detail page styling
+  - Increased kanji size to `text-6xl sm:text-7xl` for better visibility
+  - Removed small boxed display in favor of large, prominent character
+- **Push notification initialization** - Improved service worker check with better error handling
+  - Added 2-second timeout to prevent loading state from hanging indefinitely
+  - Better error messages for unsupported features on mobile browsers
+  - Enhanced logging for debugging notification issues
+
+### Changed
+
+- **API endpoint consolidation** - Kanji mnemonic generation now uses `/api/kanji/[character]/mnemonic/save` endpoint
+  - Ensures mnemonics are saved to the correct `KanjiMnemonic` table
+  - Consistent with kanji detail page implementation
+
 ## [1.2.1] - 2026-07-12
 
 ### Added
