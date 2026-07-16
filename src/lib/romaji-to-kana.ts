@@ -52,7 +52,7 @@ export function romajiToHiragana(romaji: string): string {
   if (!romaji) return '';
   
   let result = '';
-  let input = romaji.toLowerCase();
+  const input = romaji.toLowerCase();
   let i = 0;
   
   while (i < input.length) {

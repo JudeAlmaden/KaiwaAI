@@ -77,7 +77,6 @@ export default function ReviewClient() {
   const [flipped, setFlipped] = useState(false);
   const [tally, setTally] = useState({ again: 0, good: 0 });
   const [showHint, setShowHint] = useState(false);
-  const [showNote, setShowNote] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
 
   const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
