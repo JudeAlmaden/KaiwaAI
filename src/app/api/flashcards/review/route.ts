@@ -146,6 +146,7 @@ export async function GET(req: Request) {
       formType: card.wordForm?.formType ?? null,
       dictionary: card.word?.dictionary ?? null,
       jlptTier,
+      note: card.note,
       status: card.status,
       easeFactor: card.easeFactor,
       interval: card.interval,

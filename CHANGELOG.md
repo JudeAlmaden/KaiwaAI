@@ -2,6 +2,13 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.2.3] - 2026-07-16
+
+### Changed
+
+- **Version bump to 1.2.3** - Updated package metadata and release notes for the latest patch release.
+- **Changelog added** - Documented the current release in the project changelog.
+
 ## [1.2.2] - 2026-07-12
 
 ### Fixed

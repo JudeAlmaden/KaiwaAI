@@ -7,6 +7,7 @@ import { Chip, StatusBadge, STATUS_STYLE } from "../ui";
 import { speakJa, canSpeak } from "@/lib/speak";
 import KanjiBreakdown from "../chat/KanjiBreakdown";
 import { formLabel } from "@/lib/form-label";
+import { romajiToHiragana } from "@/lib/romaji-to-kana";
 
 type Card = {
   id: string;
@@ -250,10 +251,14 @@ export default function VocabClient() {
     if (filter !== "All") list = list.filter((c) => c.status === filter.toLowerCase());
     const q = query.trim().toLowerCase();
     if (q) {
+      // Convert romaji to hiragana for better search matching
+      const qHiragana = romajiToHiragana(q);
+      
       list = list.filter(
         (c) =>
           c.word.includes(q) ||
           c.reading.includes(q) ||
+          c.reading.includes(qHiragana) || // Search with converted hiragana
           (c.romaji && c.romaji.toLowerCase().includes(q)) ||
           c.meaning.toLowerCase().includes(q)
       );

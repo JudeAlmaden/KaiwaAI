@@ -10,6 +10,7 @@ import { speakJa, canSpeak } from "@/lib/speak";
 import KanjiBreakdown from "../chat/KanjiBreakdown";
 import { formLabel } from "@/lib/form-label";
 import { scheduleReviewNotifications } from "@/lib/review-notifications";
+import Furigana from "./Furigana";
 
 type Card = {
   id: string;
@@ -22,6 +23,7 @@ type Card = {
   partOfSpeech?: string;
   formType?: string | null;
   dictionary?: string | null;
+  note?: string | null; // User's personal note
   // Kanji fields
   character?: string;
   meanings?: string[];
@@ -75,6 +77,7 @@ export default function ReviewClient() {
   const [flipped, setFlipped] = useState(false);
   const [tally, setTally] = useState({ again: 0, good: 0 });
   const [showHint, setShowHint] = useState(false);
+  const [showNote, setShowNote] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
 
   const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
@@ -532,7 +535,11 @@ export default function ReviewClient() {
             </button>
           )}
           <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
-            {frontContent}
+            {isJpToEn && isVocab && card.word && card.reading ? (
+              <Furigana word={card.word} reading={card.reading} className="text-5xl" />
+            ) : (
+              frontContent
+            )}
           </span>
           {isVocab && formLabel(card.formType) && (
             <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai">

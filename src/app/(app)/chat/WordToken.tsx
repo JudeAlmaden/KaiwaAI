@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { type CachedToken } from "@/lib/types";
 import KanjiBreakdown from "./KanjiBreakdown";
 import { formLabel } from "@/lib/form-label";
+import Furigana from "../review/Furigana";
 
 type SaveState = "idle" | "saving" | "saved" | "exists" | "merged";
 
@@ -190,7 +191,13 @@ function SubWordChip({
       {open && pos && (
         <PopupPortal pos={pos} onClose={() => setOpen(false)}>
           <div className="p-3">
-            <div className="font-jp text-base font-bold">{token.surface}</div>
+            <div className="font-jp text-base font-bold">
+              {token.surface !== token.reading ? (
+                <Furigana word={token.surface} reading={token.reading} className="text-base" size="normal" />
+              ) : (
+                token.surface
+              )}
+            </div>
             {token.reading !== token.surface && (
               <div className="text-xs text-muted">{token.reading}</div>
             )}
@@ -503,8 +510,12 @@ export default function WordToken({
         <PopupPortal pos={pos} onClose={onToggle}>
           <div className="p-4">
             {/* Header */}
-            <div className="font-jp text-lg font-bold text-foreground leading-tight">
-              {token.reading}
+            <div className="font-jp text-3xl font-bold text-foreground leading-tight">
+              {token.surface !== token.reading ? (
+                <Furigana word={token.surface} reading={token.reading} className="text-3xl" size="normal" />
+              ) : (
+                token.reading
+              )}
             </div>
             {token.surface !== token.dictForm && (
               <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-amber">
