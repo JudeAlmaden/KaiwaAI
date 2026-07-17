@@ -23,6 +23,14 @@ import {
   dropFromConvosCache,
   markConversationSeen,
 } from "@/lib/chat-cache";
+import {
+  loadQuestForConv,
+  updateQuestState,
+  clearQuestForConv,
+  buildQuestSystemPromptSuffix,
+  extractQuestCompletions,
+  type ActiveQuestState,
+} from "@/lib/quests";
 
 type GMsg = {
   id: string;
@@ -78,6 +86,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [quotedMessage, setQuotedMessage] = useState<GMsg | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [questState, setQuestState] = useState<ActiveQuestState | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScroll = useRef(false);
@@ -100,6 +109,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   }
 
   const cacheKey = cacheKeys.conv(groupId);
+
+  // Load quest state for this conversation (if a quest was started)
+  useEffect(() => {
+    const state = loadQuestForConv(groupId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (state) setQuestState(state);
+  }, [groupId]);
 
   // Poll for new messages every 3 seconds for user-to-user chats
   const pollForNewMessages = useCallback(() => {
@@ -447,13 +463,38 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             | "model",
           content: m.content,
         }));
+        // Build persona personality, injecting quest system prompt if active
+        const basePersonality = persona!.personality!;
+        const questSuffix =
+          questState && !questState.completed
+            ? buildQuestSystemPromptSuffix(questState.quest)
+            : "";
         const kai = await chatWithPersona(
           content,
           ctx,
-          persona!.personality!,
+          basePersonality + questSuffix,
           history
         );
-        const res = await fetch(`/api/groups/${groupId}/messages`, {
+          // Extract and strip [OBJECTIVE_COMPLETED:id] tags from reply
+          const { cleanReply, completedIds } = extractQuestCompletions(kai.reply);
+          if (completedIds.length > 0 && questState) {
+            const allCompleted = [
+              ...questState.completedObjectiveIds,
+              ...completedIds.filter((id) => !questState.completedObjectiveIds.includes(id)),
+            ];
+            const isNowDone = allCompleted.length >= questState.quest.objectives.length;
+            const next: ActiveQuestState = {
+              ...questState,
+              completedObjectiveIds: allCompleted,
+              completed: isNowDone,
+            };
+            updateQuestState(groupId, next);
+            setQuestState(next);
+          }
+          // If quest cleaned the reply, store the cleaned version for display
+          const displayReply = completedIds.length > 0 ? cleanReply : kai.reply;
+
+          const res = await fetch(`/api/groups/${groupId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -461,7 +502,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             quotedMessageId: quotedMsg?.id,
             userCorrection: userCorrection ? JSON.stringify(userCorrection) : undefined,
             aiReply: {
-              reply: kai.reply,
+              reply: displayReply,
               english: kai.english,
               tokens: kai.tokens,
               correction: kai.correction,
@@ -649,6 +690,77 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           </Link>{" "}
           to chat with this persona.
         </p>
+      )}
+
+      {/* Quest objectives panel */}
+      {questState && !questState.completed && (
+        <div className="border-b-2 border-indigo-ai/20 bg-indigo-ai/5 px-5 py-3 sm:px-8">
+          <div className="mx-auto max-w-2xl">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-extrabold text-indigo-ai">
+                {questState.quest.emoji} {questState.quest.title}
+              </p>
+              <span className="text-xs text-muted">
+                {questState.completedObjectiveIds.length} / {questState.quest.objectives.length}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {questState.quest.objectives.map((obj) => {
+                const done = questState.completedObjectiveIds.includes(obj.id);
+                return (
+                  <div
+                    key={obj.id}
+                    title={done ? obj.description : `Hint: ${obj.jpHint}`}
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                      done
+                        ? "bg-mint/20 text-mint line-through opacity-60"
+                        : "bg-indigo-ai/10 text-indigo-ai"
+                    }`}
+                  >
+                    <span>{done ? "✅" : "⬜"}</span>
+                    <span>{obj.description}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quest completion overlay */}
+      {questState?.completed && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-bg/90 backdrop-blur-sm">
+          <div className="mx-4 max-w-sm rounded-3xl border-2 border-indigo-ai/30 bg-card p-8 text-center shadow-xl">
+            <div className="text-5xl">🎉</div>
+            <h2 className="mt-4 font-display text-2xl font-extrabold">Quest Complete!</h2>
+            <p className="mt-2 text-sm text-muted">
+              <span className="font-jp">{questState.quest.jpTitle}</span>
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              You completed all {questState.quest.objectives.length} objectives.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  clearQuestForConv(groupId);
+                  setQuestState(null);
+                }}
+                className="rounded-full border-2 border-border px-5 py-2 text-sm font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+              >
+                Keep chatting
+              </button>
+              <button
+                onClick={() => {
+                  clearQuestForConv(groupId);
+                  router.push("/chat?tab=ai");
+                }}
+                className="btn-pop rounded-full bg-indigo-ai px-5 py-2 text-sm font-bold text-white"
+              >
+                Back to Quests
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* stream */}

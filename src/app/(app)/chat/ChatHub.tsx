@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MagnifyingGlass, PencilSimple } from "@phosphor-icons/react/dist/ssr";
 import FriendsPanel from "../groups/FriendsPanel";
 import PersonaManager from "./PersonaManager";
+import QuestLauncher from "./QuestLauncher";
 import NewChat from "./NewChat";
 import Avatar from "./Avatar";
 import Kai from "../../Kai";
@@ -34,9 +35,12 @@ type Persona = {
 
 export default function ChatHub() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [convos, setConvos] = useState<Conversation[] | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
-  const [tab, setTab] = useState<"chats" | "ai" | "friends">("chats");
+  const [tab, setTab] = useState<"chats" | "ai" | "friends">(
+    (searchParams.get("tab") as "chats" | "ai" | "friends") ?? "chats"
+  );
   const [composing, setComposing] = useState(false);
   const [pending, setPending] = useState(0);
   const [starting, setStarting] = useState(false);
@@ -110,12 +114,7 @@ export default function ChatHub() {
     { id: "friends", label: "Friends" },
   ];
 
-  // Quick-action suggestion chips shown at the top of the chat list (mobile-first UX)
-  const SUGGESTIONS = [
-    { label: "✨ New AI chat", action: () => setTab("ai") },
-    { label: "💬 New chat", action: () => setComposing(true) },
-    { label: "👥 Find friends", action: () => setTab("friends") },
-  ];
+
 
   const filteredConvos = useMemo(() => {
     if (!convos) return null;
@@ -190,18 +189,7 @@ export default function ChatHub() {
               {/* Kai hero shortcut — always pinned at the top */}
               <KaiHeroCard onStartChat={startPersonaChat} personas={personas} loading={starting} />
 
-              {/* Quick-action suggestion chips — always visible */}
-              <div className="flex gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s.label}
-                    onClick={s.action}
-                    className="shrink-0 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai active:scale-95"
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
+
 
               {/* search */}
               {convos && convos.length > 4 && (
@@ -267,11 +255,29 @@ export default function ChatHub() {
           )}
 
           {tab === "ai" && (
-            <PersonaManager
-              personas={personas}
-              onChange={loadPersonas}
-              onStartChat={startPersonaChat}
-            />
+            <div className="flex flex-col gap-6">
+              {/* AI-generated roleplay quests */}
+              <QuestLauncher
+                onStartQuest={(groupId) => {
+                  loadConvos();
+                  router.push(`/chat/c/${groupId}`);
+                }}
+              />
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-xs font-bold uppercase tracking-wider text-muted/60">Personas</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              {/* Custom persona grid */}
+              <PersonaManager
+                personas={personas}
+                onChange={loadPersonas}
+                onStartChat={startPersonaChat}
+              />
+            </div>
           )}
 
           {tab === "friends" && <FriendsPanel />}
