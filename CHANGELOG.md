@@ -12,6 +12,7 @@ All notable changes to KaiwaAI are documented in this file.
 - **New Chat Modal Polish** - Added backdrop blur overlay for a glassmorphism style effect.
 - **Conversation UI Polish** - Added typing labels naming the active sender, hidden character counters that only show when nearing limits, and visually colored left borders for quote replies.
 - **Review Page Pacing & Accents** - Capped the Daily Quest review sessions at 50 cards to avoid cognitive overload and updated card styling to fit the app's clean container theme.
+- **Custom Quest Prompts** - Added the ability to generate quests based on custom user-defined scenarios, alongside themed quests.
 
 ### Fixed
 
