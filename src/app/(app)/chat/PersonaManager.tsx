@@ -45,39 +45,44 @@ export default function PersonaManager({
           rename it however you like.
         </p>
 
-        <div className="mt-4 flex flex-col gap-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {personas.map((p) => (
             <div
               key={p.id}
-              className="flex items-center gap-3 rounded-2xl border-2 border-border px-3 py-2.5"
+              className="group/p relative flex flex-col justify-between rounded-2xl border-2 border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-sm"
             >
-              <button
-                onClick={() => onStartChat(p.id)}
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-              >
+              <div className="flex items-start gap-3">
                 <Avatar name={p.name} emoji={p.avatar} size={40} />
-                <span className="min-w-0">
-                  <span className="block truncate font-bold">{p.name}</span>
-                  <span className="block truncate text-xs text-muted">
-                    {p.blurb || "Tap to chat"}
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate font-display font-extrabold text-foreground">{p.name}</span>
+                  <span className="mt-0.5 block text-xs text-muted leading-relaxed line-clamp-2" title={p.blurb}>
+                    {p.blurb || "No description"}
                   </span>
-                </span>
-              </button>
-              {p.mine ? (
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-3">
+                {p.mine ? (
+                  <button
+                    onClick={() => {
+                      setEditing(p);
+                      setCreating(false);
+                    }}
+                    className="text-xs font-bold text-muted hover:text-indigo-ai cursor-pointer"
+                  >
+                    Edit ⚙️
+                  </button>
+                ) : (
+                  <span className="rounded-full bg-border/50 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted/80">
+                    Preset
+                  </span>
+                )}
                 <button
-                  onClick={() => {
-                    setEditing(p);
-                    setCreating(false);
-                  }}
-                  className="shrink-0 text-xs font-bold text-muted hover:text-indigo-ai"
+                  onClick={() => onStartChat(p.id)}
+                  className="rounded-full bg-indigo-ai/10 px-3 py-1 text-xs font-extrabold text-indigo-ai transition-colors hover:bg-indigo-ai hover:text-white cursor-pointer"
                 >
-                  Edit
+                  Chat →
                 </button>
-              ) : (
-                <span className="shrink-0 rounded-full bg-border/40 px-2 py-0.5 text-[10px] font-bold uppercase text-muted">
-                  Preset
-                </span>
-              )}
+              </div>
             </div>
           ))}
         </div>
