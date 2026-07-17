@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MagnifyingGlass, PencilSimple, Sparkle } from "@phosphor-icons/react/dist/ssr";
+import { MagnifyingGlass, PencilSimple } from "@phosphor-icons/react/dist/ssr";
 import FriendsPanel from "../groups/FriendsPanel";
 import PersonaManager from "./PersonaManager";
 import NewChat from "./NewChat";
 import Avatar from "./Avatar";
+import Kai from "../../Kai";
+import PageHeader from "../PageHeader";
 import { cacheKeys, readCache, writeCache, isUnread } from "@/lib/chat-cache";
 
 type Conversation = {
@@ -126,146 +128,165 @@ export default function ChatHub() {
     );
   }, [convos, query]);
 
+  const unreadCount = useMemo(() => {
+    if (!convos) return 0;
+    return convos.filter((c) =>
+      isUnread(c.id, c.lastAt, c.lastMessage?.fromMe ?? false)
+    ).length;
+  }, [convos]);
+
+  const dynamicSubtitle = useMemo(() => {
+    if (unreadCount > 0) {
+      return `You have ${unreadCount} unread conversation${unreadCount === 1 ? "" : "s"}`;
+    }
+    if (convos?.length === 0) {
+      return "Start your first conversation with Kai";
+    }
+    return "Talk to AI personas, friends, and groups";
+  }, [unreadCount, convos]);
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`relative rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
-              tab === t.id
-                ? "bg-indigo-ai text-white shadow-sm"
-                : "text-muted hover:bg-indigo-ai/10"
-            }`}
-          >
-            {t.label}
-            {t.id === "friends" && pending > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-sakura px-1 text-[10px] font-bold text-white">
-                {pending}
-              </span>
-            )}
-          </button>
-        ))}
-
-        {tab === "chats" && (
-          <button
-            onClick={() => setComposing(true)}
-            className="btn-pop ml-auto flex items-center gap-1.5 rounded-full bg-indigo-ai px-4 py-2 text-sm font-bold text-white"
-          >
-            <PencilSimple size={16} weight="bold" />
-            New chat
-          </button>
-        )}
-      </div>
-
-      {tab === "chats" && (
-        <div className="flex flex-col gap-3">
-          {/* Mobile suggestion chips — visible only when there are convos */}
-          {convos !== null && convos.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1 sm:hidden" style={{ scrollbarWidth: "none" }}>
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s.label}
-                  onClick={s.action}
-                  className="shrink-0 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai active:scale-95"
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* search */}
-          {convos && convos.length > 4 && (
-            <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
-              <MagnifyingGlass size={16} className="text-muted" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search conversations…"
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted/60"
-              />
-            </div>
-          )}
-
-          {convos === null && (
-            <div className="flex flex-col gap-2">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 rounded-2xl border-2 border-border px-4 py-3"
-                >
-                  <span className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-border/50" />
-                  <span className="flex-1 space-y-2">
-                    <span className="block h-3 w-1/3 animate-pulse rounded bg-border/50" />
-                    <span className="block h-2.5 w-2/3 animate-pulse rounded bg-border/40" />
+    <div className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title="Chat"
+        jp="会話"
+        subtitle={dynamicSubtitle}
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8">
+        <div className="mx-auto max-w-2xl flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`relative rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
+                  tab === t.id
+                    ? "bg-indigo-ai text-white shadow-sm"
+                    : "text-muted hover:bg-indigo-ai/10"
+                }`}
+              >
+                {t.label}
+                {t.id === "friends" && pending > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-sakura px-1 text-[10px] font-bold text-white">
+                    {pending}
                   </span>
-                </div>
-              ))}
-            </div>
-          )}
+                )}
+              </button>
+            ))}
 
-          {convos?.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-border px-6 py-12 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-indigo-ai/10">
-                <Sparkle size={26} weight="duotone" className="text-indigo-ai" />
-              </div>
-              <p className="mt-3 font-display font-bold">No conversations yet</p>
-              <p className="mt-1 text-sm text-muted">
-                Start chatting with an AI tutor, a friend, or a group.
-              </p>
+            {tab === "chats" && (
               <button
                 onClick={() => setComposing(true)}
-                className="btn-pop mt-4 rounded-full bg-indigo-ai px-5 py-2 text-sm font-bold text-white"
+                className="btn-pop ml-auto flex items-center gap-1.5 rounded-full bg-indigo-ai px-4 py-2 text-sm font-bold text-white"
               >
-                Start a chat
+                <PencilSimple size={16} weight="bold" />
+                New chat
               </button>
+            )}
+          </div>
+
+          {tab === "chats" && (
+            <div className="flex flex-col gap-3">
+              {/* Kai hero shortcut — always pinned at the top */}
+              <KaiHeroCard onStartChat={startPersonaChat} personas={personas} loading={starting} />
+
+              {/* Quick-action suggestion chips — always visible */}
+              <div className="flex gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s.label}
+                    onClick={s.action}
+                    className="shrink-0 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai active:scale-95"
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* search */}
+              {convos && convos.length > 4 && (
+                <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
+                  <MagnifyingGlass size={16} className="text-muted" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search conversations…"
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted/60"
+                  />
+                </div>
+              )}
+
+              {convos === null && (
+                <div className="flex flex-col gap-2">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 rounded-2xl border-2 border-border px-4 py-3"
+                    >
+                      <span className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-border/50" />
+                      <span className="flex-1 space-y-2">
+                        <span className="block h-3 w-1/3 animate-pulse rounded bg-border/50" />
+                        <span className="block h-2.5 w-2/3 animate-pulse rounded bg-border/40" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {convos?.length === 0 && (
+                <div className="rounded-3xl border-2 border-dashed border-border px-6 py-8 text-center">
+                  <p className="font-display font-bold text-muted">No other conversations yet</p>
+                  <p className="mt-1 text-sm text-muted">
+                    Start chatting with a friend or create a group.
+                  </p>
+                </div>
+              )}
+
+              {filteredConvos?.map((c) => (
+                <ConversationRow 
+                  key={c.id} 
+                  convo={c} 
+                  onHide={(id) => {
+                    // Optimistically remove from list
+                    setConvos((convos) => convos?.filter((conv) => conv.id !== id) ?? null);
+                    // Hide on server
+                    fetch(`/api/groups/${id}/hide`, { method: "POST" }).catch(() => {
+                      // If failed, reload to restore
+                      loadConvos();
+                    });
+                  }}
+                />
+              ))}
+
+              {filteredConvos?.length === 0 && convos && convos.length > 0 && (
+                <p className="py-6 text-center text-sm text-muted">
+                  No conversations match &ldquo;{query}&rdquo;.
+                </p>
+              )}
             </div>
           )}
 
-          {filteredConvos?.map((c) => (
-            <ConversationRow 
-              key={c.id} 
-              convo={c} 
-              onHide={(id) => {
-                // Optimistically remove from list
-                setConvos((convos) => convos?.filter((conv) => conv.id !== id) ?? null);
-                // Hide on server
-                fetch(`/api/groups/${id}/hide`, { method: "POST" }).catch(() => {
-                  // If failed, reload to restore
-                  loadConvos();
-                });
+          {tab === "ai" && (
+            <PersonaManager
+              personas={personas}
+              onChange={loadPersonas}
+              onStartChat={startPersonaChat}
+            />
+          )}
+
+          {tab === "friends" && <FriendsPanel />}
+
+          {composing && (
+            <NewChat
+              onClose={() => setComposing(false)}
+              onCreated={(id) => {
+                setComposing(false);
+                router.push(`/chat/c/${id}`);
               }}
             />
-          ))}
-
-          {filteredConvos?.length === 0 && convos && convos.length > 0 && (
-            <p className="py-6 text-center text-sm text-muted">
-              No conversations match &ldquo;{query}&rdquo;.
-            </p>
           )}
         </div>
-      )}
-
-      {tab === "ai" && (
-        <PersonaManager
-          personas={personas}
-          onChange={loadPersonas}
-          onStartChat={startPersonaChat}
-        />
-      )}
-
-      {tab === "friends" && <FriendsPanel />}
-
-      {composing && (
-        <NewChat
-          onClose={() => setComposing(false)}
-          onCreated={(id) => {
-            setComposing(false);
-            router.push(`/chat/c/${id}`);
-          }}
-        />
-      )}
+      </div>
     </div>
   );
 }
@@ -418,17 +439,69 @@ function ConversationRow({
           <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border-2 border-border bg-card p-1 shadow-xl">
             <button
               onClick={handleHide}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-sakura/5"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-border/40"
             >
-              <span className="text-base">🗑️</span>
+              <span className="text-base">🙈</span>
               <span>
-                <span className="block font-bold text-sakura">Delete for me</span>
-                <span className="block text-xs text-muted">Reappears if they message you</span>
+                <span className="block font-bold text-foreground">Hide conversation</span>
+                <span className="block text-xs text-muted">Reappears if someone messages you</span>
               </span>
             </button>
           </div>
         )}
       </div>
     </Link>
+  );
+}
+
+/** Hero shortcut to the Kai persona — always pinned at the top of the chats list. */
+function KaiHeroCard({
+  onStartChat,
+  personas,
+  loading,
+}: {
+  onStartChat: (id: string) => void;
+  personas: { id: string; name: string; builtin: boolean }[];
+  loading: boolean;
+}) {
+  const kaiPersona = personas.find(
+    (p) => p.builtin && p.name.trim().toLowerCase() === "kai"
+  );
+
+  if (!kaiPersona) {
+    // Personas not yet loaded — show a skeleton
+    return (
+      <div className="flex animate-pulse items-center gap-4 rounded-3xl border-2 border-border bg-card p-4 shadow-sm">
+        <span className="h-14 w-14 shrink-0 rounded-full bg-border/50" />
+        <span className="flex-1 space-y-2">
+          <span className="block h-4 w-24 rounded bg-border/50" />
+          <span className="block h-3 w-40 rounded bg-border/40" />
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => onStartChat(kaiPersona.id)}
+      disabled={loading}
+      className="flex w-full items-center gap-4 rounded-3xl border-2 border-indigo-ai/25 bg-gradient-to-br from-indigo-ai/8 to-sakura/5 p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-ai/50 hover:shadow-md active:scale-[0.99] disabled:opacity-70"
+    >
+      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 ring-2 ring-indigo-ai/20">
+        <Kai size={32} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="font-display text-base font-extrabold text-foreground">Kai</span>
+          <span className="rounded-full bg-indigo-ai/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-ai">
+            AI Tutor
+          </span>
+        </span>
+        <span className="mt-0.5 block truncate text-xs text-muted">
+          Your Japanese companion — tap to start chatting
+        </span>
+      </span>
+      <span className="shrink-0 text-lg text-indigo-ai/40">›</span>
+    </button>
   );
 }

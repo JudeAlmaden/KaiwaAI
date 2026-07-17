@@ -2,6 +2,22 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.2.4] - 2026-07-18
+
+### Added
+
+- **Pinned Kai Hero Card** - Pinned a branded quick-access hero card at the top of the Chats list for one-tap conversations with Kai.
+- **Dynamic Page Subtitle** - Added a dynamic subtitle in the page header that displays unread conversation counts or guides new users.
+- **AI Persona Grid** - Redesigned the persona list into a responsive, premium 2-column grid.
+- **New Chat Modal Polish** - Added backdrop blur overlay for a glassmorphism style effect.
+- **Conversation UI Polish** - Added typing labels naming the active sender, hidden character counters that only show when nearing limits, and visually colored left borders for quote replies.
+- **Review Page Pacing & Accents** - Capped the Daily Quest review sessions at 50 cards to avoid cognitive overload and updated card styling to fit the app's clean container theme.
+
+### Fixed
+
+- **TS Import path resolution** - Fixed the relative import path of `Kai` in `ChatHub.tsx`.
+- **Linter warning/errors** - Fixed let vs const reassignment errors and removed unused `Sparkle` icon import.
+
 ## [1.2.3] - 2026-07-16
 
 ### Changed

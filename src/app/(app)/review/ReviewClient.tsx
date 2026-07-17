@@ -11,6 +11,7 @@ import KanjiBreakdown from "../chat/KanjiBreakdown";
 import { formLabel } from "@/lib/form-label";
 import { scheduleReviewNotifications } from "@/lib/review-notifications";
 import Furigana from "./Furigana";
+import Petals from "../../Petals";
 
 type Card = {
   id: string;
@@ -58,6 +59,8 @@ type Setup = {
   direction: CardDirection;
   practice: boolean; // if true, don't update SRS/mastery
   limit: number;
+  isContinuous: boolean;
+  activeLimit: number | "all";
 };
 
 export default function ReviewClient() {
@@ -67,12 +70,17 @@ export default function ReviewClient() {
     studyMode: "due", 
     direction: "jp-to-en",
     practice: false,
-    limit: 20 
+    limit: 20,
+    isContinuous: false,
+    activeLimit: 5
   });
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [customSessionExpanded, setCustomSessionExpanded] = useState(false);
 
-  const [queue, setQueue] = useState<Card[]>([]);
+  const [activePool, setActivePool] = useState<Card[]>([]);
+  const [incomingQueue, setIncomingQueue] = useState<Card[]>([]);
+  const [postedCardIds, setPostedCardIds] = useState<Set<string>>(new Set());
   const [total, setTotal] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [tally, setTally] = useState({ again: 0, good: 0 });
@@ -104,8 +112,8 @@ export default function ReviewClient() {
         body: JSON.stringify({ mnemonic }),
       });
 
-      // Update the current card in queue
-      setQueue(prev => {
+      // Update the current card in activePool
+      setActivePool(prev => {
         const updated = [...prev];
         if (updated[0]) {
           updated[0] = { ...updated[0], mnemonic };
@@ -129,7 +137,7 @@ export default function ReviewClient() {
   }, []);
 
   const handleShowHint = useCallback(async () => {
-    const card = queue[0];
+    const card = activePool[0];
     if (!card) return;
     
     // Only for kanji cards
@@ -150,7 +158,7 @@ export default function ReviewClient() {
       false
     );
     setShowHint(true);
-  }, [queue, setup.reviewType, handleGenerateMnemonic]);
+  }, [activePool, setup.reviewType, handleGenerateMnemonic]);
 
   useEffect(() => {
     const endpoint = `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review?studyMode=due&limit=200`;
@@ -159,6 +167,39 @@ export default function ReviewClient() {
       .then((d) => setDueCount(d.cards?.length ?? 0))
       .catch(() => setDueCount(0));
   }, [setup.reviewType]);
+
+  const fetchMoreCards = useCallback(async () => {
+    const endpoint = setup.reviewType === "mixed" 
+      ? "/api/review/mixed"
+      : `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
+      
+    const params = new URLSearchParams({ 
+      studyMode: setup.studyMode, 
+      limit: "100"
+    });
+    if (setup.practice) params.set("practice", "true");
+    
+    try {
+      const res = await fetch(`${endpoint}?${params}`);
+      const d = await res.json();
+      const newCards: Card[] = d.cards ?? [];
+      if (newCards.length === 0) return [];
+      
+      const existingIds = new Set([
+        ...activePool.map((c) => c.id),
+        ...postedCardIds,
+      ]);
+      const filtered = newCards.filter((c) => !existingIds.has(c.id));
+      
+      const shuffled = setup.direction === "mixed" 
+        ? filtered.map(c => ({ ...c, _dir: Math.random() < 0.5 ? "jp-to-en" : "en-to-jp" as const }))
+        : filtered.map(c => ({ ...c, _dir: setup.direction as "jp-to-en" | "en-to-jp" }));
+        
+      return shuffled;
+    } catch {
+      return [];
+    }
+  }, [setup, activePool, postedCardIds]);
 
   async function start(custom?: Partial<Setup>) {
     const s = { ...setup, ...custom };
@@ -177,7 +218,8 @@ export default function ReviewClient() {
     const d = await res.json();
     const cards: Card[] = d.cards ?? [];
     if (cards.length === 0) {
-      setQueue([]);
+      setActivePool([]);
+      setIncomingQueue([]);
       setPhase("done");
       return;
     }
@@ -187,7 +229,13 @@ export default function ReviewClient() {
       ? cards.map(c => ({ ...c, _dir: Math.random() < 0.5 ? "jp-to-en" : "en-to-jp" as const }))
       : cards.map(c => ({ ...c, _dir: s.direction as "jp-to-en" | "en-to-jp" }));
     
-    setQueue(shuffled);
+    const activeLimitNum = s.activeLimit === "all" ? shuffled.length : s.activeLimit;
+    const initialActive = shuffled.slice(0, activeLimitNum);
+    const initialIncoming = shuffled.slice(activeLimitNum);
+
+    setActivePool(initialActive);
+    setIncomingQueue(initialIncoming);
+    setPostedCardIds(new Set());
     setTotal(shuffled.length);
     setTally({ again: 0, good: 0 });
     setFlipped(false);
@@ -197,12 +245,13 @@ export default function ReviewClient() {
 
   const grade = useCallback(
     async (g: number) => {
-      const card = queue[0];
+      const card = activePool[0];
       if (!card) return;
 
-      // Only update SRS if not in practice mode
-      if (!setup.practice) {
-        // Determine which endpoint based on card type (for mixed mode) or setup
+      const isFirstAttempt = !postedCardIds.has(card.id);
+
+      // Only update SRS if not in practice mode and it's first attempt
+      if (!setup.practice && isFirstAttempt) {
         const cardType = card.type || setup.reviewType;
         const endpoint = cardType === "kanji" 
           ? "/api/kanji/review"
@@ -215,18 +264,70 @@ export default function ReviewClient() {
         }).catch(() => {});
       }
 
-      setTally((t) => ({
-        again: t.again + (g === 0 ? 1 : 0),
-        good: t.good + (g > 0 ? 1 : 0),
-      }));
+      if (isFirstAttempt) {
+        setTally((t) => ({
+          again: t.again + (g === 0 ? 1 : 0),
+          good: t.good + (g > 0 ? 1 : 0),
+        }));
+        setPostedCardIds((prev) => {
+          const next = new Set(prev);
+          next.add(card.id);
+          return next;
+        });
+      }
 
-      const rest = queue.slice(1);
-      setQueue(rest);
+      const nextActive = [...activePool];
+      const nextIncoming = [...incomingQueue];
+
+      if (g > 0) {
+        // Correct/passed: remove card from active pool
+        nextActive.shift();
+        
+        // Refill from incoming queue if possible
+        if (nextIncoming.length > 0) {
+          const newCard = nextIncoming.shift();
+          if (newCard) {
+            nextActive.push(newCard);
+          }
+          setActivePool(nextActive);
+          setIncomingQueue(nextIncoming);
+        } else if (setup.isContinuous) {
+          // If in continuous mode and incoming is empty, fetch more
+          setActivePool(nextActive);
+          setIncomingQueue([]);
+          
+          fetchMoreCards().then((more) => {
+            if (more.length > 0) {
+              const firstCard = more[0];
+              setIncomingQueue(more.slice(1));
+              setActivePool((currentActive) => [...currentActive, firstCard]);
+              setTotal((t) => t + more.length);
+            } else {
+              if (nextActive.length === 0) {
+                setPhase("done");
+              }
+            }
+          });
+        } else {
+          setActivePool(nextActive);
+          setIncomingQueue([]);
+          if (nextActive.length === 0) {
+            setPhase("done");
+          }
+        }
+      } else {
+        // Failed (g === 0): keep in active pool, but move it to the end
+        const failedCard = nextActive.shift();
+        if (failedCard) {
+          nextActive.push(failedCard);
+        }
+        setActivePool(nextActive);
+      }
+
       setFlipped(false);
       setShowHint(false); // Reset hint when moving to next card
-      if (rest.length === 0) setPhase("done");
     },
-    [queue, setup.practice, setup.reviewType]
+    [activePool, incomingQueue, postedCardIds, setup, fetchMoreCards]
   );
 
   // keyboard shortcuts during a session
@@ -262,164 +363,254 @@ export default function ReviewClient() {
   if (phase === "setup") {
     return (
       <div className="flex flex-1 flex-col">
-        <PageHeader title="Review" jp="復習" subtitle="Build a session, or review what&apos;s due." />
-        <div className="mx-auto w-full max-w-lg px-5 py-6 sm:px-8">
-          <button
-            onClick={() => start({ studyMode: "due", practice: false, limit: 200 })}
-            disabled={dueCount === 0}
-            className="flex w-full items-center justify-between rounded-3xl border-2 border-indigo-ai bg-indigo-ai/5 px-5 py-4 text-left transition-colors hover:bg-indigo-ai/10 disabled:opacity-50"
-          >
-            <span>
-              <span className="font-display text-lg font-extrabold">Due today</span>
-              <span className="block text-sm text-muted">
-                {dueCount === null
-                  ? "Checking…"
-                  : dueCount === 0
-                    ? "Nothing due right now"
-                    : `${dueCount} card${dueCount === 1 ? "" : "s"} ready`}
-              </span>
-            </span>
-            <span className="text-2xl">🔁</span>
-          </button>
-
-          <div className="mt-6 rounded-3xl border-2 border-border bg-card p-5">
-            <h2 className="font-display text-base font-bold">Custom session</h2>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Review Type
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                active={setup.reviewType === "vocabulary"}
-                onClick={() => setSetup((s) => ({ ...s, reviewType: "vocabulary" }))}
-              >
-                Vocabulary
-              </Chip>
-              <Chip
-                active={setup.reviewType === "kanji"}
-                onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
-              >
-                Kanji
-              </Chip>
-              <Chip
-                active={setup.reviewType === "mixed"}
-                onClick={() => setSetup((s) => ({ ...s, reviewType: "mixed" }))}
-              >
-                Mixed
-              </Chip>
-            </div>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Card Direction
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                active={setup.direction === "jp-to-en"}
-                onClick={() => setSetup((s) => ({ ...s, direction: "jp-to-en" }))}
-              >
-                Japanese → English
-              </Chip>
-              <Chip
-                active={setup.direction === "en-to-jp"}
-                onClick={() => setSetup((s) => ({ ...s, direction: "en-to-jp" }))}
-              >
-                English → Japanese
-              </Chip>
-              <Chip
-                active={setup.direction === "mixed"}
-                onClick={() => setSetup((s) => ({ ...s, direction: "mixed" }))}
-              >
-                Mixed
-              </Chip>
-            </div>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Study Focus
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                active={setup.studyMode === "due"}
-                onClick={() => setSetup((s) => ({ ...s, studyMode: "due" }))}
-              >
-                Due now
-              </Chip>
-              <Chip
-                active={setup.studyMode === "all"}
-                onClick={() => setSetup((s) => ({ ...s, studyMode: "all" }))}
-              >
-                Study ahead
-              </Chip>
-              <Chip
-                active={setup.studyMode === "recent"}
-                onClick={() => setSetup((s) => ({ ...s, studyMode: "recent" }))}
-              >
-                Recent
-              </Chip>
-              <Chip
-                active={setup.studyMode === "struggling"}
-                onClick={() => setSetup((s) => ({ ...s, studyMode: "struggling" }))}
-              >
-                Struggling
-              </Chip>
-              <Chip
-                active={setup.studyMode === "leeches"}
-                onClick={() => setSetup((s) => ({ ...s, studyMode: "leeches" }))}
-              >
-                Leeches
-              </Chip>
-            </div>
-
-            <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-              Session Size
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[10, 20, 50, 100].map((n) => (
-                <Chip
-                  key={n}
-                  active={setup.limit === n}
-                  onClick={() => setSetup((s) => ({ ...s, limit: n }))}
-                >
-                  {n}
-                </Chip>
-              ))}
-            </div>
-
+        <PageHeader title="Review" jp="復習" subtitle="Choose a quest to begin your session." />
+        <div className="mx-auto w-full max-w-lg px-5 py-6 sm:px-8 space-y-6">
+          
+          {/* Gamified Play Modes */}
+          <div className="space-y-4">
+            <h2 className="font-display text-xs font-bold uppercase tracking-wider text-muted/80">Select Quest Mode</h2>
+            
+            {/* Card 1: Daily Quest */}
             <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="mt-4 text-sm font-semibold text-indigo-ai hover:underline"
+              onClick={() => start({ studyMode: "due", limit: 50, isContinuous: false, reviewType: "mixed", activeLimit: 5 })}
+              disabled={dueCount === 0}
+              className="flex w-full text-left gap-4 items-center justify-between rounded-3xl border-2 border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md hover:border-indigo-ai/40 hover:bg-indigo-ai/5 cursor-pointer disabled:opacity-50 disabled:-translate-y-0 disabled:shadow-none shadow-sm"
             >
-              {showAdvanced ? "Hide" : "Show"} advanced options
+              <div className="flex-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-indigo-ai/10 text-lg">⚔️</span>
+                  <span className="font-display text-base font-extrabold text-foreground">Daily Quest</span>
+                </div>
+                <p className="mt-2 text-xs text-muted leading-relaxed">
+                  Clear your daily review backlog. Up to 50 cards per session.
+                </p>
+                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-indigo-ai/10 text-indigo-ai">
+                  {dueCount === null
+                    ? "Checking due cards…"
+                    : dueCount === 0
+                      ? "All caught up! ✓"
+                      : dueCount > 50
+                        ? `50+ cards ready`
+                        : `${dueCount} card${dueCount === 1 ? "" : "s"} ready`}
+                </span>
+              </div>
+              <span className="text-muted/40 select-none text-lg">›</span>
             </button>
 
-            {showAdvanced && (
-              <>
-                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-                  Mode
+            {/* Card 2: The Gauntlet */}
+            <button
+              onClick={() => start({ studyMode: "struggling", limit: 50, isContinuous: false, reviewType: "mixed", activeLimit: 5 })}
+              className="flex w-full text-left gap-4 items-center justify-between rounded-3xl border-2 border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md hover:border-sakura/40 hover:bg-sakura/5 cursor-pointer shadow-sm"
+            >
+              <div className="flex-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-sakura/10 text-lg">🔥</span>
+                  <span className="font-display text-base font-extrabold text-foreground">The Gauntlet</span>
+                </div>
+                <p className="mt-2 text-xs text-muted leading-relaxed">
+                  Target your weakest cards and leeches to eliminate mistakes.
+                </p>
+                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-sakura/10 text-sakura">
+                  Struggling items
+                </span>
+              </div>
+              <span className="text-muted/40 select-none text-lg">›</span>
+            </button>
+
+            {/* Card 3: Endless Zen */}
+            <button
+              onClick={() => start({ studyMode: "all", limit: 200, isContinuous: true, reviewType: "mixed", activeLimit: 5 })}
+              className="flex w-full text-left gap-4 items-center justify-between rounded-3xl border-2 border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md hover:border-mint/40 hover:bg-mint/5 cursor-pointer shadow-sm"
+            >
+              <div className="flex-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-mint/10 text-lg">🌀</span>
+                  <span className="font-display text-base font-extrabold text-foreground">Endless Zen</span>
+                </div>
+                <p className="mt-2 text-xs text-muted leading-relaxed">
+                  No limits. Study ahead and review cards continuously at your own pace.
+                </p>
+                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-mint/10 text-mint">
+                  Continuous mode
+                </span>
+              </div>
+              <span className="text-muted/40 select-none text-lg">›</span>
+            </button>
+          </div>
+
+          {/* Collapsible Advanced Customizer */}
+          <div className="mt-4 flex flex-col items-center">
+            <button
+              onClick={() => setCustomSessionExpanded(!customSessionExpanded)}
+              className="inline-flex items-center gap-2 rounded-2xl border-2 border-border bg-card px-5 py-2.5 text-xs font-bold text-muted transition-all hover:border-indigo-ai hover:text-indigo-ai active:scale-95 cursor-pointer shadow-sm font-display"
+            >
+              <span>{customSessionExpanded ? "Hide Custom Session ⚙️" : "Custom Session ⚙️"}</span>
+            </button>
+
+            {customSessionExpanded && (
+              <div className="mt-5 w-full rounded-3xl border-2 border-border bg-card p-5 shadow-sm transition-all duration-300 ease-out">
+                <h3 className="font-display text-base font-bold text-foreground">Custom Session Builder</h3>
+                <p className="text-xs text-muted mt-0.5">Define your own review rules and limits.</p>
+
+                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
+                  Review Type
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Chip
-                    active={!setup.practice}
-                    onClick={() => setSetup((s) => ({ ...s, practice: false }))}
+                    active={setup.reviewType === "vocabulary"}
+                    onClick={() => setSetup((s) => ({ ...s, reviewType: "vocabulary" }))}
                   >
-                    Review
+                    Vocabulary
                   </Chip>
                   <Chip
-                    active={setup.practice}
-                    onClick={() => setSetup((s) => ({ ...s, practice: true }))}
+                    active={setup.reviewType === "kanji"}
+                    onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
                   >
-                    Practice only
+                    Kanji
+                  </Chip>
+                  <Chip
+                    active={setup.reviewType === "mixed"}
+                    onClick={() => setSetup((s) => ({ ...s, reviewType: "mixed" }))}
+                  >
+                    Mixed
                   </Chip>
                 </div>
-                <p className="mt-1 text-xs text-muted">
-                  Practice mode won&apos;t affect your mastery scores
-                </p>
-              </>
-            )}
 
-            <PopButton onClick={() => start()} size="md" className="mt-6 w-full">
-              Start session
-            </PopButton>
+                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
+                  Card Direction
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Chip
+                    active={setup.direction === "jp-to-en"}
+                    onClick={() => setSetup((s) => ({ ...s, direction: "jp-to-en" }))}
+                  >
+                    Japanese → English
+                  </Chip>
+                  <Chip
+                    active={setup.direction === "en-to-jp"}
+                    onClick={() => setSetup((s) => ({ ...s, direction: "en-to-jp" }))}
+                  >
+                    English → Japanese
+                  </Chip>
+                  <Chip
+                    active={setup.direction === "mixed"}
+                    onClick={() => setSetup((s) => ({ ...s, direction: "mixed" }))}
+                  >
+                    Mixed
+                  </Chip>
+                </div>
+
+                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
+                  Study Focus
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Chip
+                    active={setup.studyMode === "due"}
+                    onClick={() => setSetup((s) => ({ ...s, studyMode: "due" }))}
+                  >
+                    Due now
+                  </Chip>
+                  <Chip
+                    active={setup.studyMode === "all"}
+                    onClick={() => setSetup((s) => ({ ...s, studyMode: "all" }))}
+                  >
+                    Study ahead
+                  </Chip>
+                  <Chip
+                    active={setup.studyMode === "recent"}
+                    onClick={() => setSetup((s) => ({ ...s, studyMode: "recent" }))}
+                  >
+                    Recent
+                  </Chip>
+                  <Chip
+                    active={setup.studyMode === "struggling"}
+                    onClick={() => setSetup((s) => ({ ...s, studyMode: "struggling" }))}
+                  >
+                    Struggling
+                  </Chip>
+                  <Chip
+                    active={setup.studyMode === "leeches"}
+                    onClick={() => setSetup((s) => ({ ...s, studyMode: "leeches" }))}
+                  >
+                    Leeches
+                  </Chip>
+                </div>
+
+                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
+                  Session Size
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[10, 20, 50].map((n) => (
+                    <Chip
+                      key={n}
+                      active={!setup.isContinuous && setup.limit === n}
+                      onClick={() => setSetup((s) => ({ ...s, limit: n, isContinuous: false }))}
+                    >
+                      {n}
+                    </Chip>
+                  ))}
+                  <Chip
+                    active={setup.isContinuous}
+                    onClick={() => setSetup((s) => ({ ...s, limit: 200, isContinuous: true }))}
+                  >
+                    Continuous
+                  </Chip>
+                </div>
+
+                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
+                  Active Working Pool
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[3, 5, 10, "all"].map((n) => (
+                    <Chip
+                      key={n}
+                      active={setup.activeLimit === n}
+                      onClick={() => setSetup((s) => ({ ...s, activeLimit: n as number | "all" }))}
+                    >
+                      {n === "all" ? "All (Classic)" : `${n} cards`}
+                    </Chip>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="mt-4 text-xs font-semibold text-indigo-soft hover:text-indigo-ai hover:underline cursor-pointer"
+                >
+                  {showAdvanced ? "Hide" : "Show"} advanced options
+                </button>
+
+                {showAdvanced && (
+                  <>
+                    <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
+                      Mode
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Chip
+                        active={!setup.practice}
+                        onClick={() => setSetup((s) => ({ ...s, practice: false }))}
+                      >
+                        Review
+                      </Chip>
+                      <Chip
+                        active={setup.practice}
+                        onClick={() => setSetup((s) => ({ ...s, practice: true }))}
+                      >
+                        Practice only
+                      </Chip>
+                    </div>
+                    <p className="mt-1 text-[10px] text-muted">
+                      Practice mode won&apos;t affect your mastery scores
+                    </p>
+                  </>
+                )}
+
+                <PopButton onClick={() => start()} size="md" className="mt-6 w-full font-display">
+                  Start Custom Session
+                </PopButton>
+              </div>
+            )}
           </div>
+
         </div>
       </div>
     );
@@ -428,27 +619,88 @@ export default function ReviewClient() {
   // ── DONE ───────────────────────────────────────────────────────────────
   if (phase === "done") {
     const reviewed = tally.again + tally.good;
+    const accuracy = reviewed > 0 ? Math.round((tally.good / reviewed) * 100) : 0;
     
+    const radius = 40;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (accuracy / 100) * circumference;
+
     return (
-      <div className="flex flex-1 flex-col">
-        <PageHeader title="Review" jp="復習" />
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+      <div className="flex flex-1 flex-col relative overflow-hidden">
+        {/* Celebrating drifting sakura petals in background */}
+        {reviewed > 0 && <Petals />}
+        
+        <PageHeader title="Review" jp="復習" subtitle="Review complete! Here's your performance." />
+        
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-8 text-center z-10">
           <Kai size={80} />
-          <h2 className="mt-4 font-display text-xl font-extrabold">
+          <h2 className="mt-4 font-display text-2xl font-extrabold text-foreground">
             {reviewed > 0 ? "Nice work! 🎉" : "Nothing to review"}
           </h2>
-          {reviewed > 0 && (
-            <p className="mt-1 text-sm text-muted">
-              {reviewed} reviewed · {tally.good} solid · {tally.again} to revisit
+          
+          {reviewed > 0 ? (
+            <>
+              {/* Radial Accuracy Ring */}
+              <div className="relative flex items-center justify-center h-28 w-28 mt-6">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="56"
+                    cy="56"
+                    r={radius}
+                    className="stroke-border"
+                    strokeWidth="8"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="56"
+                    cy="56"
+                    r={radius}
+                    className="stroke-indigo-ai transition-all duration-1000 ease-out"
+                    strokeWidth="8"
+                    fill="transparent"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute flex flex-col items-center justify-center">
+                  <span className="text-2xl font-extrabold text-foreground">{accuracy}%</span>
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-muted">Accuracy</span>
+                </div>
+              </div>
+
+              {/* Stats Cards Dashboard */}
+              <div className="grid grid-cols-3 gap-3 w-full max-w-md mt-6">
+                <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-4 text-center shadow-sm hover:scale-[1.02] transition-transform">
+                  <span className="text-xl">📚</span>
+                  <span className="block text-lg font-extrabold text-foreground mt-1">{reviewed}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Reviewed</span>
+                </div>
+                <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-4 text-center shadow-sm hover:scale-[1.02] transition-transform">
+                  <span className="text-xl">✅</span>
+                  <span className="block text-lg font-extrabold text-mint mt-1">{tally.good}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Solid</span>
+                </div>
+                <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-4 text-center shadow-sm hover:scale-[1.02] transition-transform">
+                  <span className="text-xl">🔁</span>
+                  <span className="block text-lg font-extrabold text-sakura mt-1">{tally.again}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">To Revisit</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="mt-1.5 text-sm text-muted">
+              You have no pending cards left to review right now.
             </p>
           )}
-          <div className="mt-6 flex gap-3">
-            <PopButton onClick={() => setPhase("setup")} size="md">
+
+          <div className="mt-8 flex gap-4 w-full max-w-xs">
+            <PopButton onClick={() => setPhase("setup")} size="md" className="flex-1">
               New session
             </PopButton>
             <Link
               href="/chat"
-              className="inline-flex h-12 items-center rounded-2xl border-2 border-border px-6 text-sm font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+              className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl border-2 border-border bg-card/40 backdrop-blur-sm px-6 text-sm font-bold text-muted transition-all hover:border-indigo-ai hover:text-indigo-ai"
             >
               Back to chat
             </Link>
@@ -459,11 +711,11 @@ export default function ReviewClient() {
   }
 
   // ── SESSION ──────────────────────────────────────────────────────────────
-  const card = queue[0] as Card & { _dir?: "jp-to-en" | "en-to-jp" };
+  const card = activePool[0] as Card & { _dir?: "jp-to-en" | "en-to-jp" };
   // Guard against a transient empty queue between the last grade and the
   // phase flip to "done" — rendering the card below assumes one exists.
   if (!card) return null;
-  const doneCount = total - queue.length;
+  const doneCount = total - (activePool.length + incomingQueue.length);
   const pct = total ? (doneCount / total) * 100 : 0;
 
   // Determine if this is vocabulary or kanji (for mixed mode)
@@ -499,8 +751,15 @@ export default function ReviewClient() {
       <div className="px-5 pt-4 sm:px-8">
         <div className="mx-auto flex max-w-md items-center gap-3">
           <button
-            onClick={() => setPhase("setup")}
+            onClick={() => {
+              if (tally.again + tally.good > 0) {
+                setPhase("done");
+              } else {
+                setPhase("setup");
+              }
+            }}
             className="text-sm font-bold text-muted hover:text-indigo-ai"
+            title="End session and see summary"
           >
             ✕
           </button>
@@ -511,137 +770,90 @@ export default function ReviewClient() {
             />
           </div>
           <span className="text-xs font-bold tabular-nums text-muted">
-            {doneCount}/{total}
+            {setup.isContinuous ? `${doneCount} reviewed` : `${doneCount}/${total}`}
           </span>
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6">
-        <div
-          onClick={() => setFlipped((f) => !f)}
-          className="relative flex min-h-[280px] w-full max-w-md cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-border bg-card p-6 text-center shadow-md transition-all hover:border-indigo-ai/30 hover:shadow-lg active:scale-[0.99] sm:min-h-[300px]"
-        >
-          {canSpeak() && isJpToEn && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                speakJa(backContent.japanese || "");
-              }}
-              className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai"
-              title="Hear it"
-            >
-              🔊
-            </button>
-          )}
-          <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
-            {isJpToEn && isVocab && card.word && card.reading ? (
-              <Furigana word={card.word} reading={card.reading} className="text-5xl" />
-            ) : (
-              frontContent
-            )}
-          </span>
-          {isVocab && formLabel(card.formType) && (
-            <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai">
-              {formLabel(card.formType)}
-            </p>
-          )}
-          {!isVocab && !flipped && card.radicals && card.radicals.length > 0 && (
-            <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Radicals</p>
-              <div className="mt-2 flex flex-wrap justify-center gap-2">
-                {card.radicals.map((radical, i) => (
-                  <button
-                    key={i}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(`/kanji?search=${encodeURIComponent(radical)}`, '_blank');
-                    }}
-                    className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
-                    title={`Search for ${radical}`}
-                  >
-                    {radical}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {flipped ? (
-            <div className="mt-5 w-full" onClick={(e) => e.stopPropagation()}>
-              {isJpToEn ? (
-                <>
-                  {backContent.reading && (
-                    <p className="font-jp text-xl text-indigo-ai">{backContent.reading}</p>
-                  )}
-                  {backContent.romaji && (
-                    <p className="text-sm text-muted">{backContent.romaji}</p>
-                  )}
-                  <p className="mt-2 text-lg font-semibold">{backContent.english}</p>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-muted">
-                    {backContent.meta}
-                  </p>
-                  {isVocab && formLabel(card.formType) && card.dictionary && (
-                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
-                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-                    </p>
-                  )}
-                  {isVocab && card.word && <KanjiBreakdown word={card.word} />}
-                  {!isVocab && card.radicals && card.radicals.length > 0 && (
-                    <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Radicals</p>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {card.radicals.map((radical, i) => (
-                          <button
-                            key={i}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Try to navigate to the radical as a kanji
-                              window.open(`/kanji/${encodeURIComponent(radical)}`, '_blank');
-                            }}
-                            className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
-                            title={`Open ${radical}`}
-                          >
-                            {radical}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {!isVocab && backContent.mnemonic && (
-                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
-                      <p className="text-xs font-bold uppercase tracking-wide text-mint">
-                        💡 Mnemonic
-                      </p>
-                      <p className="mt-1 text-sm text-foreground">{backContent.mnemonic}</p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="font-jp text-4xl font-bold text-indigo-ai">
-                    {backContent.japanese}
-                  </p>
-                  {backContent.reading && (
-                    <p className="mt-2 text-sm text-muted">{backContent.reading}</p>
-                  )}
-                  {isVocab && formLabel(card.formType) && card.dictionary && (
-                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
-                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-                    </p>
-                  )}
-                  {!isVocab && backContent.mnemonic && (
-                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
-                      <p className="text-xs font-bold uppercase tracking-wide text-mint">
-                        💡 Mnemonic
-                      </p>
-                      <p className="mt-1 text-sm text-foreground">{backContent.mnemonic}</p>
-                    </div>
-                  )}
-                </>
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-4">
+        {/* Active memory pool indicators */}
+        {setup.activeLimit !== "all" && (
+          <div className="flex items-center justify-center gap-2">
+            {activePool.map((c, idx) => {
+              const isCurrent = idx === 0;
+              const hasBeenAttempted = postedCardIds.has(c.id);
+              return (
+                <div
+                  key={c.id}
+                  className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
+                    isCurrent
+                      ? "bg-indigo-ai ring-4 ring-indigo-ai/20 scale-125"
+                      : hasBeenAttempted
+                        ? "bg-sakura animate-pulse"
+                        : "bg-border border border-muted/20"
+                  }`}
+                  title={isCurrent ? "Current card" : hasBeenAttempted ? "Needs review" : "Up next"}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* 3D Flip Card */}
+        <div className="card-perspective w-full max-w-md min-h-[320px] sm:min-h-[360px]">
+          <div
+            onClick={() => setFlipped((f) => !f)}
+            className={`card-inner cursor-pointer ${flipped ? "is-flipped" : ""}`}
+          >
+            {/* Front Side */}
+            <div className="card-front hover:border-indigo-ai/30 transition-all select-none">
+              {canSpeak() && isJpToEn && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    speakJa(backContent.japanese || "");
+                  }}
+                  className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai hover:bg-indigo-ai/20 transition-colors"
+                  title="Hear it"
+                >
+                  🔊
+                </button>
               )}
-            </div>
-          ) : (
-            <>
-              <p className="mt-5 text-sm text-muted">Tap or press Space to flip</p>
+              <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
+                {isJpToEn && isVocab && card.word && card.reading ? (
+                  <Furigana word={card.word} reading={card.reading} className="text-5xl" />
+                ) : (
+                  frontContent
+                )}
+              </span>
+              {isVocab && formLabel(card.formType) && (
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai font-display">
+                  {formLabel(card.formType)}
+                </p>
+              )}
+              {!isVocab && card.radicals && card.radicals.length > 0 && (
+                <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Radicals</p>
+                  <div className="mt-2 flex flex-wrap justify-center gap-2">
+                    {card.radicals.map((radical, i) => (
+                      <button
+                        key={i}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`/kanji?search=${encodeURIComponent(radical)}`, '_blank');
+                        }}
+                        className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                        title={`Search for ${radical}`}
+                      >
+                        {radical}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="mt-5 text-xs text-muted/80">Tap or press Space to flip</p>
+
               {!isVocab && (
                 <button
                   onClick={(e) => {
@@ -661,10 +873,10 @@ export default function ReviewClient() {
               {showHint && !isVocab && card.mnemonic && (
                 <div className="mt-3 w-full space-y-2" onClick={(e) => e.stopPropagation()}>
                   <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
-                    <p className="text-xs font-bold uppercase tracking-wide text-mint">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display">
                       💡 Mnemonic
                     </p>
-                    <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{card.mnemonic}</p>
+                    <p className="mt-1 text-xs text-foreground whitespace-pre-wrap leading-relaxed">{card.mnemonic}</p>
                   </div>
                   <button
                     onClick={() => {
@@ -682,8 +894,82 @@ export default function ReviewClient() {
                   </button>
                 </div>
               )}
-            </>
-          )}
+            </div>
+
+            {/* Back Side */}
+            <div className="card-back overflow-y-auto">
+              {isJpToEn ? (
+                <>
+                  {backContent.reading && (
+                    <p className="font-jp text-2xl font-bold text-indigo-ai">{backContent.reading}</p>
+                  )}
+                  {backContent.romaji && (
+                    <p className="text-xs text-muted mt-0.5">{backContent.romaji}</p>
+                  )}
+                  <p className="mt-2.5 text-xl font-bold text-foreground">{backContent.english}</p>
+                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
+                    {backContent.meta}
+                  </p>
+                  {isVocab && formLabel(card.formType) && card.dictionary && (
+                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
+                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
+                    </p>
+                  )}
+                  {isVocab && card.word && <KanjiBreakdown word={card.word} />}
+                  {!isVocab && card.radicals && card.radicals.length > 0 && (
+                    <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2 w-full" onClick={(e) => e.stopPropagation()}>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Radicals</p>
+                      <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
+                        {card.radicals.map((radical, i) => (
+                          <button
+                            key={i}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`/kanji/${encodeURIComponent(radical)}`, '_blank');
+                            }}
+                            className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                            title={`Open ${radical}`}
+                          >
+                            {radical}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!isVocab && backContent.mnemonic && (
+                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display">
+                        💡 Mnemonic
+                      </p>
+                      <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="font-jp text-4xl font-bold text-indigo-ai">
+                    {backContent.japanese}
+                  </p>
+                  {backContent.reading && (
+                    <p className="mt-2 text-sm font-jp text-muted">{backContent.reading}</p>
+                  )}
+                  {isVocab && formLabel(card.formType) && card.dictionary && (
+                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
+                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
+                    </p>
+                  )}
+                  {!isVocab && backContent.mnemonic && (
+                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display">
+                        💡 Mnemonic
+                      </p>
+                      <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         {flipped ? (

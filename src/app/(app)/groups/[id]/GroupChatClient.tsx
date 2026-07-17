@@ -706,12 +706,21 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             );
           })}
           {sending && (
-            <div className="mt-1 flex items-end gap-2">
+            <div className="mt-2 flex items-end gap-2">
               {group?.persona && (
                 <Avatar name={group.persona.name} emoji={group.persona.avatar} size={28} />
               )}
-              <div className="flex gap-1 rounded-3xl rounded-bl-md bg-card px-4 py-3.5 shadow-sm">
-                <Dot d="0ms" /> <Dot d="150ms" /> <Dot d="300ms" />
+              <div className="flex flex-col items-start gap-0.5">
+                {group?.persona && (
+                  <span className="ml-1 text-[10px] font-bold text-indigo-ai/70">
+                    {group.persona.name} is typing…
+                  </span>
+                )}
+                <div className="flex gap-1.5 rounded-3xl rounded-bl-md border-2 border-border bg-card px-4 py-3 shadow-sm">
+                  <Dot d="0ms" />
+                  <Dot d="160ms" />
+                  <Dot d="320ms" />
+                </div>
               </div>
             </div>
           )}
@@ -745,10 +754,12 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             </p>
           )}
           {quotedMessage && (
-            <div className="mb-2 flex items-start gap-2 rounded-2xl border-2 border-indigo-ai/30 bg-indigo-ai/5 px-3 py-2">
+            <div className="mb-2 flex items-start gap-2 overflow-hidden rounded-2xl border-2 border-l-4 border-indigo-ai/20 border-l-indigo-ai bg-indigo-ai/5 px-3 py-2">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-indigo-ai">
-                  Replying to {quotedMessage.senderName}
+                <p className={`text-xs font-extrabold ${
+                  quotedMessage.senderKind === "persona" ? "text-indigo-ai" : "text-muted"
+                }`}>
+                  ↩ {quotedMessage.senderName}
                 </p>
                 <p className="mt-0.5 truncate text-xs text-muted">
                   {quotedMessage.content}
@@ -770,7 +781,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               onClear={() => setMemSuggestions([])}
             />
           )}
-          <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
+          <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2 focus-within:border-indigo-ai/60 transition-colors">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -782,15 +793,20 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               }
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted/60"
             />
-            <span
-              className={`text-xs tabular-nums ${over ? "font-bold text-sakura" : "text-muted/60"}`}
-            >
-              {len}/{MAX_MESSAGE_CHARS}
-            </span>
+            {/* Character counter: hidden until 80% full */}
+            {len > MAX_MESSAGE_CHARS * 0.8 && (
+              <span
+                className={`text-xs tabular-nums font-semibold transition-colors ${
+                  over ? "text-sakura font-bold" : len > MAX_MESSAGE_CHARS * 0.9 ? "text-amber" : "text-muted/60"
+                }`}
+              >
+                {MAX_MESSAGE_CHARS - len}
+              </span>
+            )}
             <button
               onClick={send}
               disabled={sending || over || !input.trim()}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai text-white disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai text-white shadow-sm transition-all hover:bg-indigo-deep disabled:opacity-40"
               aria-label="Send"
             >
               ↑
