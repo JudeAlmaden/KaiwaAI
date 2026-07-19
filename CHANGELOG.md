@@ -2,6 +2,29 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.2.5] - 2026-07-20
+
+### Added
+
+- **Gallery-Style Review Quest Selection** - Transformed the review page into a Pinterest-style masonry layout with varied card sizes for visual interest.
+- **Masonry Grid on Mobile** - Implemented a 2-column masonry layout on mobile devices for better space utilization and visual variety.
+- **Modular Quest Card Components** - Refactored quest modes into individual reusable components for better code organization and maintainability.
+- **Custom Session Modal** - Moved custom session builder into a clean modal overlay with backdrop blur, keeping the main page focused.
+- **Enhanced Quest Card Animations** - Added gradient overlays, icon animations (scale, rotate), and color-matched shadows for each quest type.
+- **Difficulty Badges** - Added visual difficulty indicators (RECOMMENDED, HARD MODE, BALANCED, FOCUSED, INFINITE) to each quest card.
+- **Responsive Card Sizing** - Implemented progressive sizing for icons, text, and padding that scales from mobile to desktop.
+- **Status Indicators** - Added pulsing dots and live card counts to show quest availability and status.
+
+### Changed
+
+- **Improved Mobile UX** - Cards now display in a 2-column masonry grid on mobile with optimized touch targets (44x44px minimum).
+- **Better Visual Hierarchy** - Daily Quest and Endless Zen now span full width on all devices to emphasize their importance.
+- **Responsive Typography** - Text and icons now scale appropriately across breakpoints (mobile: xs/base, tablet: sm/lg, desktop: sm/xl).
+
+### Fixed
+
+- **Removed Unused Imports** - Cleaned up unused `Chip` import in ReviewClient.tsx to pass linting.
+
 ## [1.2.4] - 2026-07-18
 
 ### Added
