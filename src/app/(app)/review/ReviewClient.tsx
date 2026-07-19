@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
-import { Chip } from "../ui";
 import { PopButton } from "../../PopButton";
 import { speakJa, canSpeak } from "@/lib/speak";
 import KanjiBreakdown from "../chat/KanjiBreakdown";
@@ -12,6 +11,7 @@ import { formLabel } from "@/lib/form-label";
 import { scheduleReviewNotifications } from "@/lib/review-notifications";
 import Furigana from "./Furigana";
 import Petals from "../../Petals";
+import QuestGallery from "./QuestGallery";
 
 type Card = {
   id: string;
@@ -76,7 +76,7 @@ export default function ReviewClient() {
   });
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [customSessionExpanded, setCustomSessionExpanded] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
 
   const [activePool, setActivePool] = useState<Card[]>([]);
   const [incomingQueue, setIncomingQueue] = useState<Card[]>([]);
@@ -364,254 +364,16 @@ export default function ReviewClient() {
     return (
       <div className="flex flex-1 flex-col">
         <PageHeader title="Review" jp="復習" subtitle="Choose a quest to begin your session." />
-        <div className="mx-auto w-full max-w-lg px-5 py-6 sm:px-8 space-y-6">
-          
-          {/* Gamified Play Modes */}
-          <div className="space-y-4">
-            <h2 className="font-display text-xs font-bold uppercase tracking-wider text-muted/80">Select Quest Mode</h2>
-            
-            {/* Card 1: Daily Quest */}
-            <button
-              onClick={() => start({ studyMode: "due", limit: 50, isContinuous: false, reviewType: "mixed", activeLimit: 5 })}
-              disabled={dueCount === 0}
-              className="flex w-full text-left gap-4 items-center justify-between rounded-3xl border-2 border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md hover:border-indigo-ai/40 hover:bg-indigo-ai/5 cursor-pointer disabled:opacity-50 disabled:-translate-y-0 disabled:shadow-none shadow-sm"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-indigo-ai/10 text-lg">⚔️</span>
-                  <span className="font-display text-base font-extrabold text-foreground">Daily Quest</span>
-                </div>
-                <p className="mt-2 text-xs text-muted leading-relaxed">
-                  Clear your daily review backlog. Up to 50 cards per session.
-                </p>
-                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-indigo-ai/10 text-indigo-ai">
-                  {dueCount === null
-                    ? "Checking due cards…"
-                    : dueCount === 0
-                      ? "All caught up! ✓"
-                      : dueCount > 50
-                        ? `50+ cards ready`
-                        : `${dueCount} card${dueCount === 1 ? "" : "s"} ready`}
-                </span>
-              </div>
-              <span className="text-muted/40 select-none text-lg">›</span>
-            </button>
-
-            {/* Card 2: The Gauntlet */}
-            <button
-              onClick={() => start({ studyMode: "struggling", limit: 50, isContinuous: false, reviewType: "mixed", activeLimit: 5 })}
-              className="flex w-full text-left gap-4 items-center justify-between rounded-3xl border-2 border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md hover:border-sakura/40 hover:bg-sakura/5 cursor-pointer shadow-sm"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-sakura/10 text-lg">🔥</span>
-                  <span className="font-display text-base font-extrabold text-foreground">The Gauntlet</span>
-                </div>
-                <p className="mt-2 text-xs text-muted leading-relaxed">
-                  Target your weakest cards and leeches to eliminate mistakes.
-                </p>
-                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-sakura/10 text-sakura">
-                  Struggling items
-                </span>
-              </div>
-              <span className="text-muted/40 select-none text-lg">›</span>
-            </button>
-
-            {/* Card 3: Endless Zen */}
-            <button
-              onClick={() => start({ studyMode: "all", limit: 200, isContinuous: true, reviewType: "mixed", activeLimit: 5 })}
-              className="flex w-full text-left gap-4 items-center justify-between rounded-3xl border-2 border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md hover:border-mint/40 hover:bg-mint/5 cursor-pointer shadow-sm"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-mint/10 text-lg">🌀</span>
-                  <span className="font-display text-base font-extrabold text-foreground">Endless Zen</span>
-                </div>
-                <p className="mt-2 text-xs text-muted leading-relaxed">
-                  No limits. Study ahead and review cards continuously at your own pace.
-                </p>
-                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-mint/10 text-mint">
-                  Continuous mode
-                </span>
-              </div>
-              <span className="text-muted/40 select-none text-lg">›</span>
-            </button>
-          </div>
-
-          {/* Collapsible Advanced Customizer */}
-          <div className="mt-4 flex flex-col items-center">
-            <button
-              onClick={() => setCustomSessionExpanded(!customSessionExpanded)}
-              className="inline-flex items-center gap-2 rounded-2xl border-2 border-border bg-card px-5 py-2.5 text-xs font-bold text-muted transition-all hover:border-indigo-ai hover:text-indigo-ai active:scale-95 cursor-pointer shadow-sm font-display"
-            >
-              <span>{customSessionExpanded ? "Hide Custom Session ⚙️" : "Custom Session ⚙️"}</span>
-            </button>
-
-            {customSessionExpanded && (
-              <div className="mt-5 w-full rounded-3xl border-2 border-border bg-card p-5 shadow-sm transition-all duration-300 ease-out">
-                <h3 className="font-display text-base font-bold text-foreground">Custom Session Builder</h3>
-                <p className="text-xs text-muted mt-0.5">Define your own review rules and limits.</p>
-
-                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Review Type
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Chip
-                    active={setup.reviewType === "vocabulary"}
-                    onClick={() => setSetup((s) => ({ ...s, reviewType: "vocabulary" }))}
-                  >
-                    Vocabulary
-                  </Chip>
-                  <Chip
-                    active={setup.reviewType === "kanji"}
-                    onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
-                  >
-                    Kanji
-                  </Chip>
-                  <Chip
-                    active={setup.reviewType === "mixed"}
-                    onClick={() => setSetup((s) => ({ ...s, reviewType: "mixed" }))}
-                  >
-                    Mixed
-                  </Chip>
-                </div>
-
-                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Card Direction
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Chip
-                    active={setup.direction === "jp-to-en"}
-                    onClick={() => setSetup((s) => ({ ...s, direction: "jp-to-en" }))}
-                  >
-                    Japanese → English
-                  </Chip>
-                  <Chip
-                    active={setup.direction === "en-to-jp"}
-                    onClick={() => setSetup((s) => ({ ...s, direction: "en-to-jp" }))}
-                  >
-                    English → Japanese
-                  </Chip>
-                  <Chip
-                    active={setup.direction === "mixed"}
-                    onClick={() => setSetup((s) => ({ ...s, direction: "mixed" }))}
-                  >
-                    Mixed
-                  </Chip>
-                </div>
-
-                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Study Focus
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Chip
-                    active={setup.studyMode === "due"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "due" }))}
-                  >
-                    Due now
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "all"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "all" }))}
-                  >
-                    Study ahead
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "recent"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "recent" }))}
-                  >
-                    Recent
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "struggling"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "struggling" }))}
-                  >
-                    Struggling
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "leeches"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "leeches" }))}
-                  >
-                    Leeches
-                  </Chip>
-                </div>
-
-                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Session Size
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {[10, 20, 50].map((n) => (
-                    <Chip
-                      key={n}
-                      active={!setup.isContinuous && setup.limit === n}
-                      onClick={() => setSetup((s) => ({ ...s, limit: n, isContinuous: false }))}
-                    >
-                      {n}
-                    </Chip>
-                  ))}
-                  <Chip
-                    active={setup.isContinuous}
-                    onClick={() => setSetup((s) => ({ ...s, limit: 200, isContinuous: true }))}
-                  >
-                    Continuous
-                  </Chip>
-                </div>
-
-                <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Active Working Pool
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {[3, 5, 10, "all"].map((n) => (
-                    <Chip
-                      key={n}
-                      active={setup.activeLimit === n}
-                      onClick={() => setSetup((s) => ({ ...s, activeLimit: n as number | "all" }))}
-                    >
-                      {n === "all" ? "All (Classic)" : `${n} cards`}
-                    </Chip>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="mt-4 text-xs font-semibold text-indigo-soft hover:text-indigo-ai hover:underline cursor-pointer"
-                >
-                  {showAdvanced ? "Hide" : "Show"} advanced options
-                </button>
-
-                {showAdvanced && (
-                  <>
-                    <p className="mt-4 mb-1.5 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                      Mode
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Chip
-                        active={!setup.practice}
-                        onClick={() => setSetup((s) => ({ ...s, practice: false }))}
-                      >
-                        Review
-                      </Chip>
-                      <Chip
-                        active={setup.practice}
-                        onClick={() => setSetup((s) => ({ ...s, practice: true }))}
-                      >
-                        Practice only
-                      </Chip>
-                    </div>
-                    <p className="mt-1 text-[10px] text-muted">
-                      Practice mode won&apos;t affect your mastery scores
-                    </p>
-                  </>
-                )}
-
-                <PopButton onClick={() => start()} size="md" className="mt-6 w-full font-display">
-                  Start Custom Session
-                </PopButton>
-              </div>
-            )}
-          </div>
-
-        </div>
+        <QuestGallery
+          dueCount={dueCount}
+          setup={setup}
+          setSetup={setSetup}
+          onStartQuest={start}
+          showCustomModal={showCustomModal}
+          setShowCustomModal={setShowCustomModal}
+          showAdvanced={showAdvanced}
+          setShowAdvanced={setShowAdvanced}
+        />
       </div>
     );
   }
