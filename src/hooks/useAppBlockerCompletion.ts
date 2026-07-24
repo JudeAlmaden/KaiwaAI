@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { AppBlocker } from '@/plugins/app-blocker';
 import { grantUnlock } from '@/lib/app-blocker-unlock';
 
 /**

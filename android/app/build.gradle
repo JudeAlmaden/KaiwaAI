@@ -21,13 +21,13 @@ android {
         release {
             def keystorePath = System.getenv("KEYSTORE_PATH") ?: ""
             def keystorePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-            def keyAlias = System.getenv("KEY_ALIAS") ?: ""
-            def keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            def releaseKeyAlias = System.getenv("KEY_ALIAS") ?: ""
+            def releaseKeyPassword = System.getenv("KEY_PASSWORD") ?: ""
             if (keystorePath) {
                 storeFile file(keystorePath)
                 storePassword keystorePassword
-                keyAlias keyAlias
-                keyPassword keyPassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
             }
         }
     }
