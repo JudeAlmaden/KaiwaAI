@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { AppBlocker } from '@/plugins/app-blocker';
+import { grantUnlock } from '@/lib/app-blocker-unlock';
 
 /**
  * Hook to track flashcard completion for app blocker feature
@@ -13,10 +14,10 @@ export function useAppBlockerCompletion(completedCount: number, requiredCount: n
     if (requiredCount > 0 && completedCount >= requiredCount && !hasCompleted.current) {
       hasCompleted.current = true;
       
-      // Mark flashcards as completed in app blocker (15-minute unlock window)
-      AppBlocker.markFlashcardsCompleted()
+      // Mark flashcards as completed in app blocker (unlock window)
+      grantUnlock()
         .then(() => {
-          console.log('App blocker: Flashcards completed successfully. App unlocked for 15 minutes!');
+          console.log('App blocker: Flashcards completed successfully. App unlocked!');
           
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('kaiwa:appblocker:unlocked', {

@@ -47,7 +47,6 @@ export interface ReviewCardProps {
   flipped: boolean;
   onFlip: () => void;
   onGrade: (grade: number) => void;
-  // Mnemonic & hint state
   showHint?: boolean;
   generatingMnemonic?: boolean;
   onToggleHint?: () => void;
@@ -69,12 +68,10 @@ export default function ReviewCard({
   const isVocab = cardType === "vocabulary";
   const isJpToEn = card._dir ? card._dir === "jp-to-en" : true;
 
-  // Front side content
   const frontContent = isJpToEn
     ? (isVocab ? card.word : card.character)
     : (isVocab ? card.meaning : card.meanings?.[0]);
 
-  // Back side content
   const backContent = isVocab
     ? {
         japanese: card.word,
@@ -82,7 +79,7 @@ export default function ReviewCard({
         romaji: card.romaji,
         english: card.meaning,
         meta: card.partOfSpeech || "Vocabulary",
-        mnemonic: undefined,
+        mnemonic: undefined as string | undefined,
       }
     : {
         japanese: card.character,
@@ -93,18 +90,89 @@ export default function ReviewCard({
         mnemonic: card.mnemonic,
       };
 
+  const backFace = (
+    <>
+      {isJpToEn ? (
+        <>
+          {backContent.reading && (
+            <p className="font-jp text-2xl font-bold text-indigo-ai">{backContent.reading}</p>
+          )}
+          {backContent.romaji && <p className="text-xs text-muted mt-0.5">{backContent.romaji}</p>}
+          <p className="mt-2.5 text-xl font-bold text-foreground">{backContent.english}</p>
+          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
+            {backContent.meta}
+          </p>
+          {isVocab && formLabel(card.formType) && card.dictionary && (
+            <p className="mt-2 text-xs font-semibold text-indigo-ai">
+              {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
+            </p>
+          )}
+          {isVocab && card.word && <KanjiBreakdown word={card.word} />}
+          {!isVocab && card.radicals && card.radicals.length > 0 && (
+            <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2 w-full">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Radicals</p>
+              <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
+                {card.radicals.map((radical, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`/kanji?search=${encodeURIComponent(radical)}`, "_blank");
+                    }}
+                    className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                    title={`Search for ${radical}`}
+                  >
+                    {radical}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {!isVocab && backContent.mnemonic && (
+            <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
+                <Lightbulb size={12} /> Mnemonic
+              </p>
+              <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="font-jp text-4xl font-bold text-indigo-ai">{backContent.japanese}</p>
+          {backContent.reading && (
+            <p className="mt-2 text-sm font-jp text-muted">{backContent.reading}</p>
+          )}
+          {isVocab && formLabel(card.formType) && card.dictionary && (
+            <p className="mt-2 text-xs font-semibold text-indigo-ai">
+              {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
+            </p>
+          )}
+          {!isVocab && backContent.mnemonic && (
+            <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
+                <Lightbulb size={12} /> Mnemonic
+              </p>
+              <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col items-center justify-center gap-6 w-full max-w-md">
-      {/* 3D Flip Card */}
-      <div className="card-perspective w-full min-h-[380px] sm:min-h-[420px]">
+      <div className="card-perspective w-full h-[380px] sm:h-[420px]">
         <div
           onClick={onFlip}
           className={`card-inner cursor-pointer ${flipped ? "is-flipped" : ""}`}
         >
-          {/* Front Side */}
-          <div className="card-front hover:border-indigo-ai/30 transition-all select-none">
+          <div className="card-front select-none">
             {canSpeak() && isJpToEn && backContent.japanese && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   speakJa(backContent.japanese || "");
@@ -136,6 +204,7 @@ export default function ReviewCard({
                   {card.radicals.map((radical, i) => (
                     <button
                       key={i}
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         window.open(`/kanji?search=${encodeURIComponent(radical)}`, "_blank");
@@ -149,11 +218,10 @@ export default function ReviewCard({
                 </div>
               </div>
             )}
-
             <p className="mt-5 text-xs text-muted/80">Tap or press Space to flip</p>
-
             {!isVocab && onToggleHint && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleHint();
@@ -177,6 +245,7 @@ export default function ReviewCard({
                 </div>
                 {onGenerateMnemonic && (
                   <button
+                    type="button"
                     onClick={() => onGenerateMnemonic(true)}
                     disabled={generatingMnemonic}
                     className="w-full inline-flex items-center justify-center gap-1 rounded-full border-2 border-mint/30 bg-mint/10 px-3 py-1.5 text-xs font-bold text-mint transition-all hover:bg-mint/20 disabled:opacity-50"
@@ -189,83 +258,14 @@ export default function ReviewCard({
             )}
           </div>
 
-          {/* Back Side */}
-          <div className="card-back overflow-y-auto">
-            {isJpToEn ? (
-              <>
-                {backContent.reading && (
-                  <p className="font-jp text-2xl font-bold text-indigo-ai">{backContent.reading}</p>
-                )}
-                {backContent.romaji && (
-                  <p className="text-xs text-muted mt-0.5">{backContent.romaji}</p>
-                )}
-                <p className="mt-2.5 text-xl font-bold text-foreground">{backContent.english}</p>
-                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
-                  {backContent.meta}
-                </p>
-                {isVocab && formLabel(card.formType) && card.dictionary && (
-                  <p className="mt-2 text-xs font-semibold text-indigo-ai">
-                    {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-                  </p>
-                )}
-                {isVocab && card.word && <KanjiBreakdown word={card.word} />}
-                {!isVocab && card.radicals && card.radicals.length > 0 && (
-                  <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2 w-full" onClick={(e) => e.stopPropagation()}>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Radicals</p>
-                    <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
-                      {card.radicals.map((radical, i) => (
-                        <button
-                          key={i}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(`/kanji?search=${encodeURIComponent(radical)}`, "_blank");
-                          }}
-                          className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
-                          title={`Search for ${radical}`}
-                        >
-                          {radical}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {!isVocab && backContent.mnemonic && (
-                  <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
-                      <Lightbulb size={12} /> Mnemonic
-                    </p>
-                    <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="font-jp text-4xl font-bold text-indigo-ai">
-                  {backContent.japanese}
-                </p>
-                {backContent.reading && (
-                  <p className="mt-2 text-sm font-jp text-muted">{backContent.reading}</p>
-                )}
-                {isVocab && formLabel(card.formType) && card.dictionary && (
-                  <p className="mt-2 text-xs font-semibold text-indigo-ai">
-                    {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-                  </p>
-                )}
-                {!isVocab && backContent.mnemonic && (
-                  <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
-                      <Lightbulb size={12} /> Mnemonic
-                    </p>
-                    <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
-                  </div>
-                )}
-              </>
-            )}
+          <div className="card-back">
+            <div className="card-back-scroll" onClick={(e) => e.stopPropagation()}>
+              {backFace}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Grade Action Buttons (Only shown when card is flipped) */}
       {flipped ? (
         <div className="grid w-full max-w-md grid-cols-4 gap-2.5">
           {GRADES.map((g) => {
@@ -273,6 +273,7 @@ export default function ReviewCard({
             return (
               <button
                 key={g.grade}
+                type="button"
                 onClick={() => onGrade(g.grade)}
                 className={`flex flex-col items-center justify-center rounded-2xl py-3 text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:brightness-105 active:translate-y-[2px] ${g.color}`}
               >

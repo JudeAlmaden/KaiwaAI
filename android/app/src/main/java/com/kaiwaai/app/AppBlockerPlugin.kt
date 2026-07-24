@@ -175,6 +175,27 @@ class AppBlockerPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun isUnlockActive(call: PluginCall) {
+        val prefs = activity.getSharedPreferences("AppBlocker", android.content.Context.MODE_PRIVATE)
+        val flashcardsCompleted = prefs.getBoolean("flashcards_completed", false)
+        val unlockExpirationTime = prefs.getLong("unlock_expiration_time", 0L)
+        val currentTime = System.currentTimeMillis()
+        val active = flashcardsCompleted && currentTime < unlockExpirationTime
+
+        if (flashcardsCompleted && !active) {
+            prefs.edit()
+                .putBoolean("flashcards_completed", false)
+                .putLong("unlock_expiration_time", 0L)
+                .apply()
+        }
+
+        val ret = com.getcapacitor.JSObject()
+        ret.put("active", active)
+        ret.put("expiresAt", if (active) unlockExpirationTime else 0L)
+        call.resolve(ret)
+    }
+
+    @PluginMethod
     fun launchApp(call: PluginCall) {
         val packageName = call.getString("packageName")
         if (packageName == null) {

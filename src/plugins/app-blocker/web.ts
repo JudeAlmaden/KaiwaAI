@@ -58,6 +58,10 @@ export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
     console.log('App blocking not supported on web');
   }
 
+  async isUnlockActive(): Promise<{ active: boolean; expiresAt: number }> {
+    return { active: false, expiresAt: 0 };
+  }
+
   async launchApp(_: { packageName: string }): Promise<void> { // eslint-disable-line @typescript-eslint/no-unused-vars
     console.log('App launching not supported on web');
   }

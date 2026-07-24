@@ -74,6 +74,7 @@ export default function ReviewClient() {
   const [postedCardIds, setPostedCardIds] = useState<Set<string>>(new Set());
   const [total, setTotal] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [cardEpoch, setCardEpoch] = useState(0);
   const [tally, setTally] = useState({ again: 0, good: 0 });
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
@@ -311,6 +312,7 @@ export default function ReviewClient() {
     setTotal(shuffled.length);
     setTally({ again: 0, good: 0 });
     setFlipped(false);
+    setCardEpoch((e) => e + 1);
     setShowHint(false);
     setPhase("session");
   }
@@ -397,6 +399,7 @@ export default function ReviewClient() {
       }
 
       setFlipped(false);
+      setCardEpoch((e) => e + 1);
       setShowHint(false); // Reset hint when moving to next card
     },
     [activePool, incomingQueue, postedCardIds, setup, fetchMoreCards]
@@ -665,6 +668,7 @@ export default function ReviewClient() {
 
         {/* Modular Review Card (with 3D flip, audio, kanji breakdown, mnemonics, & 3D icon grade buttons) */}
         <ReviewCard
+          key={`${card.id}-${cardEpoch}`}
           card={card}
           reviewType={setup.reviewType}
           flipped={flipped}

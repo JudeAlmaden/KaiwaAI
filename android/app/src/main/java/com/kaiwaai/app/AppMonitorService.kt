@@ -230,7 +230,7 @@ class AppMonitorService : Service() {
                     putExtra("is_online", isConnected)
                 }
 
-                // 2. Launch KaiwaAI Flashcard Review Screen
+                // 2. Launch KaiwaAI Flashcard Review Screen directly (no overlay intermediate)
                 handler.postDelayed({
                     try {
                         startActivity(fullScreenIntent)
@@ -239,12 +239,7 @@ class AppMonitorService : Service() {
                     }
                 }, 100L)
 
-                // 3. Display System Overlay Window if overlay permission is granted
-                if (PermissionHelper.hasOverlayPermission(this)) {
-                    showOverlayWindow(lastAppPackage, targetCount, reviewType ?: "vocabulary", direction ?: "jp-to-en")
-                }
-
-                // 4. Notification fallback
+                // 3. Notification fallback (tap opens flashcards directly)
                 try {
                     val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

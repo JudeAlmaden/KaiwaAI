@@ -68,6 +68,11 @@ export interface AppBlockerPlugin {
   markFlashcardsCompleted(): Promise<void>;
 
   /**
+   * Check if the unlock grace period is currently active
+   */
+  isUnlockActive(): Promise<{ active: boolean; expiresAt: number }>;
+
+  /**
    * Launch a specific app by package name
    */
   launchApp(options: { packageName: string }): Promise<void>;

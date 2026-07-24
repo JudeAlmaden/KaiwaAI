@@ -1,31 +1,49 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppBlocker } from '@/plugins/app-blocker';
+import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
 import Kai from '@/app/Kai';
-import { ShieldCheck, House } from '@phosphor-icons/react';
 import ReviewCard, { Card } from '@/app/(app)/review/ReviewCard';
 import OfflineBanner from '@/components/OfflineBanner';
 
-
+type InitResult =
+  | { kind: 'session' }
+  | { kind: 'redirect-home' }
+  | { kind: 'auto-unlocked' };
 
 export default function StandaloneAppLockPage() {
   const router = useRouter();
+  const finishingRef = useRef(false);
   const [blockedPackage, setBlockedPackage] = useState<string | null>(null);
   const [requiredCount, setRequiredCount] = useState(10);
-  const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(15);
   const [cards, setCards] = useState<Card[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [cardEpoch, setCardEpoch] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [gradedIds, setGradedIds] = useState<Set<string>>(new Set()); // tracks first-attempt grades
+  const [initResult, setInitResult] = useState<InitResult | null>(null);
+  const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
 
-  // Mnemonic & hint state
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
+
+  const finishUnlock = useCallback(async (pkg: string | null) => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+
+    await grantUnlock();
+
+    if (pkg) {
+      setTimeout(() => {
+        AppBlocker.launchApp({ packageName: pkg }).catch(() => {});
+      }, 300);
+    }
+
+    router.replace('/home');
+  }, [router]);
 
   const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
     if (isRegenerate) {
@@ -65,86 +83,87 @@ export default function StandaloneAppLockPage() {
     }
   }, [currentIndex]);
 
-  const fetchCards = useCallback(async () => {
+  const fetchDueCards = useCallback(async (): Promise<Card[]> => {
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    const reviewType = params.get('reviewType') || 'vocabulary';
+    const endpoint = reviewType === 'mixed'
+      ? '/api/review/mixed'
+      : `/api/${reviewType === 'kanji' ? 'kanji' : 'flashcards'}/review`;
+
     try {
-      const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-      const reviewType = params.get('reviewType') || 'vocabulary';
-      const endpoint = reviewType === 'mixed'
-        ? '/api/review/mixed'
-        : `/api/${reviewType === 'kanji' ? 'kanji' : 'flashcards'}/review`;
-
-      // Prefer due cards for real SRS; fall back to all if nothing is due
-      const resDue = await fetch(`${endpoint}?studyMode=due&limit=50`);
-      if (resDue.ok) {
-        const data = await resDue.json();
-        if (data.cards && data.cards.length > 0) {
-          setCards(data.cards);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // No due cards — fetch from all
-      const resAll = await fetch(`${endpoint}?studyMode=all&limit=30`);
-      if (resAll.ok) {
-        const data = await resAll.json();
-        if (data.cards && data.cards.length > 0) {
-          setCards(data.cards);
-          setLoading(false);
-          return;
-        }
+      const res = await fetch(`${endpoint}?studyMode=due&limit=50`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.cards ?? [];
       }
     } catch {
       // Failed to load cards
     }
-
-    setLoading(false);
+    return [];
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Check if still within an active unlock grace period
-      const storedExpiry = localStorage.getItem('kaiwa_unlock_expiry');
-      if (storedExpiry && Date.now() < parseInt(storedExpiry)) {
-        setIsUnlocked(true);
-        setLoading(false);
-        const params = new URLSearchParams(window.location.search);
-        const pkg = params.get('blocked_package');
-        if (pkg) {
-          setTimeout(() => {
-            AppBlocker.launchApp({ packageName: pkg }).catch(() => {});
-          }, 500);
+    let cancelled = false;
+
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const pkg = params.get('blocked_package');
+      const countParam = params.get('count');
+      const isBlockIntercept = params.get('mode') === 'app-blocker' || !!pkg;
+
+      // Stale /app-lock URL (e.g. reopening KaiwaAI after unlock expired) — go home
+      if (!isBlockIntercept) {
+        if (!cancelled) {
+          setInitResult({ kind: 'redirect-home' });
+          setLoading(false);
         }
         return;
       }
 
-      const params = new URLSearchParams(window.location.search);
-      const pkg = params.get('blocked_package');
-      const countParam = params.get('count');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (pkg) setBlockedPackage(pkg);
-
       if (countParam) {
-        const cnt = parseInt(countParam) || 10;
-        setRequiredCount(cnt);
+        setRequiredCount(parseInt(countParam, 10) || 10);
       } else {
         AppBlocker.getFlashcardRequirement()
-          .then((res) => {
-            if (res?.count) setRequiredCount(res.count);
-          })
+          .then((res) => { if (res?.count) setRequiredCount(res.count); })
           .catch(() => {});
       }
 
-      // Load unlock duration from config
-      AppBlocker.getAppBlockerConfig()
-        .then((cfg) => {
-          if (cfg?.unlockDurationMinutes) setUnlockDurationMinutes(cfg.unlockDurationMinutes);
-        })
-        .catch(() => {});
+      const unlock = await getUnlockStatus();
+      if (unlock.active) {
+        if (!cancelled) {
+          setInitResult({ kind: 'auto-unlocked' });
+          setLoading(false);
+        }
+        finishUnlock(pkg);
+        return;
+      }
+
+      const dueCards = await fetchDueCards();
+      if (cancelled) return;
+
+      // No due cards — nothing to review, skip the lock entirely
+      if (dueCards.length === 0) {
+        setInitResult({ kind: 'auto-unlocked' });
+        setLoading(false);
+        finishUnlock(pkg);
+        return;
+      }
+
+      setCards(dueCards);
+      setInitResult({ kind: 'session' });
+      setLoading(false);
     }
 
-    fetchCards();
-  }, [fetchCards]);
+    init();
+    return () => { cancelled = true; };
+  }, [fetchDueCards, finishUnlock]);
+
+  useEffect(() => {
+    if (initResult?.kind === 'redirect-home') {
+      router.replace('/home');
+    }
+  }, [initResult, router]);
 
   const handleGrade = useCallback(
     (grade: number) => {
@@ -153,7 +172,6 @@ export default function StandaloneAppLockPage() {
 
       const isFirstAttempt = !gradedIds.has(card.id);
 
-      // Submit SRS update on first attempt only
       if (isFirstAttempt) {
         const cardType = card.type || 'vocabulary';
         const endpoint = cardType === 'kanji' ? '/api/kanji/review' : '/api/flashcards/review';
@@ -167,47 +185,29 @@ export default function StandaloneAppLockPage() {
       }
 
       setFlipped(false);
+      setCardEpoch((e) => e + 1);
 
       if (grade > 0) {
-        // Passed — count toward unlock
         const newCompleted = completedCount + 1;
         setCompletedCount(newCompleted);
 
         if (newCompleted >= requiredCount) {
-          const unlock = () => {
-            // Store unlock expiry so re-opens within the grace period skip the lock
-            const expiryMs = Date.now() + unlockDurationMinutes * 60 * 1000;
-            localStorage.setItem('kaiwa_unlock_expiry', String(expiryMs));
-            setIsUnlocked(true);
-            if (blockedPackage) {
-              setTimeout(() => {
-                AppBlocker.launchApp({ packageName: blockedPackage }).catch(() => {});
-              }, 800);
-            }
-          };
-          AppBlocker.markFlashcardsCompleted().then(unlock).catch((e) => {
-            console.error(e);
-            unlock();
-          });
+          finishUnlock(blockedPackage);
         } else {
-          // Move to next card
           setCurrentIndex((prev) => (prev + 1) % cards.length);
         }
       } else {
-        // Again — cycle card to end of queue without counting progress
         setCards(prev => {
           const next = [...prev];
           const [failed] = next.splice(currentIndex, 1);
           next.push(failed);
           return next;
         });
-        // Keep currentIndex pointing at the same position (which is now a different card)
       }
     },
-    [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds]
+    [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, finishUnlock]
   );
 
-  // Keyboard shortcut listener (Space to flip, 1-4 for grades)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -231,70 +231,27 @@ export default function StandaloneAppLockPage() {
   const currentCard = cards[currentIndex];
   const progressPct = Math.min(100, Math.round((completedCount / requiredCount) * 100));
 
-  if (loading) {
+  if (loading || initResult?.kind === 'redirect-home' || initResult?.kind === 'auto-unlocked') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
         <Kai size={64} className="animate-bounce" />
         <p className="mt-4 text-sm font-bold text-muted font-display">
-          Kai is preparing your Focus Guard review...
+          {initResult?.kind === 'auto-unlocked'
+            ? 'Unlocking your app...'
+            : 'Loading Focus Guard...'}
         </p>
       </div>
     );
   }
 
-  // No cards available
-  if (cards.length === 0) {
+  if (!currentCard) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background text-center">
         <Kai size={64} className="mb-4 opacity-60" />
         <h1 className="font-display text-xl font-bold text-foreground mb-2">No Cards Available</h1>
         <p className="text-sm text-muted max-w-xs leading-relaxed mb-6">
-          You need to add vocabulary or kanji cards before Focus Guard can quiz you. Add some cards and try again!
+          Add vocabulary or kanji cards to use Focus Guard.
         </p>
-        <button
-          onClick={() => router.push('/home')}
-          className="px-6 py-3 rounded-2xl bg-indigo-ai border-b-4 border-indigo-deep text-white font-bold text-sm flex items-center gap-2"
-        >
-          <House size={18} />
-          Go to App Home
-        </button>
-      </div>
-    );
-  }
-
-  // Completion View
-  if (isUnlocked) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-emerald-500/10 via-background to-background text-center animate-in fade-in duration-300">
-        <div className="w-20 h-20 rounded-3xl bg-mint/20 text-mint flex items-center justify-center mb-5 border-2 border-mint/40 shadow-xs animate-bounce">
-          <ShieldCheck size={48} />
-        </div>
-
-        <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-foreground mb-2">
-          Focus Guard Unlocked! 🎉
-        </h1>
-
-        <p className="text-sm text-muted max-w-md leading-relaxed mb-8">
-          Awesome job! You completed <strong className="text-foreground">{completedCount}</strong> flashcards. Kai has unlocked your app for the next 15 minutes!
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-          {blockedPackage && (
-            <button
-              onClick={() => AppBlocker.launchApp({ packageName: blockedPackage }).catch(() => {})}
-              className="w-full min-h-[48px] px-6 py-3 rounded-2xl bg-emerald-500 border-b-4 border-emerald-600 text-white font-bold text-sm shadow-sm hover:brightness-105 transition active:translate-y-[2px] flex items-center justify-center gap-2"
-            >
-              🚀 Launch App Now
-            </button>
-          )}
-          <button
-            onClick={() => router.push('/home')}
-            className="w-full min-h-[48px] px-6 py-3 rounded-2xl bg-indigo-ai border-b-4 border-indigo-deep text-white font-bold text-sm shadow-sm hover:brightness-105 transition active:translate-y-[2px] flex items-center justify-center gap-2"
-          >
-            <House size={18} />
-            Go to App Home
-          </button>
-        </div>
       </div>
     );
   }
@@ -303,7 +260,6 @@ export default function StandaloneAppLockPage() {
     <div className="min-h-screen flex flex-col bg-background relative overflow-hidden select-none">
       <OfflineBanner isAppBlockerMode={true} />
 
-      {/* Standalone Focus Guard Header */}
       <header className="p-4 sm:px-8 bg-card/60 backdrop-blur-md border-b-2 border-border flex items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
           <div className="relative shrink-0">
@@ -313,11 +269,13 @@ export default function StandaloneAppLockPage() {
             </span>
           </div>
           <div>
-            <h1 className="font-display text-base font-extrabold text-foreground flex items-center gap-1.5">
+            <h1 className="font-display text-base font-extrabold text-foreground">
               Focus Guard
             </h1>
             <p className="text-xs text-muted">
-              {blockedPackage ? `Complete cards to open ${blockedPackage.split('.').pop() || 'app'}` : 'Complete cards to unlock'}
+              {blockedPackage
+                ? `Complete cards to open ${blockedPackage.split('.').pop() || 'app'}`
+                : 'Complete cards to unlock'}
             </p>
           </div>
         </div>
@@ -327,7 +285,6 @@ export default function StandaloneAppLockPage() {
         </div>
       </header>
 
-      {/* Progress Bar */}
       <div className="w-full h-2 bg-muted/20">
         <div
           className="h-full bg-indigo-ai transition-all duration-300 ease-out"
@@ -335,7 +292,6 @@ export default function StandaloneAppLockPage() {
         />
       </div>
 
-      {/* Active Pool Indicators */}
       <div className="flex items-center justify-center gap-2 pt-3">
         {cards.slice(0, 5).map((c, idx) => {
           const isCurrent = idx === currentIndex % 5;
@@ -352,9 +308,9 @@ export default function StandaloneAppLockPage() {
         })}
       </div>
 
-      {/* Standalone 3D Flip Card Container */}
       <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-4 max-w-md mx-auto w-full">
         <ReviewCard
+          key={`${currentCard.id}-${cardEpoch}`}
           card={currentCard}
           reviewType={currentCard.type || "vocabulary"}
           flipped={flipped}
