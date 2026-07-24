@@ -1,18 +1,41 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { encryptSecret } from "@/lib/crypto";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
 
-// Whether server-side keys are stored (never returns the keys themselves).
-export async function GET() {
+// Whether server-side keys are stored.
+// If ?sync=true, returns decrypted keys so user can sync keys to a new device.
+export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json({ stored: Boolean(user.geminiKeyEnc) });
+
+  const url = new URL(req.url);
+  const wantsSync = url.searchParams.get("sync") === "true";
+
+  if (!user.geminiKeyEnc) {
+    return NextResponse.json({ stored: false, keys: [] });
+  }
+
+  if (wantsSync) {
+    try {
+      const decrypted = decryptSecret(user.geminiKeyEnc);
+      let keys: string[] = [];
+      try {
+        const parsed = JSON.parse(decrypted);
+        keys = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        keys = [decrypted];
+      }
+      return NextResponse.json({ stored: true, keys });
+    } catch {
+      return NextResponse.json({ error: "Failed to decrypt server key" }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ stored: true });
 }
 
 // Store (encrypted) the user's Gemini key(s) for server-side use. Opt-in.
-// Accepts `keys: string[]` (preferred) or a single `key: string`. All keys are
-// stored as one encrypted JSON array so the server can rotate like the chat.
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -47,8 +70,7 @@ export async function POST(req: Request) {
   }
 }
 
-// Remove the server-side keys (server features stop; chat still uses the
-// client-side keys).
+// Remove the server-side keys
 export async function DELETE() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -84,35 +84,35 @@ export default function UserSettingsTab({ email }: { email: string }) {
   return (
     <>
       {/* Account Info */}
-      <section className="rounded-3xl border-2 border-border bg-card p-5">
+      <section className="rounded-3xl border-2 border-border bg-card p-4 sm:p-5 overflow-hidden">
         <h2 className="font-display text-lg font-bold">Account</h2>
-        <p className="mt-1 text-sm text-muted">{email}</p>
+        <p className="mt-1 text-sm text-muted truncate max-w-full">{email}</p>
         <div className="mt-4 w-full">
           <LogoutButton variant="button" />
         </div>
       </section>
 
       {/* Change Name */}
-      <section className="rounded-3xl border-2 border-border bg-card p-5">
+      <section className="rounded-3xl border-2 border-border bg-card p-4 sm:p-5 overflow-hidden">
         <h2 className="font-display text-lg font-bold">Display Name</h2>
         <p className="mt-1 text-sm text-muted">
           This name appears in your chats and conversations with others.
         </p>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-col gap-3">
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && updateName()}
             placeholder="Enter new name"
-            className="h-11 flex-1 rounded-2xl border-2 border-border bg-card px-4 text-sm outline-none focus:border-indigo-ai"
+            className="h-13 w-full rounded-2xl border-2 border-border bg-card px-4 text-base sm:text-sm font-medium outline-none focus:border-indigo-ai transition-colors"
             disabled={nameBusy}
           />
           <PopButton
             onClick={updateName}
             disabled={!name.trim() || nameBusy}
-            className="h-11 px-5"
+            className="h-13 w-full text-sm font-bold"
           >
             {nameBusy ? "Saving..." : "Update"}
           </PopButton>
@@ -139,7 +139,7 @@ export default function UserSettingsTab({ email }: { email: string }) {
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             placeholder="Current password"
-            className="h-11 rounded-2xl border-2 border-border bg-card px-4 text-sm outline-none focus:border-indigo-ai"
+            className="h-13 rounded-2xl border-2 border-border bg-card px-4 text-base sm:text-sm font-medium outline-none focus:border-indigo-ai transition-colors"
             disabled={passwordBusy}
           />
           <input
@@ -147,7 +147,7 @@ export default function UserSettingsTab({ email }: { email: string }) {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="New password"
-            className="h-11 rounded-2xl border-2 border-border bg-card px-4 text-sm outline-none focus:border-indigo-ai"
+            className="h-13 rounded-2xl border-2 border-border bg-card px-4 text-base sm:text-sm font-medium outline-none focus:border-indigo-ai transition-colors"
             disabled={passwordBusy}
           />
           <input
@@ -156,14 +156,14 @@ export default function UserSettingsTab({ email }: { email: string }) {
             onChange={(e) => setConfirmPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && updatePassword()}
             placeholder="Confirm new password"
-            className="h-11 rounded-2xl border-2 border-border bg-card px-4 text-sm outline-none focus:border-indigo-ai"
+            className="h-13 rounded-2xl border-2 border-border bg-card px-4 text-base sm:text-sm font-medium outline-none focus:border-indigo-ai transition-colors"
             disabled={passwordBusy}
           />
 
           <PopButton
             onClick={updatePassword}
             disabled={!currentPassword || !newPassword || !confirmPassword || passwordBusy}
-            className="h-11"
+            className="h-13 text-sm font-bold"
           >
             {passwordBusy ? "Updating..." : "Update Password"}
           </PopButton>

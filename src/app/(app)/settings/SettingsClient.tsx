@@ -1,40 +1,48 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import ApiKeyCard from "./ApiKeyCard";
 import ServerKeyCard from "./ServerKeyCard";
 import ModelCard from "./ModelCard";
 import OutreachCard from "./OutreachCard";
 import ReviewNotificationCard from "./ReviewNotificationCard";
 import UserSettingsTab from "./UserSettingsTab";
+import AppBlockerSettings from "./app-blocker/page";
 
-type Tab = "user" | "ai" | "learning";
+import { Capacitor } from "@capacitor/core";
+
+type Tab = "user" | "ai" | "learning" | "mobile";
 
 export default function SettingsClient({ email }: { email: string }) {
   const [tab, setTab] = useState<Tab>("user");
+  const isAndroid = Capacitor.getPlatform() === "android";
 
-  const tabs: { id: Tab; label: string; icon: string }[] = [
+  const allTabs: { id: Tab; label: string; icon: string }[] = [
     { id: "user", label: "User", icon: "👤" },
     { id: "ai", label: "AI Settings", icon: "🧠" },
     { id: "learning", label: "Learning", icon: "📚" },
+    { id: "mobile", label: "Mobile", icon: "📱" },
   ];
 
+  const tabs = isAndroid ? allTabs : allTabs.filter(t => t.id !== "mobile");
+
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-5 py-6 sm:px-8">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-5 sm:px-8 min-w-0">
       {/* Tabs */}
-      <div className="flex gap-2 rounded-2xl border-2 border-border bg-card p-1.5">
+      <div className="flex gap-1.5 sm:gap-2 rounded-2xl border-2 border-border bg-card p-1.5 overflow-x-auto no-scrollbar">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
+            className={`flex flex-1 items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 ${
               tab === t.id
                 ? "bg-indigo-ai text-white shadow-sm"
                 : "text-muted hover:bg-indigo-ai/5 hover:text-foreground"
             }`}
           >
-            <span className="text-base">{t.icon}</span>
-            <span className="hidden sm:inline">{t.label}</span>
+            <span className="text-sm sm:text-base">{t.icon}</span>
+            <span>{t.label}</span>
           </button>
         ))}
       </div>
@@ -45,42 +53,6 @@ export default function SettingsClient({ email }: { email: string }) {
       {/* AI Settings Tab */}
       {tab === "ai" && (
         <div className="flex flex-col gap-5">
-          {/* Dual System Explainer */}
-          <div className="rounded-3xl border-2 border-indigo-ai/20 bg-indigo-ai/5 p-5">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🔑</span>
-              <div className="flex-1">
-                <h3 className="font-display text-base font-bold text-indigo-ai">
-                  How API Keys Work
-                </h3>
-                <p className="mt-2 text-sm text-muted">
-                  KaiwaAI uses <strong>your own</strong> Google Gemini API key (BYOK).
-                  You have two options:
-                </p>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-start gap-2">
-                    <span className="text-mint">📱</span>
-                    <div>
-                      <strong className="text-foreground">Personal Keys:</strong>{" "}
-                      <span className="text-muted">
-                        Stored on your device only. Most private. Used for vocab, kanji, and personal chat.
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-indigo-ai">🌐</span>
-                    <div>
-                      <strong className="text-foreground">Server Key (Optional):</strong>{" "}
-                      <span className="text-muted">
-                        Encrypted copy on our server. Enables groups, scheduling, and background features.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <ApiKeyCard />
           <ServerKeyCard />
         </div>
@@ -94,6 +66,9 @@ export default function SettingsClient({ email }: { email: string }) {
           <ReviewNotificationCard />
         </div>
       )}
+
+      {/* Mobile Tab */}
+      {tab === "mobile" && <AppBlockerSettings />}
     </div>
   );
 }

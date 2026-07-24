@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Surface, Toggle } from "../ui";
 import { keysForRequest } from "@/lib/api-keys";
+import { Cloud, Check, ShieldCheck } from "@phosphor-icons/react";
 
 export default function ServerKeyCard() {
   const [stored, setStored] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/settings/server-key")
@@ -18,109 +19,125 @@ export default function ServerKeyCard() {
 
   async function enable() {
     setError(null);
+    setSuccessMsg(null);
     const keys = keysForRequest();
     if (keys.length === 0) {
       setError("Add a Personal API key above first.");
       return;
     }
     setBusy(true);
-    const res = await fetch("/api/settings/server-key", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keys }),
-    });
-    setBusy(false);
-    if (res.ok) setStored(true);
-    else setError("Couldn't store the key. Is ENCRYPTION_KEY set?");
+    try {
+      const res = await fetch("/api/settings/server-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keys }),
+      });
+      setBusy(false);
+      if (res.ok) {
+        setStored(true);
+        setSuccessMsg("Server sync enabled! Your keys are safely encrypted.");
+      } else {
+        setError("Couldn't store key on server.");
+      }
+    } catch {
+      setBusy(false);
+      setError("Network error while enabling server key.");
+    }
   }
 
   async function disable() {
     setBusy(true);
-    await fetch("/api/settings/server-key", { method: "DELETE" });
-    setBusy(false);
-    setStored(false);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      await fetch("/api/settings/server-key", { method: "DELETE" });
+      setStored(false);
+      setSuccessMsg("Server sync disabled.");
+    } catch {
+      setError("Failed to disable server key.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <Surface>
+    <section className="rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-xs space-y-4">
+      {/* Header with Toggle */}
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h2 className="font-display text-lg font-bold">
-              Server API Key (Optional)
-            </h2>
-            <span className="rounded-full bg-indigo-ai/15 px-2.5 py-1 text-[10px] font-bold uppercase text-indigo-ai">
-              Advanced
-            </span>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold shrink-0">
+            <Cloud size={20} />
           </div>
-          <p className="mt-1 text-sm text-muted">
-            Enable server-side AI features by storing an encrypted copy of your key
-          </p>
-          
-          <div className="mt-3 space-y-2 text-sm">
-            <div className="flex items-start gap-2">
-              <span className="text-mint">✓</span>
-              <span className="text-muted">AI personas in group chats</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-mint">✓</span>
-              <span className="text-muted">Scheduled messages from Kai</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-mint">✓</span>
-              <span className="text-muted">Background summaries & prep</span>
-            </div>
+          <div className="min-w-0">
+            <h2 className="font-display text-base font-bold text-foreground">
+              Server Key &amp; Account Sync
+            </h2>
+            <p className="text-xs text-muted">
+              Sync keys across devices &amp; enable background features.
+            </p>
           </div>
         </div>
-        <Toggle
-          on={Boolean(stored)}
+
+        {/* Toggle Switch */}
+        <button
           onClick={() => {
             if (busy) return;
-            if (stored) {
-              disable();
-            } else {
-              enable();
-            }
+            if (stored) disable();
+            else enable();
           }}
           disabled={busy}
-        />
+          className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+            stored ? "bg-indigo-ai" : "bg-muted/30"
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+              stored ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </button>
       </div>
 
-      {busy && <p className="mt-3 text-xs text-muted">Saving…</p>}
-      {error && <p className="mt-3 rounded-2xl border-2 border-sakura/20 bg-sakura/5 p-3 text-sm text-sakura">
-        <strong>⚠️ Error:</strong> {error}
-      </p>}
-      {stored && !busy && (
-        <div className="mt-3 rounded-2xl border-2 border-mint/20 bg-mint/5 p-3">
-          <p className="flex items-center gap-1.5 text-sm font-bold text-mint">
-            <span>✓</span>
-            <span>Server features enabled</span>
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            Your key is encrypted (AES-256-GCM) and automatically rotates like your personal keys.
-          </p>
+      {/* Feature Bullet List */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-muted font-medium pt-1">
+        <div className="flex items-center gap-2">
+          <Check size={14} className="text-indigo-ai shrink-0" />
+          <span>Multi-device key sync</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Check size={14} className="text-indigo-ai shrink-0" />
+          <span>AI Personas in group chats</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Check size={14} className="text-indigo-ai shrink-0" />
+          <span>Scheduled Kai messages</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Check size={14} className="text-indigo-ai shrink-0" />
+          <span>Background session prep</span>
+        </div>
+      </div>
+
+      {busy && <p className="text-xs text-muted font-medium animate-pulse">Updating settings...</p>}
+
+      {error && (
+        <div className="rounded-xl border border-sakura/30 bg-sakura/10 p-2.5 text-xs text-sakura font-bold">
+          ⚠️ {error}
         </div>
       )}
-      
-      <details className="mt-3 rounded-2xl border-2 border-amber/20 bg-amber/5 p-3">
-        <summary className="cursor-pointer text-xs font-bold text-amber">
-          🔒 Privacy & Security Information
-        </summary>
-        <div className="mt-2 space-y-2 text-xs text-muted">
-          <p>
-            When enabled, your personal API key(s) are copied to our server and encrypted at rest using AES-256-GCM encryption.
-          </p>
-          <p>
-            <strong className="text-foreground">What we do:</strong> Encrypt your key, use it only for your AI features, automatically rotate through multiple keys.
-          </p>
-          <p>
-            <strong className="text-foreground">What we don&apos;t do:</strong> Log your key, send it back to your browser, or share it with third parties.
-          </p>
-          <p>
-            You can disable this anytime to immediately wipe your key from the server. Personal keys on your device are never affected.
-          </p>
+
+      {successMsg && (
+        <div className="rounded-xl border border-mint/30 bg-mint/10 p-2.5 text-xs text-mint font-bold flex items-center gap-2">
+          <Check size={14} />
+          {successMsg}
         </div>
-      </details>
-    </Surface>
+      )}
+
+      {/* Clean Security Note Footer */}
+      <div className="pt-1 text-[11px] text-muted flex items-center gap-1.5">
+        <ShieldCheck size={14} className="text-emerald-500 shrink-0" />
+        <span>Encrypted using AES-256-GCM before saving to account.</span>
+      </div>
+    </section>
   );
 }

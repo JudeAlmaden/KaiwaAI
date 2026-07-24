@@ -264,7 +264,7 @@ export default function KanjiClient() {
         </div>
 
         {/* JLPT Level Filter */}
-        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto pb-1">
+        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto no-scrollbar scrollbar-none pb-1">
           {JLPT_LEVELS.map((level) => (
             <Chip
               key={level}
@@ -277,7 +277,7 @@ export default function KanjiClient() {
         </div>
 
         {/* Review Status Filter */}
-        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto pb-1">
+        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto no-scrollbar scrollbar-none pb-1">
           {REVIEW_FILTERS.map((filter) => (
             <Chip
               key={filter}

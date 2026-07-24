@@ -361,7 +361,7 @@ export default function VocabClient() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col min-w-0 max-w-full overflow-x-hidden">
       <PageHeader
         title="Vocab"
         jp="単語"
@@ -439,7 +439,7 @@ export default function VocabClient() {
             </button>
           )}
         </div>
-        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto">
+        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto no-scrollbar scrollbar-none">
           {FILTERS.map((f) => (
             <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
               {f}
@@ -473,27 +473,27 @@ export default function VocabClient() {
                     {items.length}
                   </span>
                 </h3>
-                <div className="grid gap-2.5 sm:grid-cols-2">
+                <div className="grid gap-2.5 sm:grid-cols-2 min-w-0">
                   {items.map((c) => (
                     <div
                       key={c.id}
                       onClick={() => openCard(c)}
-                      className="group flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-soft hover:shadow-md hover:shadow-indigo-ai/5"
+                      className="group flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-soft hover:shadow-md hover:shadow-indigo-ai/5 min-w-0 max-w-full overflow-hidden"
                     >
                       <Ring pct={progressOf(c)} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline gap-2">
-                          <p className="font-jp text-lg font-bold leading-tight">
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <div className="flex items-baseline gap-2 min-w-0 overflow-hidden">
+                          <p className="font-jp text-lg font-bold leading-tight shrink-0 max-w-[60%] truncate">
                             {c.word}
                           </p>
-                          <p className="truncate font-jp text-xs text-indigo-ai/70">
+                          <p className="truncate font-jp text-xs text-indigo-ai/70 min-w-0 flex-1">
                             {c.reading}
                           </p>
                           {c.note && (
-                            <span className="text-xs" title="Has note">📝</span>
+                            <span className="text-xs shrink-0" title="Has note">📝</span>
                           )}
                         </div>
-                        <p className="truncate text-xs text-muted">
+                        <p className="truncate text-xs text-muted min-w-0 block">
                           {c.meaning}
                         </p>
                       </div>
@@ -562,7 +562,7 @@ export default function VocabClient() {
 
             <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Meaning</p>
-              <p className="mt-1 text-base font-semibold leading-6">{selected.meaning}</p>
+              <p className="mt-1 text-base font-semibold leading-6 break-words whitespace-pre-wrap">{selected.meaning}</p>
             </div>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-border/60 px-2.5 py-1 font-bold uppercase text-muted">
