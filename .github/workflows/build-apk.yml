@@ -2,8 +2,11 @@ name: Build Android APK (Production)
 
 on:
   push:
-    branches: [main]
+    branches: [main, testing]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -34,18 +37,118 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      # Decode the keystore stored as a base64 GitHub Secret
-      - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/kaiwaai-release.jks
+      - name: Decode and verify keystore
+        env:
+          KEYSTORE_HEX: ${{ secrets.KEYSTORE_HEX }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing=""
+          if [ -z "$KEYSTORE_HEX" ] && [ -z "$KEYSTORE_BASE64" ]; then
+            missing="$missing KEYSTORE_HEX (or KEYSTORE_BASE64)"
+          fi
+          [ -z "$KEYSTORE_PASSWORD" ] && missing="$missing KEYSTORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && missing="$missing KEY_ALIAS"
+          [ -z "$KEY_PASSWORD" ] && missing="$missing KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "ERROR: Missing GitHub secrets:$missing"
+            exit 1
+          fi
+
+          KEYSTORE_PASSWORD="$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          KEY_ALIAS="$(printf '%s' "$KEY_ALIAS" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          KEY_PASSWORD="$(printf '%s' "$KEY_PASSWORD" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+          KEYSTORE_PATH="android/app/kaiwaai-release.jks"
+          python3 - <<'PY'
+          import base64, hashlib, os, pathlib, re, subprocess, sys
+
+          def load_keystore_bytes() -> bytes:
+              hex_raw = os.environ.get("KEYSTORE_HEX", "").strip()
+              if hex_raw:
+                  cleaned = re.sub(r"[^0-9a-fA-F]", "", hex_raw)
+                  if len(cleaned) % 2 != 0:
+                      print("ERROR: KEYSTORE_HEX has an odd number of hex characters.")
+                      sys.exit(1)
+                  data = bytes.fromhex(cleaned)
+                  print(f"Loaded keystore from KEYSTORE_HEX ({len(cleaned)} hex chars)")
+                  return data
+
+              raw = os.environ["KEYSTORE_BASE64"].strip()
+              if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
+                  raw = raw[1:-1]
+              raw = re.sub(r"-----BEGIN[^-]+-----", "", raw)
+              raw = re.sub(r"-----END[^-]+-----", "", raw)
+              raw = re.sub(r"\s+", "", raw)
+              if "-" in raw or "_" in raw:
+                  raw = raw.replace("-", "+").replace("_", "/")
+              raw = re.sub(r"[^A-Za-z0-9+/=]", "", raw)
+              try:
+                  data = base64.b64decode(raw, validate=True)
+              except Exception as exc:
+                  print(f"ERROR: KEYSTORE_BASE64 is not valid base64: {exc}")
+                  sys.exit(1)
+              print("Loaded keystore from KEYSTORE_BASE64")
+              return data
+
+          data = load_keystore_bytes()
+          if len(data) < 500:
+              print(f"ERROR: Decoded keystore is too small ({len(data)} bytes).")
+              sys.exit(1)
+
+          keystore_path = pathlib.Path("android/app/kaiwaai-release.jks")
+          keystore_path.write_bytes(data)
+          print(f"Keystore size: {len(data)} bytes")
+          print(f"Keystore SHA256: {hashlib.sha256(data).hexdigest()}")
+
+          store_password = os.environ["KEYSTORE_PASSWORD"]
+          key_alias = os.environ["KEY_ALIAS"]
+          key_password = os.environ["KEY_PASSWORD"]
+
+          result = subprocess.run(
+              [
+                  "keytool",
+                  "-list",
+                  "-v",
+                  "-keystore",
+                  str(keystore_path),
+                  "-storepass",
+                  store_password,
+                  "-alias",
+                  key_alias,
+              ],
+              capture_output=True,
+              text=True,
+          )
+          if result.returncode != 0:
+              print("ERROR: Keystore validation failed.")
+              print(result.stderr.strip() or result.stdout.strip())
+              print("Check KEYSTORE_HEX/KEYSTORE_BASE64 matches kaiwaai-release.jks on your PC.")
+              print("Also verify KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD.")
+              sys.exit(1)
+
+          github_env = os.environ["GITHUB_ENV"]
+          with open(github_env, "a", encoding="utf-8") as env_file:
+              for name, value in [
+                  ("KEYSTORE_PASSWORD", store_password),
+                  ("KEY_ALIAS", key_alias),
+                  ("KEY_PASSWORD", key_password),
+              ]:
+                  env_file.write(f"{name}<<EOF\n{value}\nEOF\n")
+          PY
+
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "ERROR: Decoded keystore is empty."
+            exit 1
+          fi
 
       - name: Build signed release APK
         run: chmod +x gradlew && ./gradlew assembleRelease
         working-directory: android
         env:
           KEYSTORE_PATH: kaiwaai-release.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Release APK
         uses: softprops/action-gh-release@v2

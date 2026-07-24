@@ -28,6 +28,7 @@ android {
                 storePassword keystorePassword
                 keyAlias releaseKeyAlias
                 keyPassword releaseKeyPassword
+                storeType "pkcs12"
             }
         }
     }
