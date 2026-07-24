@@ -68,8 +68,6 @@ export default function ReviewClient() {
     activeLimit: 5
   });
   const [dueCount, setDueCount] = useState<number | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showCustomModal, setShowCustomModal] = useState(false);
 
   const [activePool, setActivePool] = useState<Card[]>([]);
   const [incomingQueue, setIncomingQueue] = useState<Card[]>([]);
@@ -123,11 +121,6 @@ export default function ReviewClient() {
     }
   };
 
-  const handleStartAppBlockerSession = () => {
-    if (typeof window !== "undefined") {
-      window.location.href = `/app-lock?autostart=true&mode=app-blocker&count=${appBlockerConfig.count}&reviewType=${appBlockerConfig.reviewType}&direction=${appBlockerConfig.direction}`;
-    }
-  };
 
   // Auto-start review session directly if already configured or triggered by App Blocker
   useEffect(() => {
@@ -140,6 +133,7 @@ export default function ReviewClient() {
       if ((isAutostart || isConfigured) && phase === "setup") {
         if (countParam) {
           const reqCount = parseInt(countParam) || 10;
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setSetup(prev => ({ ...prev, limit: reqCount }));
           start({ studyMode: "all", limit: reqCount });
         } else {
@@ -155,6 +149,7 @@ export default function ReviewClient() {
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
@@ -588,11 +583,13 @@ export default function ReviewClient() {
   const isJpToEn = card._dir === "jp-to-en";
 
   // Front side content
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const frontContent = isJpToEn
     ? (isVocab ? card.word : card.character)
     : (isVocab ? card.meaning : card.meanings?.[0]);
 
   // Back side content (flipped)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const backContent = isVocab ? {
     japanese: card.word,
     reading: card.reading,

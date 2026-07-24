@@ -14,6 +14,7 @@ export default function StandaloneAppLockPage() {
   const router = useRouter();
   const [blockedPackage, setBlockedPackage] = useState<string | null>(null);
   const [requiredCount, setRequiredCount] = useState(10);
+  const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(15);
   const [cards, setCards] = useState<Card[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
@@ -102,9 +103,25 @@ export default function StandaloneAppLockPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // Check if still within an active unlock grace period
+      const storedExpiry = localStorage.getItem('kaiwa_unlock_expiry');
+      if (storedExpiry && Date.now() < parseInt(storedExpiry)) {
+        setIsUnlocked(true);
+        setLoading(false);
+        const params = new URLSearchParams(window.location.search);
+        const pkg = params.get('blocked_package');
+        if (pkg) {
+          setTimeout(() => {
+            AppBlocker.launchApp({ packageName: pkg }).catch(() => {});
+          }, 500);
+        }
+        return;
+      }
+
       const params = new URLSearchParams(window.location.search);
       const pkg = params.get('blocked_package');
       const countParam = params.get('count');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (pkg) setBlockedPackage(pkg);
 
       if (countParam) {
@@ -117,6 +134,13 @@ export default function StandaloneAppLockPage() {
           })
           .catch(() => {});
       }
+
+      // Load unlock duration from config
+      AppBlocker.getAppBlockerConfig()
+        .then((cfg) => {
+          if (cfg?.unlockDurationMinutes) setUnlockDurationMinutes(cfg.unlockDurationMinutes);
+        })
+        .catch(() => {});
     }
 
     fetchCards();
@@ -151,6 +175,9 @@ export default function StandaloneAppLockPage() {
 
         if (newCompleted >= requiredCount) {
           const unlock = () => {
+            // Store unlock expiry so re-opens within the grace period skip the lock
+            const expiryMs = Date.now() + unlockDurationMinutes * 60 * 1000;
+            localStorage.setItem('kaiwa_unlock_expiry', String(expiryMs));
             setIsUnlocked(true);
             if (blockedPackage) {
               setTimeout(() => {

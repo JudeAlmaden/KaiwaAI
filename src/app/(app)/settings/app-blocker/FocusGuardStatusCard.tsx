@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Kai from '@/app/Kai';
-import { ShieldCheck, ShieldWarning, Sliders, X, Minus, Plus } from '@phosphor-icons/react';
+import { ShieldWarning, Sliders, X, Minus, Plus } from '@phosphor-icons/react';
 
 interface FocusGuardStatusCardProps {
   isMonitoring: boolean;

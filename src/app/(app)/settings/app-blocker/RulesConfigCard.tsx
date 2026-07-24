@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, Gear, X, Minus, Plus, Sliders } from '@phosphor-icons/react';
+import { Target, X, Minus, Plus, Sliders } from '@phosphor-icons/react';
 
 interface RulesConfigCardProps {
   flashcardCount: number;

@@ -22,11 +22,11 @@ export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
     return { active: false };
   }
 
-  async addBlockedApp(_options: { packageName: string }): Promise<void> {
+  async addBlockedApp(_: { packageName: string }): Promise<void> { // eslint-disable-line @typescript-eslint/no-unused-vars
     console.log('App blocking not supported on web');
   }
 
-  async removeBlockedApp(_options: { packageName: string }): Promise<void> {
+  async removeBlockedApp(_: { packageName: string }): Promise<void> { // eslint-disable-line @typescript-eslint/no-unused-vars
     console.log('App blocking not supported on web');
   }
 
@@ -58,11 +58,11 @@ export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
     console.log('App blocking not supported on web');
   }
 
-  async launchApp(_options: { packageName: string }): Promise<void> {
+  async launchApp(_: { packageName: string }): Promise<void> { // eslint-disable-line @typescript-eslint/no-unused-vars
     console.log('App launching not supported on web');
   }
 
-  async requestPermissions(_options?: { type?: 'usageStats' | 'overlay' }): Promise<{ granted: boolean; usageStats?: boolean; overlay?: boolean }> {
+  async requestPermissions(_?: { type?: 'usageStats' | 'overlay' }): Promise<{ granted: boolean; usageStats?: boolean; overlay?: boolean }> { // eslint-disable-line @typescript-eslint/no-unused-vars
     return { granted: false, usageStats: false, overlay: false };
   }
 

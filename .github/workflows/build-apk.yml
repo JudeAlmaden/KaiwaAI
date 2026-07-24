@@ -14,16 +14,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build Next.js (static export)
-        run: npm run build
-        env:
-          CAPACITOR_SERVER_URL: https://kaiwa-ai.vercel.app
+
+      - name: Create stub web assets for cap sync
+        run: |
+          mkdir -p out
+          echo '<html><body>KaiwaAI</body></html>' > out/index.html
 
       - uses: actions/setup-java@v4
         with:

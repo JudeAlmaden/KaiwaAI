@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import ApiKeyCard from "./ApiKeyCard";
 import ServerKeyCard from "./ServerKeyCard";
 import ModelCard from "./ModelCard";

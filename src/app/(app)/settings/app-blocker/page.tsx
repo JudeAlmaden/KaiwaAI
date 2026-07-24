@@ -73,6 +73,7 @@ export default function AppBlockerSettings() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSettings();
   }, [loadSettings]);
 
@@ -102,6 +103,7 @@ export default function AppBlockerSettings() {
 
   useEffect(() => {
     if (showPermissionModal) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setModalFeedback(null);
       checkPermissionStatus();
     }

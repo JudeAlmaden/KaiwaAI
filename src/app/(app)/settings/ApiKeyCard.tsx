@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   listKeys,
   addKey,
@@ -19,8 +19,8 @@ function mask(key: string) {
 }
 
 export default function ApiKeyCard() {
-  const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
-  const [active, setActive] = useState(0);
+  const [keys, setKeys] = useState<ApiKeyEntry[]>(() => listKeys());
+  const [active, setActive] = useState(() => getActiveIndex());
   const [draft, setDraft] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -31,10 +31,6 @@ export default function ApiKeyCard() {
     setKeys(listKeys());
     setActive(getActiveIndex());
   }
-
-  useEffect(() => {
-    refresh();
-  }, []);
 
   async function add() {
     const trimmed = draft.trim();

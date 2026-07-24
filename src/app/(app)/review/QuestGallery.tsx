@@ -15,10 +15,6 @@ import {
   Minus,
   Plus,
   ArrowRight,
-  BookBookmark,
-  Percent,
-  Timer,
-  Sliders,
 } from "@phosphor-icons/react";
 import Link from "next/link";
 
@@ -54,8 +50,6 @@ type QuestGalleryProps = {
 
 export default function QuestGallery({
   dueCount,
-  strugglingCount,
-  totalCards,
   isMonitoring,
   isAndroid = true,
   appBlockerConfig,
@@ -63,7 +57,7 @@ export default function QuestGallery({
   onToggleMonitoring,
   onUpdateAppBlockerConfig,
 }: QuestGalleryProps) {
-  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [, setShowCustomModal] = useState(false);
   const [showAppBlockerModal, setShowAppBlockerModal] = useState(false);
 
   return (
@@ -396,25 +390,3 @@ export default function QuestGallery({
   );
 }
 
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 ${
-        active
-          ? "bg-indigo-ai text-white shadow-xs"
-          : "border border-border bg-background text-muted hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}

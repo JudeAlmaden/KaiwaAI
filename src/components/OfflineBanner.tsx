@@ -1,7 +1,7 @@
 'use client';
 
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
-import { WifiSlash, Info } from '@phosphor-icons/react';
+import { WifiSlash } from '@phosphor-icons/react';
 
 interface OfflineBannerProps {
   isAppBlockerMode?: boolean;

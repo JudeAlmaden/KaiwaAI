@@ -28,7 +28,7 @@ export default function FlashcardCompletePage() {
       <div className="animate-bounce text-6xl mb-4">🎉</div>
       <h1 className="text-3xl font-bold mb-2">Great Job!</h1>
       <p className="text-lg text-muted mb-4">
-        You've completed your flashcards!
+        You&apos;ve completed your flashcards!
       </p>
       <p className="text-sm text-muted">
         You can now access your blocked app.

@@ -50,14 +50,11 @@ function getKaiSpeech(stats: Stats | null, timeJp: string) {
 
 export default function HomeClient() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [greeting, setGreeting] = useState({ en: "Good day", jp: "こんにちは！" });
-  const [promptIndex, setPromptIndex] = useState(0);
-  const [proverbIndex, setProverbIndex] = useState(0);
+  const [greeting] = useState(() => getTimeGreeting());
+  const [promptIndex] = useState(() => Math.floor(Math.random() * DAILY_PROMPTS.length));
+  const [proverbIndex] = useState(() => Math.floor(Math.random() * PROVERBS.length));
 
   useEffect(() => {
-    setGreeting(getTimeGreeting());
-    setPromptIndex(Math.floor(Math.random() * DAILY_PROMPTS.length));
-    setProverbIndex(Math.floor(Math.random() * PROVERBS.length));
 
     fetch("/api/activity", { method: "POST" })
       .catch(() => {})

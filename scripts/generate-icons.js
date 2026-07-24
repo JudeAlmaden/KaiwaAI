@@ -1,6 +1,10 @@
-const sharp = require('sharp');
-const path = require('path');
-const fs = require('fs');
+import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const src = path.join(__dirname, '../public/icons/apple-touch-icon.png');
 
