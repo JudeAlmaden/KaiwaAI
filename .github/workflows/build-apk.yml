@@ -1,0 +1,57 @@
+name: Build Android APK (Production)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Next.js (static export)
+        run: npm run build
+        env:
+          CAPACITOR_SERVER_URL: https://kaiwa-ai.vercel.app
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # Decode the keystore stored as a base64 GitHub Secret
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/kaiwaai-release.jks
+
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease
+        working-directory: android
+        env:
+          KEYSTORE_PATH: kaiwaai-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Release APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "KaiwaAI v${{ github.run_number }}"
+          body: "Production release built from `main`."
+          files: android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

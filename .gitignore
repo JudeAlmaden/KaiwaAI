@@ -51,3 +51,10 @@ next-env.d.ts
 
 # AI assistant artifacts
 CLAUDE.md
+
+# Keystore files
+*.jks
+*.b64.txt
+
+# IDE settings
+.idea/

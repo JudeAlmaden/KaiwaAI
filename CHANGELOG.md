@@ -2,6 +2,32 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.3.0] - 2026-07-25
+
+### Added
+
+- **Focus Guard (App Blocker)** - New Android feature that intercepts blocked apps and requires completing a flashcard review session before unlocking access. Configurable card count, review type, and unlock duration.
+- **App Lock Screen** (`/app-lock`) - Standalone review page shown by the app blocker service. Features the full review experience including card flip, SRS grading, kanji breakdown, mnemonic hints, and auto-launch of the blocked app on completion.
+- **Unified `ReviewCard` Component** - Modularized the flashcard review UI into a single shared `ReviewCard` component used by both `/review` and `/app-lock`. Includes 3D flip animation, audio playback, furigana, kanji breakdown, and mnemonic hint.
+- **Spaced Repetition in App Lock** - App lock review now fetches due cards first (falling back to all), tracks first-attempt grades, submits SRS updates to the server, and cycles "Again" cards to the back without counting toward the unlock threshold.
+- **AppBlocker Capacitor Plugin** - Native Android plugin with `launchApp` method to auto-launch the originally blocked app after review completion.
+- **Offline Banner** - Network status indicator shown when the device is offline.
+- **CI/CD Pipeline** - GitHub Actions workflow that builds a signed release APK on every push to `main` and publishes it to GitHub Releases.
+- **Android App Icon** - App icon generated from existing brand assets across all mipmap densities (mdpi → xxxhdpi).
+
+### Changed
+
+- **Grade Buttons** - Removed keyboard shortcut number hints from grade buttons (Again / Hard / Good / Easy). Now show icon + label only (2 lines).
+- **Capacitor Config** - Server URL now driven by `CAPACITOR_SERVER_URL` env var. Production builds point to Vercel; local dev uses LAN IP.
+- **`webDir`** - Changed from `public` to `out` to correctly reference Next.js static export output.
+
+### Fixed
+
+- Fixed `useCallback` missing import in `settings/app-blocker/page.tsx`
+- Fixed `@/lib/client-mnemonic` wrong module path → `@/lib/kanji-mnemonic-client`
+- Fixed conflicting local `Card` type declaration in `ReviewClient.tsx` (shadowed imported `Card` from `ReviewCard`)
+- Removed hardcoded offline fallback card array from app lock page
+
 ## [1.2.5] - 2026-07-20
 
 ### Added
