@@ -5,50 +5,42 @@ import Link from "next/link";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
 import { PopButton } from "../../PopButton";
-import { speakJa, canSpeak } from "@/lib/speak";
-import KanjiBreakdown from "../chat/KanjiBreakdown";
-import { formLabel } from "@/lib/form-label";
 import { scheduleReviewNotifications } from "@/lib/review-notifications";
-import Furigana from "./Furigana";
 import Petals from "../../Petals";
 import QuestGallery from "./QuestGallery";
+import { useAppBlockerCompletion } from "@/hooks/useAppBlockerCompletion";
+import OfflineBanner from "@/components/OfflineBanner";
+import { AppBlocker } from "@/plugins/app-blocker";
+import ReviewCard, { Card } from "./ReviewCard";
 
-type Card = {
-  id: string;
-  type?: "vocabulary" | "kanji"; // For mixed mode
-  // Vocabulary fields
-  word?: string;
-  reading?: string;
-  romaji?: string;
-  meaning?: string;
-  partOfSpeech?: string;
-  formType?: string | null;
-  dictionary?: string | null;
-  note?: string | null; // User's personal note
-  // Kanji fields
-  character?: string;
-  meanings?: string[];
-  readingsOn?: string[];
-  readingsKun?: string[];
-  radicals?: string[];
-  mnemonic?: string; // User's mnemonic for this kanji
-  // Common
-  status: "new" | "learning" | "known";
-};
-
-const GRADES: { grade: number; label: string; key: string; color: string }[] = [
-  { grade: 0, label: "Again", key: "1", color: "bg-sakura text-white border-sakura" },
-  { grade: 1, label: "Hard", key: "2", color: "bg-amber/20 text-amber border-amber/40" },
-  { grade: 2, label: "Good", key: "3", color: "bg-sky/20 text-sky border-sky/40" },
-  { grade: 3, label: "Easy", key: "4", color: "bg-mint/20 text-mint border-mint/40" },
+const FALLBACK_OFFLINE_CARDS: Card[] = [
+  { id: "off-1", status: "learning", word: "こんにちは", reading: "konnichiwa", romaji: "konnichiwa", meaning: "Hello / Good afternoon" },
+  { id: "off-2", status: "learning", word: "ありがとう", reading: "arigatou", romaji: "arigatou", meaning: "Thank you" },
+  { id: "off-3", status: "learning", word: "水", reading: "みず", romaji: "mizu", meaning: "Water" },
+  { id: "off-4", status: "learning", word: "食べる", reading: "たべる", romaji: "taberu", meaning: "To eat" },
+  { id: "off-5", status: "learning", word: "飲む", reading: "のむ", romaji: "nomu", meaning: "To drink" },
+  { id: "off-6", status: "learning", word: "日本", reading: "にほん", romaji: "nihon", meaning: "Japan" },
+  { id: "off-7", status: "learning", word: "友達", reading: "ともだち", romaji: "tomodachi", meaning: "Friend" },
+  { id: "off-8", status: "learning", word: "勉強", reading: "べんきょう", romaji: "benkyou", meaning: "Study" },
+  { id: "off-9", status: "learning", word: "学生", reading: "がくせい", romaji: "gakusei", meaning: "Student" },
+  { id: "off-10", status: "learning", word: "先生", reading: "せんせい", romaji: "sensei", meaning: "Teacher" },
+  { id: "off-11", status: "learning", word: "本", reading: "ほん", romaji: "hon", meaning: "Book" },
+  { id: "off-12", status: "learning", word: "学校", reading: "がっこう", romaji: "gakkou", meaning: "School" },
+  { id: "off-13", status: "learning", word: "猫", reading: "ねこ", romaji: "neko", meaning: "Cat" },
+  { id: "off-14", status: "learning", word: "犬", reading: "いぬ", romaji: "inu", meaning: "Dog" },
+  { id: "off-15", status: "learning", word: "大きい", reading: "おおきい", romaji: "ookii", meaning: "Big / Large" },
 ];
+
+
 
 type StudyMode = 
   | "due"           // Cards with nextReview in the past
   | "all"           // Study ahead (any cards)
   | "recent"        // Recently added (last 7 days)
   | "struggling"    // Low ease factor (<2.0) or many reviews
-  | "leeches";      // Cards reviewed 8+ times with interval <7 days
+  | "leeches"       // Cards reviewed 8+ times with interval <7 days
+  | "new"
+  | "custom";
 
 type CardDirection = "jp-to-en" | "en-to-jp" | "mixed";
 type ReviewType = "vocabulary" | "kanji" | "mixed";
@@ -61,6 +53,7 @@ type Setup = {
   limit: number;
   isContinuous: boolean;
   activeLimit: number | "all";
+  customCardIds?: string[];
 };
 
 export default function ReviewClient() {
@@ -86,6 +79,83 @@ export default function ReviewClient() {
   const [tally, setTally] = useState({ again: 0, good: 0 });
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
+
+  // App Blocker Completion Tracking
+  const completedCount = tally.good + tally.again;
+  useAppBlockerCompletion(completedCount, setup.limit);
+
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [appBlockerConfig, setAppBlockerConfig] = useState<import('@/plugins/app-blocker').AppBlockerConfig>({
+    count: 10,
+    blockChance: 100,
+    unlockDurationMinutes: 15,
+    reviewType: 'vocabulary',
+    direction: 'jp-to-en',
+  });
+
+  useEffect(() => {
+    AppBlocker.isMonitoring().then((r) => setIsMonitoring(r.active)).catch(() => {});
+    AppBlocker.getAppBlockerConfig().then((cfg) => setAppBlockerConfig(cfg)).catch(() => {});
+  }, []);
+
+  const handleToggleMonitoring = async () => {
+    try {
+      if (isMonitoring) {
+        await AppBlocker.stopMonitoring();
+        setIsMonitoring(false);
+      } else {
+        await AppBlocker.setAppBlockerConfig(appBlockerConfig);
+        await AppBlocker.startMonitoring();
+        setIsMonitoring(true);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUpdateAppBlockerConfig = async (update: Partial<import('@/plugins/app-blocker').AppBlockerConfig>) => {
+    const next = { ...appBlockerConfig, ...update };
+    setAppBlockerConfig(next);
+    try {
+      await AppBlocker.setAppBlockerConfig(next);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleStartAppBlockerSession = () => {
+    if (typeof window !== "undefined") {
+      window.location.href = `/app-lock?autostart=true&mode=app-blocker&count=${appBlockerConfig.count}&reviewType=${appBlockerConfig.reviewType}&direction=${appBlockerConfig.direction}`;
+    }
+  };
+
+  // Auto-start review session directly if already configured or triggered by App Blocker
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isAutostart = params.get("autostart") === "true" || params.get("mode") === "app-blocker";
+      const isConfigured = localStorage.getItem("kaiwa_review_setup_configured") === "true";
+      const countParam = params.get("count");
+      
+      if ((isAutostart || isConfigured) && phase === "setup") {
+        if (countParam) {
+          const reqCount = parseInt(countParam) || 10;
+          setSetup(prev => ({ ...prev, limit: reqCount }));
+          start({ studyMode: "all", limit: reqCount });
+        } else {
+          AppBlocker.getFlashcardRequirement()
+            .then(res => {
+              const reqCount = res.count || 10;
+              setSetup(prev => ({ ...prev, limit: reqCount }));
+              start({ studyMode: "all", limit: reqCount });
+            })
+            .catch(() => {
+              start({ studyMode: "all", limit: 10 });
+            });
+        }
+      }
+    }
+  }, []);
 
   const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
     if (isRegenerate) {
@@ -214,14 +284,21 @@ export default function ReviewClient() {
       limit: String(s.limit) 
     });
     if (s.practice) params.set("practice", "true");
-    const res = await fetch(`${endpoint}?${params}`);
-    const d = await res.json();
-    const cards: Card[] = d.cards ?? [];
+    
+    let cards: Card[] = [];
+    try {
+      const res = await fetch(`${endpoint}?${params}`);
+      if (res.ok) {
+        const d = await res.json();
+        cards = d.cards ?? [];
+      }
+    } catch {
+      cards = [];
+    }
+
+    // Fallback to offline cards if network request returned no cards or failed
     if (cards.length === 0) {
-      setActivePool([]);
-      setIncomingQueue([]);
-      setPhase("done");
-      return;
+      cards = FALLBACK_OFFLINE_CARDS.slice(0, Math.min(s.limit, FALLBACK_OFFLINE_CARDS.length));
     }
     
     // Shuffle for mixed direction
@@ -361,18 +438,32 @@ export default function ReviewClient() {
 
   // ── SETUP ──────────────────────────────────────────────────────────────
   if (phase === "setup") {
+    const isAppBlocker = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "app-blocker";
+    const isAutostart = typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("autostart") === "true" || isAppBlocker);
+
+    if (isAutostart) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center p-6 bg-background text-center min-h-[60vh]">
+          <Kai size={64} className="animate-bounce" />
+          <p className="mt-4 text-sm font-bold text-muted font-display animate-pulse">
+            Starting your Focus Guard review session...
+          </p>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col pb-32 px-4 sm:px-8">
+        <OfflineBanner isAppBlockerMode={isAppBlocker} />
         <PageHeader title="Review" jp="復習" subtitle="Choose a quest to begin your session." />
         <QuestGallery
-          dueCount={dueCount}
-          setup={setup}
-          setSetup={setSetup}
+          dueCount={dueCount || 0}
+          isMonitoring={isMonitoring}
+          isAndroid={true}
+          appBlockerConfig={appBlockerConfig}
           onStartQuest={start}
-          showCustomModal={showCustomModal}
-          setShowCustomModal={setShowCustomModal}
-          showAdvanced={showAdvanced}
-          setShowAdvanced={setShowAdvanced}
+          onToggleMonitoring={handleToggleMonitoring}
+          onUpdateAppBlockerConfig={handleUpdateAppBlockerConfig}
         />
       </div>
     );
@@ -456,7 +547,18 @@ export default function ReviewClient() {
             </p>
           )}
 
-          <div className="mt-8 flex gap-4 w-full max-w-xs">
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+            {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("blocked_package") && (
+              <button
+                onClick={() => {
+                  const pkg = new URLSearchParams(window.location.search).get("blocked_package");
+                  if (pkg) AppBlocker.launchApp({ packageName: pkg }).catch(() => {});
+                }}
+                className="w-full h-12 rounded-2xl bg-emerald-500 border-b-4 border-emerald-600 text-white font-bold text-sm shadow-sm hover:brightness-105 transition active:translate-y-[2px] flex items-center justify-center gap-2"
+              >
+                🚀 Launch App
+              </button>
+            )}
             <PopButton onClick={() => setPhase("setup")} size="md" className="flex-1">
               New session
             </PopButton>
@@ -507,8 +609,11 @@ export default function ReviewClient() {
     mnemonic: card.mnemonic,
   };
 
+  const isAppBlockerSession = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "app-blocker";
+
   return (
     <div className="flex flex-1 flex-col">
+      <OfflineBanner isAppBlockerMode={isAppBlockerSession} />
       {/* progress */}
       <div className="px-5 pt-4 sm:px-8">
         <div className="mx-auto flex max-w-md items-center gap-3">
@@ -561,197 +666,31 @@ export default function ReviewClient() {
           </div>
         )}
 
-        {/* 3D Flip Card */}
-        <div className="card-perspective w-full max-w-md min-h-[320px] sm:min-h-[360px]">
-          <div
-            onClick={() => setFlipped((f) => !f)}
-            className={`card-inner cursor-pointer ${flipped ? "is-flipped" : ""}`}
-          >
-            {/* Front Side */}
-            <div className="card-front hover:border-indigo-ai/30 transition-all select-none">
-              {canSpeak() && isJpToEn && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    speakJa(backContent.japanese || "");
-                  }}
-                  className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai hover:bg-indigo-ai/20 transition-colors"
-                  title="Hear it"
-                >
-                  🔊
-                </button>
-              )}
-              <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
-                {isJpToEn && isVocab && card.word && card.reading ? (
-                  <Furigana word={card.word} reading={card.reading} className="text-5xl" />
-                ) : (
-                  frontContent
-                )}
-              </span>
-              {isVocab && formLabel(card.formType) && (
-                <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai font-display">
-                  {formLabel(card.formType)}
-                </p>
-              )}
-              {!isVocab && card.radicals && card.radicals.length > 0 && (
-                <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Radicals</p>
-                  <div className="mt-2 flex flex-wrap justify-center gap-2">
-                    {card.radicals.map((radical, i) => (
-                      <button
-                        key={i}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          window.open(`/kanji?search=${encodeURIComponent(radical)}`, '_blank');
-                        }}
-                        className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
-                        title={`Search for ${radical}`}
-                      >
-                        {radical}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <p className="mt-5 text-xs text-muted/80">Tap or press Space to flip</p>
-
-              {!isVocab && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (showHint && card.mnemonic) {
-                      setShowHint(false);
-                    } else {
-                      handleShowHint();
-                    }
-                  }}
-                  disabled={generatingMnemonic}
-                  className="mt-3 rounded-full border-2 border-mint/30 bg-mint/5 px-4 py-2 text-xs font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50"
-                >
-                  {generatingMnemonic ? "✨ Generating..." : showHint ? "Hide hint" : "💡 Show hint"}
-                </button>
-              )}
-              {showHint && !isVocab && card.mnemonic && (
-                <div className="mt-3 w-full space-y-2" onClick={(e) => e.stopPropagation()}>
-                  <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display">
-                      💡 Mnemonic
-                    </p>
-                    <p className="mt-1 text-xs text-foreground whitespace-pre-wrap leading-relaxed">{card.mnemonic}</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      handleGenerateMnemonic(
-                        card.character!,
-                        card.meanings!,
-                        card.radicals || [],
-                        true
-                      );
-                    }}
-                    disabled={generatingMnemonic}
-                    className="w-full rounded-full border-2 border-mint/30 bg-mint/10 px-3 py-1.5 text-xs font-bold text-mint transition-all hover:bg-mint/20 disabled:opacity-50"
-                  >
-                    {generatingMnemonic ? "⏳ Regenerating..." : "🔄 Regenerate"}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Back Side */}
-            <div className="card-back overflow-y-auto">
-              {isJpToEn ? (
-                <>
-                  {backContent.reading && (
-                    <p className="font-jp text-2xl font-bold text-indigo-ai">{backContent.reading}</p>
-                  )}
-                  {backContent.romaji && (
-                    <p className="text-xs text-muted mt-0.5">{backContent.romaji}</p>
-                  )}
-                  <p className="mt-2.5 text-xl font-bold text-foreground">{backContent.english}</p>
-                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
-                    {backContent.meta}
-                  </p>
-                  {isVocab && formLabel(card.formType) && card.dictionary && (
-                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
-                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-                    </p>
-                  )}
-                  {isVocab && card.word && <KanjiBreakdown word={card.word} />}
-                  {!isVocab && card.radicals && card.radicals.length > 0 && (
-                    <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2 w-full" onClick={(e) => e.stopPropagation()}>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Radicals</p>
-                      <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
-                        {card.radicals.map((radical, i) => (
-                          <button
-                            key={i}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(`/kanji/${encodeURIComponent(radical)}`, '_blank');
-                            }}
-                            className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
-                            title={`Open ${radical}`}
-                          >
-                            {radical}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {!isVocab && backContent.mnemonic && (
-                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display">
-                        💡 Mnemonic
-                      </p>
-                      <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="font-jp text-4xl font-bold text-indigo-ai">
-                    {backContent.japanese}
-                  </p>
-                  {backContent.reading && (
-                    <p className="mt-2 text-sm font-jp text-muted">{backContent.reading}</p>
-                  )}
-                  {isVocab && formLabel(card.formType) && card.dictionary && (
-                    <p className="mt-2 text-xs font-semibold text-indigo-ai">
-                      {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-                    </p>
-                  )}
-                  {!isVocab && backContent.mnemonic && (
-                    <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display">
-                        💡 Mnemonic
-                      </p>
-                      <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {flipped ? (
-          <div className="grid w-full max-w-md grid-cols-4 gap-2">
-            {GRADES.map((g) => (
-              <button
-                key={g.grade}
-                onClick={() => grade(g.grade)}
-                className={`flex flex-col items-center rounded-2xl border-2 py-3 text-sm font-bold transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${g.color}`}
-              >
-                {g.label}
-                <span className="mt-0.5 text-[10px] opacity-70">{g.key}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted">
-            {isJpToEn ? "What does this mean?" : "How do you say this in Japanese?"}
-          </p>
-        )}
+        {/* Modular Review Card (with 3D flip, audio, kanji breakdown, mnemonics, & 3D icon grade buttons) */}
+        <ReviewCard
+          card={card}
+          reviewType={setup.reviewType}
+          flipped={flipped}
+          onFlip={() => setFlipped((f) => !f)}
+          onGrade={(g) => grade(g)}
+          showHint={showHint}
+          generatingMnemonic={generatingMnemonic}
+          onToggleHint={() => {
+            if (showHint && card.mnemonic) {
+              setShowHint(false);
+            } else {
+              handleShowHint();
+            }
+          }}
+          onGenerateMnemonic={(isRegen) => {
+            handleGenerateMnemonic(
+              card.character!,
+              card.meanings!,
+              card.radicals || [],
+              isRegen
+            );
+          }}
+        />
       </div>
     </div>
   );

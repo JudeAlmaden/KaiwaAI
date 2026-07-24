@@ -1,284 +1,420 @@
-/**
- * Quest Gallery - Gallery-style layout for review quest modes
- */
+"use client";
 
-import { Chip } from "../ui";
-import { PopButton } from "@/app/PopButton";
+import { useState } from "react";
 import {
   DailyQuestCard,
   GauntletCard,
   VocabularyCard,
   KanjiQuestCard,
   EndlessZenCard,
+  AppBlockerCard,
   CustomSessionCard,
 } from "./quest-cards";
+import {
+  ShieldCheck,
+  Minus,
+  Plus,
+  ArrowRight,
+  BookBookmark,
+  Percent,
+  Timer,
+  Sliders,
+} from "@phosphor-icons/react";
+import Link from "next/link";
 
-type Setup = {
-  reviewType: "vocabulary" | "kanji" | "mixed";
-  studyMode: "due" | "all" | "recent" | "struggling" | "leeches";
+export type QuestStartParams = {
+  studyMode: "all" | "struggling" | "due" | "new" | "custom";
+  limit?: number;
+  isContinuous?: boolean;
+  reviewType?: "mixed" | "vocabulary" | "kanji";
+  direction?: "jp-to-en" | "en-to-jp" | "mixed";
+  customCardIds?: string[];
+  activeLimit?: number;
+};
+
+export type AppBlockerConfig = {
+  count: number;
+  blockChance: number;
+  unlockDurationMinutes: number;
+  reviewType: "mixed" | "vocabulary" | "kanji";
   direction: "jp-to-en" | "en-to-jp" | "mixed";
-  practice: boolean;
-  limit: number;
-  isContinuous: boolean;
-  activeLimit: number | "all";
 };
 
 type QuestGalleryProps = {
-  dueCount: number | null;
-  setup: Setup;
-  setSetup: React.Dispatch<React.SetStateAction<Setup>>;
-  onStartQuest: (custom?: Partial<Setup>) => void;
-  showCustomModal: boolean;
-  setShowCustomModal: (show: boolean) => void;
-  showAdvanced: boolean;
-  setShowAdvanced: (show: boolean) => void;
+  dueCount: number;
+  strugglingCount?: number;
+  totalCards?: number;
+  isMonitoring: boolean;
+  isAndroid?: boolean;
+  appBlockerConfig: AppBlockerConfig;
+  onStartQuest: (params: QuestStartParams) => void;
+  onToggleMonitoring: () => void;
+  onUpdateAppBlockerConfig: (updates: Partial<AppBlockerConfig>) => void;
 };
 
 export default function QuestGallery({
   dueCount,
-  setup,
-  setSetup,
+  strugglingCount,
+  totalCards,
+  isMonitoring,
+  isAndroid = true,
+  appBlockerConfig,
   onStartQuest,
-  showCustomModal,
-  setShowCustomModal,
-  showAdvanced,
-  setShowAdvanced,
+  onToggleMonitoring,
+  onUpdateAppBlockerConfig,
 }: QuestGalleryProps) {
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showAppBlockerModal, setShowAppBlockerModal] = useState(false);
+
   return (
-    <>
-      {/* Gallery-style grid layout */}
-      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-6">
-        
-        {/* Masonry grid - 2 columns on mobile, 2 on tablet, 3 on desktop */}
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 auto-rows-auto">
-          
-          {/* Daily Quest - Full width (spans 2 columns on mobile/tablet, 3 on desktop) */}
+    <div className="w-full space-y-6">
+      {/* 3-Column Structured Collage Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
+        {/* Row 1: Daily Quest Hero (Span 3 columns) */}
+        <div className="col-span-1 md:col-span-3">
           <DailyQuestCard
             dueCount={dueCount}
-            onStart={() => onStartQuest({ studyMode: "due", limit: 50, isContinuous: false, reviewType: "mixed", activeLimit: 5 })}
+            onStart={() =>
+              onStartQuest({
+                studyMode: "due",
+                limit: Math.max(10, dueCount),
+                isContinuous: false,
+                reviewType: "mixed",
+                activeLimit: 5,
+              })
+            }
           />
-
-          {/* The Gauntlet - Left column on mobile */}
-          <GauntletCard
-            onStart={() => onStartQuest({ studyMode: "struggling", limit: 50, isContinuous: false, reviewType: "mixed", activeLimit: 5 })}
-          />
-
-          {/* Vocabulary Learning - Right column on mobile */}
-          <VocabularyCard
-            onStart={() => onStartQuest({ studyMode: "all", limit: 5, isContinuous: false, reviewType: "vocabulary", direction: "mixed", activeLimit: 5 })}
-          />
-
-          {/* Kanji Quest - Left column on mobile */}
-          <KanjiQuestCard
-            onStart={() => onStartQuest({ studyMode: "all", limit: 10, isContinuous: false, reviewType: "kanji", activeLimit: 5 })}
-          />
-
-          {/* Custom Session Button - Right column on mobile */}
-          <CustomSessionCard onClick={() => setShowCustomModal(true)} />
-
-          {/* Endless Zen - Full width (spans 2 columns on mobile/tablet) */}
-          <EndlessZenCard
-            onStart={() => onStartQuest({ studyMode: "all", limit: 200, isContinuous: true, reviewType: "mixed", activeLimit: 5 })}
-          />
-
         </div>
+
+        {/* Row 2: 3 Equal Columns */}
+        <div className="col-span-1">
+          <GauntletCard
+            onStart={() =>
+              onStartQuest({
+                studyMode: "struggling",
+                limit: 50,
+                isContinuous: false,
+                reviewType: "mixed",
+                activeLimit: 5,
+              })
+            }
+          />
+        </div>
+
+        <div className="col-span-1">
+          <VocabularyCard
+            onStart={() =>
+              onStartQuest({
+                studyMode: "all",
+                limit: 5,
+                isContinuous: false,
+                reviewType: "vocabulary",
+                direction: "mixed",
+                activeLimit: 5,
+              })
+            }
+          />
+        </div>
+
+        <div className="col-span-1">
+          <KanjiQuestCard
+            onStart={() =>
+              onStartQuest({
+                studyMode: "all",
+                limit: 10,
+                isContinuous: false,
+                reviewType: "kanji",
+                activeLimit: 5,
+              })
+            }
+          />
+        </div>
+
+        {/* Row 3: Focus Guard (Android only, 1 col) or Custom Session (1 col) + Endless Zen (2 cols) */}
+        {isAndroid ? (
+          <>
+            <div className="col-span-1 md:col-span-1">
+              <AppBlockerCard
+                isMonitoring={isMonitoring}
+                requirementCount={appBlockerConfig.count}
+                onClick={() => setShowAppBlockerModal(true)}
+              />
+            </div>
+
+            <div className="col-span-1 md:col-span-2">
+              <EndlessZenCard
+                onStart={() =>
+                  onStartQuest({
+                    studyMode: "all",
+                    limit: 200,
+                    isContinuous: true,
+                    reviewType: "mixed",
+                    activeLimit: 5,
+                  })
+                }
+              />
+            </div>
+
+            <div className="col-span-1 md:col-span-3">
+              <CustomSessionCard onClick={() => setShowCustomModal(true)} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="col-span-1 md:col-span-2 order-1 md:order-2">
+              <EndlessZenCard
+                onStart={() =>
+                  onStartQuest({
+                    studyMode: "all",
+                    limit: 200,
+                    isContinuous: true,
+                    reviewType: "mixed",
+                    activeLimit: 5,
+                  })
+                }
+              />
+            </div>
+
+            <div className="col-span-1 md:col-span-1 order-2 md:order-1">
+              <CustomSessionCard onClick={() => setShowCustomModal(true)} />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Custom Session Modal */}
-      {showCustomModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowCustomModal(false)}>
-          <div 
-            className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border-2 border-border bg-background p-6 shadow-2xl"
+      {/* Focus Guard Simplified Minimal Modal */}
+      {showAppBlockerModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowAppBlockerModal(false)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close button */}
-            <button
-              onClick={() => setShowCustomModal(false)}
-              className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-xl bg-muted/20 text-muted hover:bg-muted/40 hover:text-foreground transition-colors"
-            >
-              ✕
-            </button>
-
-            <h2 className="font-display text-2xl font-extrabold text-foreground mb-2">Custom Session Builder</h2>
-            <p className="text-sm text-muted mb-6">Define your own review rules and limits.</p>
-
-            <div className="space-y-5">
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Review Type
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Chip
-                    active={setup.reviewType === "vocabulary"}
-                    onClick={() => setSetup((s) => ({ ...s, reviewType: "vocabulary" }))}
-                  >
-                    Vocabulary
-                  </Chip>
-                  <Chip
-                    active={setup.reviewType === "kanji"}
-                    onClick={() => setSetup((s) => ({ ...s, reviewType: "kanji" }))}
-                  >
-                    Kanji
-                  </Chip>
-                  <Chip
-                    active={setup.reviewType === "mixed"}
-                    onClick={() => setSetup((s) => ({ ...s, reviewType: "mixed" }))}
-                  >
-                    Mixed
-                  </Chip>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold shrink-0">
+                  <ShieldCheck size={22} />
                 </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Card Direction
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Chip
-                    active={setup.direction === "jp-to-en"}
-                    onClick={() => setSetup((s) => ({ ...s, direction: "jp-to-en" }))}
-                  >
-                    Japanese → English
-                  </Chip>
-                  <Chip
-                    active={setup.direction === "en-to-jp"}
-                    onClick={() => setSetup((s) => ({ ...s, direction: "en-to-jp" }))}
-                  >
-                    English → Japanese
-                  </Chip>
-                  <Chip
-                    active={setup.direction === "mixed"}
-                    onClick={() => setSetup((s) => ({ ...s, direction: "mixed" }))}
-                  >
-                    Mixed
-                  </Chip>
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Study Focus
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Chip
-                    active={setup.studyMode === "due"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "due" }))}
-                  >
-                    Due now
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "all"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "all" }))}
-                  >
-                    Study ahead
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "recent"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "recent" }))}
-                  >
-                    Recent
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "struggling"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "struggling" }))}
-                  >
-                    Struggling
-                  </Chip>
-                  <Chip
-                    active={setup.studyMode === "leeches"}
-                    onClick={() => setSetup((s) => ({ ...s, studyMode: "leeches" }))}
-                  >
-                    Leeches
-                  </Chip>
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Session Size
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {[10, 20, 50].map((n) => (
-                    <Chip
-                      key={n}
-                      active={!setup.isContinuous && setup.limit === n}
-                      onClick={() => setSetup((s) => ({ ...s, limit: n, isContinuous: false }))}
-                    >
-                      {n}
-                    </Chip>
-                  ))}
-                  <Chip
-                    active={setup.isContinuous}
-                    onClick={() => setSetup((s) => ({ ...s, limit: 200, isContinuous: true }))}
-                  >
-                    Continuous
-                  </Chip>
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                  Active Working Pool
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {[3, 5, 10, "all"].map((n) => (
-                    <Chip
-                      key={n}
-                      active={setup.activeLimit === n}
-                      onClick={() => setSetup((s) => ({ ...s, activeLimit: n as number | "all" }))}
-                    >
-                      {n === "all" ? "All (Classic)" : `${n} cards`}
-                    </Chip>
-                  ))}
+                <div>
+                  <h2 className="font-display text-base font-bold text-foreground">
+                    Focus Guard Options
+                  </h2>
+                  <p className="text-xs text-muted">
+                    Quick interception rules &amp; flashcard goal
+                  </p>
                 </div>
               </div>
 
               <button
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="text-xs font-semibold text-indigo-soft hover:text-indigo-ai hover:underline cursor-pointer"
+                onClick={() => setShowAppBlockerModal(false)}
+                className="w-8 h-8 rounded-xl bg-muted/15 text-muted hover:text-foreground flex items-center justify-center text-xs font-bold transition"
               >
-                {showAdvanced ? "Hide" : "Show"} advanced options
+                ✕
               </button>
+            </div>
 
-              {showAdvanced && (
-                <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted font-display">
-                    Mode
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip
-                      active={!setup.practice}
-                      onClick={() => setSetup((s) => ({ ...s, practice: false }))}
-                    >
-                      Review
-                    </Chip>
-                    <Chip
-                      active={setup.practice}
-                      onClick={() => setSetup((s) => ({ ...s, practice: true }))}
-                    >
-                      Practice only
-                    </Chip>
-                  </div>
-                  <p className="mt-1 text-[10px] text-muted">
-                    Practice mode won&apos;t affect your mastery scores
-                  </p>
-                </div>
-              )}
+            {/* Master Switch Bar */}
+            <div className="flex items-center justify-between p-3 rounded-2xl border-2 border-border bg-background">
+              <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    isMonitoring ? "bg-emerald-500 animate-pulse" : "bg-muted"
+                  }`}
+                />
+                <span>App Blocker Guard: {isMonitoring ? "Active" : "Paused"}</span>
+              </div>
 
-              <PopButton 
-                onClick={() => {
-                  setShowCustomModal(false);
-                  onStartQuest();
-                }} 
-                size="lg" 
-                className="mt-6 w-full font-display"
+              <button
+                onClick={onToggleMonitoring}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 ${
+                  isMonitoring
+                    ? "bg-rose-500 text-white"
+                    : "bg-indigo-ai text-white"
+                }`}
               >
-                Start Custom Session
-              </PopButton>
+                {isMonitoring ? "Pause Guard" : "Start Guard"}
+              </button>
+            </div>
+
+            {/* Required Goal Stepper */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                Target Cards per Interception
+              </span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      onUpdateAppBlockerConfig({
+                        count: Math.max(1, appBlockerConfig.count - 1),
+                      })
+                    }
+                    className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <span className="w-8 text-center font-display font-extrabold text-foreground text-sm">
+                    {appBlockerConfig.count}
+                  </span>
+                  <button
+                    onClick={() =>
+                      onUpdateAppBlockerConfig({
+                        count: Math.min(100, appBlockerConfig.count + 1),
+                      })
+                    }
+                    className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {[5, 10, 15, 20].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => onUpdateAppBlockerConfig({ count: preset })}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
+                        appBlockerConfig.count === preset
+                          ? "bg-indigo-ai text-white"
+                          : "border border-border bg-background text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Probability & Re-lock Grace Period */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                  Probability
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {[25, 50, 75, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => onUpdateAppBlockerConfig({ blockChance: pct })}
+                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold text-center transition ${
+                        appBlockerConfig.blockChance === pct
+                          ? "bg-amber-500 text-white"
+                          : "border border-border bg-background text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                  Unlock Grace
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {[5, 15, 30, 60].map((mins) => (
+                    <button
+                      key={mins}
+                      onClick={() =>
+                        onUpdateAppBlockerConfig({ unlockDurationMinutes: mins })
+                      }
+                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold text-center transition ${
+                        appBlockerConfig.unlockDurationMinutes === mins
+                          ? "bg-emerald-500 text-white"
+                          : "border border-border bg-background text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {mins}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Review Type & Direction */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                Flashcard Settings
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                {(["mixed", "vocabulary", "kanji"] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => onUpdateAppBlockerConfig({ reviewType: type })}
+                    className={`px-3 py-1 rounded-xl capitalize transition ${
+                      appBlockerConfig.reviewType === type
+                        ? "bg-indigo-ai text-white"
+                        : "border border-border bg-background text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+
+                <span className="text-muted text-[10px] mx-1">•</span>
+
+                {(["jp-to-en", "en-to-jp", "mixed"] as const).map((dir) => (
+                  <button
+                    key={dir}
+                    onClick={() => onUpdateAppBlockerConfig({ direction: dir })}
+                    className={`px-2.5 py-1 rounded-xl transition text-[11px] ${
+                      appBlockerConfig.direction === dir
+                        ? "bg-indigo-ai text-white"
+                        : "border border-border bg-background text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {dir === "jp-to-en"
+                      ? "JP → EN"
+                      : dir === "en-to-jp"
+                      ? "EN → JP"
+                      : "Mixed Dir"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer Link */}
+            <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
+              <Link
+                href="/settings/app-blocker"
+                className="font-bold text-indigo-ai hover:underline flex items-center gap-1 text-[11px]"
+                onClick={() => setShowAppBlockerModal(false)}
+              >
+                <span>Full App Manager &amp; App Selection</span>
+                <ArrowRight size={12} />
+              </Link>
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 ${
+        active
+          ? "bg-indigo-ai text-white shadow-xs"
+          : "border border-border bg-background text-muted hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
