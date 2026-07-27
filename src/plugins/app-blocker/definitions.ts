@@ -1,9 +1,23 @@
+export type BlockerStudyMode =
+  | 'due'         // Only SRS-due cards (nextReview <= now)
+  | 'all'         // Any cards (study ahead)
+  | 'recent'      // Added in the last 7 days
+  | 'struggling'  // Low ease factor (<2.0)
+  | 'leeches';    // Many reviews but still short interval
+
+export type BlockerNoDueAction =
+  | 'autoOpen'    // Nothing due — just unlock and launch the blocked app
+  | 'studyAny';   // Fallback to studyMode="all" (use any available cards)
+
 export interface AppBlockerConfig {
   count: number; // Flashcard count requirement (e.g. 10)
   blockChance: number; // Interception probability percentage (1-100, default 100)
   unlockDurationMinutes: number; // Re-lock grace period in minutes (default 15)
   reviewType: 'vocabulary' | 'kanji' | 'mixed';
   direction: 'jp-to-en' | 'en-to-jp' | 'mixed';
+  studyMode: BlockerStudyMode;
+  practice: boolean; // If true, don't update SRS / learning status
+  noDueAction: BlockerNoDueAction;
 }
 
 export interface AppBlockerPlugin {

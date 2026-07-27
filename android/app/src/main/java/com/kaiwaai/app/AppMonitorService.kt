@@ -204,10 +204,14 @@ class AppMonitorService : Service() {
 
                 val isConnected = NetworkUtils.isNetworkAvailable(this)
                 val targetCount = prefs.getInt("flashcard_requirement", 10)
-                val reviewType = prefs.getString("review_type", "vocabulary")
-                val direction = prefs.getString("direction", "jp-to-en")
+                val reviewType = prefs.getString("review_type", "vocabulary") ?: "vocabulary"
+                val direction = prefs.getString("direction", "jp-to-en") ?: "jp-to-en"
+                val studyMode = prefs.getString("study_mode", "due") ?: "due"
+                val practiceMode = prefs.getBoolean("practice_mode", false)
+                val noDueAction = prefs.getString("no_due_action", "autoOpen") ?: "autoOpen"
+                val practiceQp = if (practiceMode) "1" else "0"
 
-                Log.i(TAG, "🚨 BLOCKING DETECTED: $lastAppPackage | Online: $isConnected | Requirement: $targetCount cards ($reviewType/$direction)")
+                Log.i(TAG, "🚨 BLOCKING DETECTED: $lastAppPackage | Online: $isConnected | Requirement: $targetCount cards ($reviewType/$direction/$studyMode) practice=$practiceMode noDue=$noDueAction")
 
                 // 1. KICK THE BLOCKED APP OUT TO HOME SCREEN IMMEDIATELY
                 try {
@@ -221,11 +225,21 @@ class AppMonitorService : Service() {
                 }
 
                 val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP or
                             Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                    putExtra("route", "/app-lock?autostart=true&mode=app-blocker&count=$targetCount&blocked_package=$lastAppPackage&reviewType=$reviewType&direction=$direction")
+                    val route = buildString {
+                        append("/app-lock?autostart=true&mode=app-blocker")
+                        append("&count=$targetCount")
+                        append("&blocked_package=$lastAppPackage")
+                        append("&reviewType=$reviewType")
+                        append("&direction=$direction")
+                        append("&studyMode=$studyMode")
+                        append("&practice=$practiceQp")
+                        append("&noDueAction=$noDueAction")
+                    }
+                    putExtra("route", route)
                     putExtra("blocked_package", lastAppPackage)
                     putExtra("is_online", isConnected)
                 }
@@ -277,8 +291,17 @@ class AppMonitorService : Service() {
         }
     }
 
-    private fun showOverlayWindow(targetPackage: String, targetCount: Int, reviewType: String = "vocabulary", direction: String = "jp-to-en") {
+    private fun showOverlayWindow(
+        targetPackage: String,
+        targetCount: Int,
+        reviewType: String = "vocabulary",
+        direction: String = "jp-to-en",
+        studyMode: String = "due",
+        practiceMode: Boolean = false,
+        noDueAction: String = "autoOpen"
+    ) {
         if (overlayView != null) return
+        val practiceQp = if (practiceMode) "1" else "0"
 
         handler.post {
             try {
@@ -338,12 +361,22 @@ class AppMonitorService : Service() {
                     setPadding(40, 20, 40, 20)
                     setOnClickListener {
                         removeOverlayWindow()
+                        val route = buildString {
+                            append("/app-lock?autostart=true&mode=app-blocker")
+                            append("&count=$targetCount")
+                            append("&blocked_package=$targetPackage")
+                            append("&reviewType=$reviewType")
+                            append("&direction=$direction")
+                            append("&studyMode=$studyMode")
+                            append("&practice=$practiceQp")
+                            append("&noDueAction=$noDueAction")
+                        }
                         val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
                                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
                                     Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                            putExtra("route", "/app-lock?autostart=true&mode=app-blocker&count=$targetCount&blocked_package=$targetPackage&reviewType=$reviewType&direction=$direction")
+                            putExtra("route", route)
                             putExtra("blocked_package", targetPackage)
                         }
                         startActivity(fullScreenIntent)

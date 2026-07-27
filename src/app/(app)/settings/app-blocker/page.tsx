@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { AppBlocker, type AppInfo } from '@/plugins/app-blocker';
+import { AppBlocker, type AppInfo, type AppBlockerConfig } from '@/plugins/app-blocker';
+import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
 import PageHeader from '@/app/(app)/PageHeader';
 import Kai from '@/app/Kai';
 
@@ -29,6 +30,17 @@ const RECOMMENDED_APPS: RecommendedApp[] = [
   { appName: 'Netflix', packageName: 'com.netflix.mediaclient', domain: 'netflix.com', category: 'Media' },
 ];
 
+const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction'>> = {
+  count: 10,
+  blockChance: 100,
+  unlockDurationMinutes: 15,
+  reviewType: 'vocabulary',
+  direction: 'jp-to-en',
+  studyMode: 'due',
+  practice: false,
+  noDueAction: 'autoOpen',
+};
+
 export default function AppBlockerSettings() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [hasPermissions, setHasPermissions] = useState(false);
@@ -37,6 +49,13 @@ export default function AppBlockerSettings() {
   const [blockedApps, setBlockedApps] = useState<string[]>([]);
   const [installedApps, setInstalledApps] = useState<AppInfo[]>([]);
   const [flashcardCount, setFlashcardCount] = useState(10);
+  const [blockChance, setBlockChance] = useState<number>(100);
+  const [unlockDurationMinutes, setUnlockDurationMinutes] = useState<number>(15);
+  const [reviewType, setReviewType] = useState<'vocabulary' | 'kanji' | 'mixed'>(DEFAULT_CONFIG.reviewType);
+  const [direction, setDirection] = useState<'jp-to-en' | 'en-to-jp' | 'mixed'>(DEFAULT_CONFIG.direction);
+  const [studyMode, setStudyMode] = useState<BlockerStudyMode>(DEFAULT_CONFIG.studyMode);
+  const [practice, setPractice] = useState<boolean>(DEFAULT_CONFIG.practice);
+  const [noDueAction, setNoDueAction] = useState<BlockerNoDueAction>(DEFAULT_CONFIG.noDueAction);
   const [loading, setLoading] = useState(true);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [modalFeedback, setModalFeedback] = useState<string | null>(null);
@@ -49,11 +68,12 @@ export default function AppBlockerSettings() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [monitorStatus, permStatus, blocked, installed] = await Promise.all([
+      const [monitorStatus, permStatus, blocked, installed, config] = await Promise.all([
         AppBlocker.isMonitoring().catch(() => ({ active: false })),
         AppBlocker.checkPermissions().catch(() => ({ granted: false })),
         AppBlocker.getBlockedApps().catch(() => ({ apps: [] })),
-        AppBlocker.getInstalledApps().catch(() => ({ apps: [] }))
+        AppBlocker.getInstalledApps().catch(() => ({ apps: [] })),
+        AppBlocker.getAppBlockerConfig().catch(() => DEFAULT_CONFIG as AppBlockerConfig),
       ]);
 
       setIsMonitoring(monitorStatus.active);
@@ -63,8 +83,18 @@ export default function AppBlockerSettings() {
       const deviceApps = (installed.apps || []).sort((a, b) =>
         (a.appName || '').localeCompare(b.appName || '')
       );
-
       setInstalledApps(deviceApps);
+
+      if (config) {
+        setFlashcardCount(config.count ?? 10);
+        setBlockChance(config.blockChance ?? 100);
+        setUnlockDurationMinutes(config.unlockDurationMinutes ?? 15);
+        setReviewType(config.reviewType ?? 'vocabulary');
+        setDirection(config.direction ?? 'jp-to-en');
+        setStudyMode(config.studyMode ?? 'due');
+        setPractice(config.practice ?? false);
+        setNoDueAction(config.noDueAction ?? 'autoOpen');
+      }
     } catch (error) {
       console.error('Error loading settings:', error);
     } finally {
@@ -133,6 +163,17 @@ export default function AppBlockerSettings() {
         setIsMonitoring(false);
       } else {
         await AppBlocker.setFlashcardRequirement({ count: flashcardCount });
+        // Ensure full config is saved before starting
+        await AppBlocker.setAppBlockerConfig({
+          count: flashcardCount,
+          blockChance,
+          unlockDurationMinutes,
+          reviewType,
+          direction,
+          studyMode,
+          practice,
+          noDueAction,
+        });
         await AppBlocker.startMonitoring();
         setIsMonitoring(true);
       }
@@ -162,10 +203,42 @@ export default function AppBlockerSettings() {
     setFlashcardCount(validCount);
     try {
       await AppBlocker.setFlashcardRequirement({ count: validCount });
+      await AppBlocker.setAppBlockerConfig({ count: validCount });
     } catch (error) {
       console.error('Error updating flashcard count:', error);
     }
   };
+
+  const handleUpdateConfig = useCallback(async (updates: {
+    count?: number;
+    blockChance?: number;
+    unlockDurationMinutes?: number;
+    reviewType?: 'mixed' | 'vocabulary' | 'kanji';
+    direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
+    studyMode?: BlockerStudyMode;
+    practice?: boolean;
+    noDueAction?: BlockerNoDueAction;
+  }) => {
+    // Apply optimistic UI state
+    if (updates.count !== undefined) setFlashcardCount(updates.count);
+    if (updates.blockChance !== undefined) setBlockChance(updates.blockChance);
+    if (updates.unlockDurationMinutes !== undefined) setUnlockDurationMinutes(updates.unlockDurationMinutes);
+    if (updates.reviewType !== undefined) setReviewType(updates.reviewType);
+    if (updates.direction !== undefined) setDirection(updates.direction);
+    if (updates.studyMode !== undefined) setStudyMode(updates.studyMode);
+    if (updates.practice !== undefined) setPractice(updates.practice);
+    if (updates.noDueAction !== undefined) setNoDueAction(updates.noDueAction);
+
+    try {
+      // count has its own legacy setter; mirror in config too
+      if (updates.count !== undefined) {
+        await AppBlocker.setFlashcardRequirement({ count: updates.count });
+      }
+      await AppBlocker.setAppBlockerConfig(updates);
+    } catch (error) {
+      console.error('Error updating blocker config:', error);
+    }
+  }, []);
 
   const recommendedInstalledApps = useMemo(() => {
     const distractingPackages = [
@@ -264,10 +337,18 @@ export default function AppBlockerSettings() {
           isMonitoring={isMonitoring}
           blockedCount={blockedApps.length}
           flashcardCount={flashcardCount}
+          blockChance={blockChance}
+          unlockDurationMinutes={unlockDurationMinutes}
+          reviewType={reviewType}
+          direction={direction}
+          studyMode={studyMode}
+          practice={practice}
+          noDueAction={noDueAction}
           hasPermissions={hasPermissions}
           onToggleMonitoring={toggleMonitoring}
           onRequestPermissions={requestPermissions}
           onUpdateFlashcardCount={updateFlashcardCount}
+          onUpdateAppBlockerConfig={handleUpdateConfig}
         />
 
         {/* Application Interception Manager with Recommended Tab Default */}

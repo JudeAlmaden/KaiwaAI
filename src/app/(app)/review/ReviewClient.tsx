@@ -90,6 +90,9 @@ export default function ReviewClient() {
     unlockDurationMinutes: 15,
     reviewType: 'vocabulary',
     direction: 'jp-to-en',
+    studyMode: 'due',
+    practice: false,
+    noDueAction: 'autoOpen',
   });
 
   useEffect(() => {

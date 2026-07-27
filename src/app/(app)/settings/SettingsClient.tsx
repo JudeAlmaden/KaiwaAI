@@ -8,6 +8,7 @@ import OutreachCard from "./OutreachCard";
 import ReviewNotificationCard from "./ReviewNotificationCard";
 import UserSettingsTab from "./UserSettingsTab";
 import AppBlockerSettings from "./app-blocker/page";
+import MobileAppDownloadCard from "./MobileAppDownloadCard";
 
 import { Capacitor } from "@capacitor/core";
 
@@ -17,14 +18,12 @@ export default function SettingsClient({ email }: { email: string }) {
   const [tab, setTab] = useState<Tab>("user");
   const isAndroid = Capacitor.getPlatform() === "android";
 
-  const allTabs: { id: Tab; label: string; icon: string }[] = [
+  const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: "user", label: "User", icon: "👤" },
     { id: "ai", label: "AI Settings", icon: "🧠" },
     { id: "learning", label: "Learning", icon: "📚" },
     { id: "mobile", label: "Mobile", icon: "📱" },
   ];
-
-  const tabs = isAndroid ? allTabs : allTabs.filter(t => t.id !== "mobile");
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-5 sm:px-8 min-w-0">
@@ -67,7 +66,7 @@ export default function SettingsClient({ email }: { email: string }) {
       )}
 
       {/* Mobile Tab */}
-      {tab === "mobile" && <AppBlockerSettings />}
+      {tab === "mobile" && (isAndroid ? <AppBlockerSettings /> : <MobileAppDownloadCard />)}
     </div>
   );
 }

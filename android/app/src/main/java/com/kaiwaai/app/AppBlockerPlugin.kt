@@ -134,13 +134,16 @@ class AppBlockerPlugin : Plugin() {
     @PluginMethod
     fun getAppBlockerConfig(call: PluginCall) {
         val prefs = activity.getSharedPreferences("AppBlocker", android.content.Context.MODE_PRIVATE)
-        
+
         val ret = com.getcapacitor.JSObject().apply {
             put("count", prefs.getInt("flashcard_requirement", 10))
             put("blockChance", prefs.getInt("block_chance_pct", 100))
             put("unlockDurationMinutes", prefs.getInt("unlock_duration_minutes", 15))
-            put("reviewType", prefs.getString("review_type", "vocabulary"))
-            put("direction", prefs.getString("direction", "jp-to-en"))
+            put("reviewType", prefs.getString("review_type", "vocabulary") ?: "vocabulary")
+            put("direction", prefs.getString("direction", "jp-to-en") ?: "jp-to-en")
+            put("studyMode", prefs.getString("study_mode", "due") ?: "due")
+            put("practice", prefs.getBoolean("practice_mode", false))
+            put("noDueAction", prefs.getString("no_due_action", "autoOpen") ?: "autoOpen")
         }
         call.resolve(ret)
     }
@@ -155,6 +158,9 @@ class AppBlockerPlugin : Plugin() {
         call.getInt("unlockDurationMinutes")?.let { editor.putInt("unlock_duration_minutes", it) }
         call.getString("reviewType")?.let { editor.putString("review_type", it) }
         call.getString("direction")?.let { editor.putString("direction", it) }
+        call.getString("studyMode")?.let { editor.putString("study_mode", it) }
+        call.getBoolean("practice")?.let { editor.putBoolean("practice_mode", it) }
+        call.getString("noDueAction")?.let { editor.putString("no_due_action", it) }
 
         editor.apply()
         call.resolve()

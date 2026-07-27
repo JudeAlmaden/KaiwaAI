@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppBlocker } from '@/plugins/app-blocker';
+import type { BlockerStudyMode, BlockerNoDueAction, AppBlockerConfig } from '@/plugins/app-blocker/definitions';
 import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
 import Kai from '@/app/Kai';
 import ReviewCard, { Card } from '@/app/(app)/review/ReviewCard';
@@ -26,6 +27,7 @@ export default function StandaloneAppLockPage() {
   const [loading, setLoading] = useState(true);
   const [initResult, setInitResult] = useState<InitResult | null>(null);
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
+  const [practice, setPractice] = useState(false);
 
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
@@ -83,15 +85,16 @@ export default function StandaloneAppLockPage() {
     }
   }, [currentIndex]);
 
-  const fetchDueCards = useCallback(async (): Promise<Card[]> => {
-    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-    const reviewType = params.get('reviewType') || 'vocabulary';
+  const fetchCards = useCallback(async (
+    reviewType: 'vocabulary' | 'kanji' | 'mixed',
+    studyMode: BlockerStudyMode,
+  ): Promise<Card[]> => {
     const endpoint = reviewType === 'mixed'
       ? '/api/review/mixed'
       : `/api/${reviewType === 'kanji' ? 'kanji' : 'flashcards'}/review`;
 
     try {
-      const res = await fetch(`${endpoint}?studyMode=due&limit=50`);
+      const res = await fetch(`${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=50`);
       if (res.ok) {
         const data = await res.json();
         return data.cards ?? [];
@@ -129,6 +132,28 @@ export default function StandaloneAppLockPage() {
           .catch(() => {});
       }
 
+      // Pull full config (URL params take precedence, then saved native prefs)
+      const urlReviewType = params.get('reviewType') as AppBlockerConfig['reviewType'] | null;
+      const urlStudyMode = params.get('studyMode') as BlockerStudyMode | null;
+      const urlPractice = params.get('practice');
+      const urlNoDue = params.get('noDueAction') as BlockerNoDueAction | null;
+
+      let savedConfig: AppBlockerConfig | null = null;
+      try {
+        savedConfig = await AppBlocker.getAppBlockerConfig().catch(() => null);
+      } catch {
+        savedConfig = null;
+      }
+
+      const reviewType: AppBlockerConfig['reviewType'] = urlReviewType ?? savedConfig?.reviewType ?? 'vocabulary';
+      const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'due';
+      const practiceEnabled: boolean =
+        urlPractice !== null ? urlPractice === '1' || urlPractice === 'true' : (savedConfig?.practice ?? false);
+      const noDueActionResolved: BlockerNoDueAction =
+        urlNoDue ?? savedConfig?.noDueAction ?? 'autoOpen';
+
+      setPractice(practiceEnabled);
+
       const unlock = await getUnlockStatus();
       if (unlock.active) {
         if (!cancelled) {
@@ -139,25 +164,39 @@ export default function StandaloneAppLockPage() {
         return;
       }
 
-      const dueCards = await fetchDueCards();
+      let pulledCards = await fetchCards(reviewType, studyMode);
       if (cancelled) return;
 
-      // No due cards — nothing to review, skip the lock entirely
-      if (dueCards.length === 0) {
-        setInitResult({ kind: 'auto-unlocked' });
-        setLoading(false);
-        finishUnlock(pkg);
-        return;
+      // If studyMode returned empty, honor noDueAction
+      if (pulledCards.length === 0) {
+        if (noDueActionResolved === 'autoOpen') {
+          setInitResult({ kind: 'auto-unlocked' });
+          setLoading(false);
+          finishUnlock(pkg);
+          return;
+        }
+        // studyAny: retry with mode=all so there's always something to review
+        if (noDueActionResolved === 'studyAny') {
+          const fallbackCards = await fetchCards(reviewType, 'all');
+          if (!cancelled && fallbackCards.length === 0) {
+            // Nothing at all — give up and unlock
+            setInitResult({ kind: 'auto-unlocked' });
+            setLoading(false);
+            finishUnlock(pkg);
+            return;
+          }
+          pulledCards = fallbackCards;
+        }
       }
 
-      setCards(dueCards);
+      setCards(pulledCards);
       setInitResult({ kind: 'session' });
       setLoading(false);
     }
 
     init();
     return () => { cancelled = true; };
-  }, [fetchDueCards, finishUnlock]);
+  }, [fetchCards, finishUnlock]);
 
   useEffect(() => {
     if (initResult?.kind === 'redirect-home') {
@@ -172,7 +211,7 @@ export default function StandaloneAppLockPage() {
 
       const isFirstAttempt = !gradedIds.has(card.id);
 
-      if (isFirstAttempt) {
+      if (isFirstAttempt && !practice) {
         const cardType = card.type || 'vocabulary';
         const endpoint = cardType === 'kanji' ? '/api/kanji/review' : '/api/flashcards/review';
         fetch(endpoint, {
@@ -180,7 +219,9 @@ export default function StandaloneAppLockPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cardId: card.id, grade }),
         }).catch(() => {});
+      }
 
+      if (isFirstAttempt) {
         setGradedIds(prev => { const next = new Set(prev); next.add(card.id); return next; });
       }
 
@@ -205,7 +246,7 @@ export default function StandaloneAppLockPage() {
         });
       }
     },
-    [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, finishUnlock]
+    [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, finishUnlock]
   );
 
   useEffect(() => {
@@ -280,8 +321,15 @@ export default function StandaloneAppLockPage() {
           </div>
         </div>
 
-        <div className="px-3.5 py-1.5 rounded-full bg-indigo-ai/10 text-indigo-ai font-display text-xs font-extrabold border border-indigo-ai/20">
-          {completedCount} / {requiredCount} Cards
+        <div className="flex items-center gap-2">
+          {practice && (
+            <span className="px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-600 font-display text-[10px] font-extrabold border border-violet-500/20">
+              PRACTICE
+            </span>
+          )}
+          <div className="px-3.5 py-1.5 rounded-full bg-indigo-ai/10 text-indigo-ai font-display text-xs font-extrabold border border-indigo-ai/20">
+            {completedCount} / {requiredCount} Cards
+          </div>
         </div>
       </header>
 

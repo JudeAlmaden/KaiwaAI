@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Kai from '@/app/Kai';
 import { ShieldWarning, Sliders, X, Minus, Plus } from '@phosphor-icons/react';
+import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
 
 interface FocusGuardStatusCardProps {
   isMonitoring: boolean;
@@ -12,6 +13,9 @@ interface FocusGuardStatusCardProps {
   unlockDurationMinutes?: number;
   reviewType?: string;
   direction?: string;
+  studyMode?: BlockerStudyMode;
+  practice?: boolean;
+  noDueAction?: BlockerNoDueAction;
   hasPermissions: boolean;
   onToggleMonitoring: () => void;
   onRequestPermissions: () => void;
@@ -22,8 +26,19 @@ interface FocusGuardStatusCardProps {
     unlockDurationMinutes?: number;
     reviewType?: 'mixed' | 'vocabulary' | 'kanji';
     direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
+    studyMode?: BlockerStudyMode;
+    practice?: boolean;
+    noDueAction?: BlockerNoDueAction;
   }) => void;
 }
+
+const STUDY_MODES: { id: BlockerStudyMode; label: string; hint: string }[] = [
+  { id: 'due', label: 'Due', hint: 'SRS scheduled now' },
+  { id: 'all', label: 'All', hint: 'Any card (study ahead)' },
+  { id: 'recent', label: 'Recent', hint: 'Added in 7 days' },
+  { id: 'struggling', label: 'Struggling', hint: 'Low ease factor' },
+  { id: 'leeches', label: 'Leeches', hint: 'Stuck short-interval' },
+];
 
 export default function FocusGuardStatusCard({
   isMonitoring,
@@ -31,6 +46,11 @@ export default function FocusGuardStatusCard({
   flashcardCount,
   blockChance = 100,
   unlockDurationMinutes = 15,
+  reviewType = 'mixed',
+  direction = 'mixed',
+  studyMode = 'due',
+  practice = false,
+  noDueAction = 'autoOpen',
   hasPermissions,
   onToggleMonitoring,
   onRequestPermissions,
@@ -224,6 +244,142 @@ export default function FocusGuardStatusCard({
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Study Mode */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                Study Mode (Which cards?)
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {STUDY_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    title={m.hint}
+                    onClick={() => onUpdateAppBlockerConfig?.({ studyMode: m.id })}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition ${
+                      studyMode === m.id
+                        ? 'bg-indigo-ai text-white'
+                        : 'border border-border bg-background text-muted hover:text-foreground'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted leading-snug">
+                {STUDY_MODES.find(m => m.id === studyMode)?.hint}
+              </p>
+            </div>
+
+            {/* Session Type + Direction + Practice */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                  Card Type
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                  {(['mixed', 'vocabulary', 'kanji'] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => onUpdateAppBlockerConfig?.({ reviewType: type })}
+                      className={`px-3 py-1 rounded-xl capitalize transition ${
+                        reviewType === type
+                          ? 'bg-indigo-ai text-white'
+                          : 'border border-border bg-background text-muted hover:text-foreground'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                  Direction
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(['jp-to-en', 'en-to-jp', 'mixed'] as const).map((dir) => (
+                    <button
+                      key={dir}
+                      onClick={() => onUpdateAppBlockerConfig?.({ direction: dir })}
+                      className={`px-2.5 py-1 rounded-xl transition text-[11px] font-bold ${
+                        direction === dir
+                          ? 'bg-indigo-ai text-white'
+                          : 'border border-border bg-background text-muted hover:text-foreground'
+                      }`}
+                    >
+                      {dir === 'jp-to-en'
+                        ? 'JP → EN'
+                        : dir === 'en-to-jp'
+                        ? 'EN → JP'
+                        : 'Mixed Dir'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Practice Toggle + No Due Action */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-2xl border-2 text-xs font-bold transition ${
+                    practice
+                      ? 'border-violet-400 bg-violet-500/10 text-violet-600'
+                      : 'border-border bg-card text-muted hover:text-foreground'
+                  }`}
+                >
+                  <span>Practice Mode</span>
+                  <span
+                    className={`w-9 h-5 rounded-full relative transition ${
+                      practice ? 'bg-violet-500' : 'bg-muted/40'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                        practice ? 'left-4' : 'left-0.5'
+                      }`}
+                    />
+                  </span>
+                </button>
+
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                    If Nothing Due
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'autoOpen' })}
+                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
+                        noDueAction === 'autoOpen'
+                          ? 'bg-emerald-500 text-white'
+                          : 'border border-border bg-background text-muted hover:text-foreground'
+                      }`}
+                    >
+                      Auto-Open
+                    </button>
+                    <button
+                      onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'studyAny' })}
+                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
+                        noDueAction === 'studyAny'
+                          ? 'bg-sky-500 text-white'
+                          : 'border border-border bg-background text-muted hover:text-foreground'
+                      }`}
+                    >
+                      Use Any
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {(practice || noDueAction === 'studyAny') && (
+                <p className="text-[10px] text-muted leading-snug rounded-xl bg-muted/10 p-2">
+                  {practice && '🧪 Practice mode: unlock answers still count, but SRS/status in DB is not updated.'}
+                  {practice && noDueAction === 'studyAny' && <><br /></>}
+                  {noDueAction === 'studyAny' && '📚 If no cards are due (per Study Mode), fall back to pulling from "All" cards so the lock is always usable.'}
+                </p>
+              )}
             </div>
 
             {/* Done Action */}

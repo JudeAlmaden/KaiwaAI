@@ -54,7 +54,10 @@ CLAUDE.md
 
 # Keystore files
 *.jks
+*.keystore
 *.b64.txt
+keystore-hex.txt
+keystore-base64.txt
 
 # IDE settings
 .idea/
