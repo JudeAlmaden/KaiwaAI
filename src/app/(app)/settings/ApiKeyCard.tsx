@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { PopButton } from "../../PopButton";
+import { useState } from "react";
 import {
   listKeys,
   addKey,
@@ -12,6 +11,7 @@ import {
   validateApiKey,
   type ApiKeyEntry,
 } from "@/lib/api-keys";
+import { Key, ArrowsClockwise, Check, Trash, Plus, Lock } from "@phosphor-icons/react";
 
 function mask(key: string) {
   if (key.length <= 8) return "••••";
@@ -19,244 +19,229 @@ function mask(key: string) {
 }
 
 export default function ApiKeyCard() {
-  const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
-  const [active, setActive] = useState(0);
+  const [keys, setKeys] = useState<ApiKeyEntry[]>(() => listKeys());
+  const [active, setActive] = useState(() => getActiveIndex());
   const [draft, setDraft] = useState("");
-  const [label, setLabel] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState("");
 
   function refresh() {
     setKeys(listKeys());
     setActive(getActiveIndex());
   }
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh();
-  }, []);
-
   async function add() {
     const trimmed = draft.trim();
     if (!trimmed) return;
 
-    // Check if key already exists
     if (keys.some((k) => k.key === trimmed)) {
       setError("This API key is already added");
       return;
     }
 
-    // Validate format first
     if (!isValidKeyFormat(trimmed)) {
-      setError("Please enter a valid API key");
+      setError("Please enter a valid API key (starts with AIza...)");
       return;
     }
 
     setIsValidating(true);
     setError("");
 
-    // Validate with actual API call
     const result = await validateApiKey(trimmed);
 
     if (result.valid) {
-      addKey(trimmed, label);
+      addKey(trimmed, `Key ${keys.length + 1}`);
       setDraft("");
-      setLabel("");
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setSuccess("API key validated and added!");
+      setTimeout(() => setSuccess(""), 4000);
       refresh();
     } else {
-      setError(result.error || "Invalid API key");
+      setError(result.error || "Invalid API key. Please check your key.");
     }
 
     setIsValidating(false);
   }
 
-  function choose(i: number) {
-    setActiveIndex(i);
-    setActive(i);
+  async function syncFromAccount() {
+    setIsSyncing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/settings/server-key?sync=true");
+      const data = await res.json();
+      
+      if (res.ok && data.keys && data.keys.length > 0) {
+        let addedCount = 0;
+        data.keys.forEach((k: string, idx: number) => {
+          if (!keys.some(existing => existing.key === k)) {
+            addKey(k, `Synced Key ${idx + 1}`);
+            addedCount++;
+          }
+        });
+        refresh();
+        if (addedCount > 0) {
+          setSuccess(`Synced ${addedCount} key(s) from account!`);
+        } else {
+          setSuccess("Keys are up to date.");
+        }
+        setTimeout(() => setSuccess(""), 4000);
+      } else {
+        setError("No saved server keys found.");
+      }
+    } catch {
+      setError("Failed to sync keys.");
+    }
+    setIsSyncing(false);
   }
 
-  function drop(i: number) {
-    // Prevent removing the last key
-    if (keys.length === 1) {
-      setError("You must have at least 1 API key configured to use KaiwaAI");
-      setTimeout(() => setError(""), 5000);
-      return;
-    }
-    removeKey(i);
+  function choose(index: number) {
+    setActiveIndex(index);
+    setActive(index);
+  }
+
+  function drop(index: number) {
+    removeKey(index);
     refresh();
   }
 
   return (
-    <section className="rounded-3xl border-2 border-border bg-card p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-lg font-bold">Personal API Keys</h2>
-          <p className="mt-1 text-sm text-muted">
-            Stored on your device only • Used for vocab, kanji, and personal chat
-          </p>
+    <section className="rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-xs space-y-4">
+      {/* Clean Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold shrink-0">
+            <Key size={20} />
+          </div>
+          <div className="min-w-0">
+            <h2 className="font-display text-base font-bold text-foreground">Gemini API Keys</h2>
+            <p className="text-xs text-muted truncate">Stored locally on your device.</p>
+          </div>
         </div>
-        <span className="rounded-full bg-mint/15 px-2.5 py-1 text-[10px] font-bold uppercase text-mint">
-          Device Only
+
+        <span className="shrink-0 rounded-full bg-indigo-ai/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-indigo-ai">
+          BYOK
         </span>
       </div>
 
-      <p className="mt-3 text-sm text-muted">
-        Add multiple keys and Kai will rotate to a spare if one hits its rate limit.
-      </p>
-
-      {/* Show empty state if no keys */}
+      {/* Empty Alert */}
       {keys.length === 0 && (
-        <div className="mt-4 rounded-2xl border-2 border-sakura/30 bg-sakura/5 p-6 text-center">
-          <div className="text-4xl">⚠️</div>
-          <p className="mt-3 text-sm font-semibold text-sakura">
+        <div className="rounded-2xl border border-sakura/30 bg-sakura/5 p-3 text-center space-y-1">
+          <p className="text-xs font-bold text-sakura flex items-center justify-center gap-1.5">
+            <Lock size={14} />
             At least 1 API key required
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            You must have at least one Gemini API key to use KaiwaAI features
           </p>
         </div>
       )}
 
-      {/* Tutorial/How to get key */}
-      <details className="mt-3 rounded-2xl border-2 border-indigo-ai/20 bg-indigo-ai/5 p-4">
-        <summary className="cursor-pointer text-sm font-bold text-indigo-ai">
-          📖 How to get a free Gemini API key
-        </summary>
-        <div className="mt-3 space-y-2 text-sm text-muted">
-          <p className="font-semibold text-foreground">Step-by-step guide:</p>
-          <ol className="ml-4 list-decimal space-y-1.5">
-            <li>
-              Visit{" "}
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-bold text-indigo-ai underline"
-              >
-                Google AI Studio
-              </a>
-            </li>
-            <li>Sign in with your Google account</li>
-            <li>Click &ldquo;Create API key&rdquo; button</li>
-            <li>Select a Google Cloud project (or create a new one)</li>
-            <li>Copy the generated key</li>
-            <li>Paste it below</li>
-          </ol>
-          <p className="pt-2 text-xs">
-            💡 <strong>Tip:</strong> Gemini offers a generous free tier. Your key stays
-            on your device and is never sent to KaiwaAI servers.
-          </p>
-        </div>
-      </details>
-
+      {/* Keys List */}
       {keys.length > 0 && (
-        <>
-          <ul className="mt-4 flex flex-col gap-2">
-            {keys.map((k, i) => (
-              <li
-                key={i}
-                className={`flex items-center gap-3 rounded-2xl border-2 px-4 py-3 ${
-                  active === i ? "border-indigo-ai bg-indigo-ai/5" : "border-border"
-                }`}
+        <ul className="space-y-2">
+          {keys.map((k, i) => (
+            <li
+              key={i}
+              className={`flex items-center justify-between gap-3 rounded-2xl border-2 p-3 transition ${
+                active === i ? "border-indigo-ai bg-indigo-ai/5" : "border-border bg-background"
+              }`}
+            >
+              <button
+                onClick={() => choose(i)}
+                className="flex items-center gap-3 min-w-0 text-left flex-1"
               >
-                <button
-                  onClick={() => choose(i)}
-                  className="flex items-center gap-2"
-                  title={active === i ? "Active key" : "Use this key"}
+                <span
+                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    active === i ? "border-indigo-ai bg-indigo-ai text-white" : "border-border"
+                  }`}
                 >
-                  <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
-                      active === i ? "border-indigo-ai" : "border-border"
-                    }`}
-                  >
-                    {active === i && (
-                      <span className="h-2.5 w-2.5 rounded-full bg-indigo-ai" />
-                    )}
-                  </span>
-                </button>
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-bold">{k.label}</p>
-                  <code className="block truncate font-mono text-xs text-muted">{mask(k.key)}</code>
+                  {active === i && <Check size={10} weight="bold" />}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-display font-bold text-xs text-foreground truncate">{k.label || `Key ${i + 1}`}</p>
+                  <code className="font-mono text-[11px] text-muted truncate block">{mask(k.key)}</code>
                 </div>
+              </button>
+
+              <div className="flex items-center gap-2 shrink-0">
                 {active === i && (
-                  <span className="rounded-full bg-mint/15 px-2 py-0.5 text-[10px] font-bold uppercase text-mint">
-                    active
+                  <span className="px-2 py-0.5 rounded-full bg-mint/15 text-mint text-[10px] font-extrabold uppercase">
+                    Active
                   </span>
                 )}
                 <button
                   onClick={() => drop(i)}
-                  className={`text-xs font-bold transition-colors ${
+                  disabled={keys.length === 1}
+                  className={`p-1.5 rounded-lg text-xs transition ${
                     keys.length === 1
-                      ? "cursor-not-allowed text-muted/30"
-                      : "text-muted/60 hover:text-sakura"
+                      ? "opacity-30 cursor-not-allowed text-muted"
+                      : "text-muted hover:text-rose-500 hover:bg-rose-500/10"
                   }`}
-                  aria-label={keys.length === 1 ? "Cannot remove last key" : "Remove key"}
-                  title={keys.length === 1 ? "You must have at least 1 API key" : "Remove key"}
+                  title={keys.length === 1 ? "Minimum 1 key required" : "Remove key"}
                 >
-                  ✕
+                  <Trash size={15} />
                 </button>
-              </li>
-            ))}
-          </ul>
-
-          {keys.length === 1 && (
-            <div className="mt-3 rounded-2xl border-2 border-amber/20 bg-amber/5 p-3 text-xs text-muted">
-              <strong className="text-amber">ℹ️ Note:</strong> At least 1 API key is required. 
-              Add a second key before removing this one.
-            </div>
-          )}
-        </>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
 
-      {/* Success message */}
+      {/* Banners */}
       {success && (
-        <div className="mt-4 rounded-2xl border-2 border-mint/20 bg-mint/5 p-3 text-sm text-mint">
-          <strong>✓ Success!</strong> API key added and validated.
+        <div className="rounded-xl border border-mint/30 bg-mint/10 p-2.5 text-xs text-mint font-bold flex items-center gap-2">
+          <Check size={14} />
+          {success}
         </div>
       )}
 
-      {/* Error message */}
       {error && (
-        <div className="mt-4 rounded-2xl border-2 border-sakura/20 bg-sakura/5 p-3 text-sm text-sakura">
-          <strong>⚠️ Error:</strong> {error}
+        <div className="rounded-xl border border-sakura/30 bg-sakura/10 p-2.5 text-xs text-sakura font-bold">
+          ⚠️ {error}
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-2">
+      {/* Input Field + Primary Add Button */}
+      <div className="space-y-2">
         <input
-          value={label}
+          type="password"
+          value={draft}
           onChange={(e) => {
-            setLabel(e.target.value);
+            setDraft(e.target.value);
             setError("");
           }}
-          placeholder="Label (optional, e.g. Personal)"
+          onKeyDown={(e) => e.key === "Enter" && !isValidating && add()}
+          placeholder="Paste Gemini API key (AIza...)"
           disabled={isValidating}
-          className="h-11 rounded-2xl border-2 border-border bg-card px-4 text-sm outline-none focus:border-indigo-ai disabled:opacity-50"
+          className="w-full h-11 rounded-2xl border-2 border-border bg-background px-4 text-xs outline-none focus:border-indigo-ai transition"
         />
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setError("");
-            }}
-            onKeyDown={(e) => e.key === "Enter" && !isValidating && add()}
-            placeholder="Paste a Gemini API key"
-            disabled={isValidating}
-            className="h-11 flex-1 rounded-2xl border-2 border-border bg-card px-4 text-sm outline-none focus:border-indigo-ai disabled:opacity-50"
-          />
-          <PopButton 
-            onClick={add} 
-            disabled={!draft.trim() || isValidating} 
-            className="h-11 px-5"
-          >
-            {isValidating ? "Validating..." : "Add"}
-          </PopButton>
-        </div>
+        <button
+          onClick={add}
+          disabled={!draft.trim() || isValidating}
+          className="w-full py-2.5 bg-indigo-ai border-b-4 border-indigo-deep hover:brightness-105 active:translate-y-[2px] text-white font-bold text-xs rounded-2xl shadow-xs transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <Plus size={15} />
+          <span>{isValidating ? "Validating Key..." : "Add API Key"}</span>
+        </button>
+      </div>
+
+      {/* Footer Actions Row */}
+      <div className="pt-2 border-t border-border flex items-center justify-between gap-2 text-xs">
+        <a
+          href="https://aistudio.google.com/app/apikey"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-bold text-indigo-ai hover:underline text-[11px]"
+        >
+          Get free Gemini key →
+        </a>
+
+        <button
+          onClick={syncFromAccount}
+          disabled={isSyncing}
+          className="text-[11px] font-bold text-muted hover:text-foreground flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+        >
+          <ArrowsClockwise size={12} className={isSyncing ? "animate-spin" : ""} />
+          <span>{isSyncing ? "Syncing..." : "Sync from Account"}</span>
+        </button>
       </div>
     </section>
   );

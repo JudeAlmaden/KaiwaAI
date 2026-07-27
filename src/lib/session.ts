@@ -26,10 +26,11 @@ export async function createSession(payload: SessionPayload) {
     .sign(getSecretKey());
 
   const cookieStore = await cookies();
+  
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: false, // Allow HTTP for mobile app
+    sameSite: "lax", // Lax works for same-site
     path: "/",
     maxAge: MAX_AGE,
   });

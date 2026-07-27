@@ -1,5 +1,5 @@
 /**
- * Endless Zen Card - Continuous study mode
+ * Endless Zen Card - Spans 2 columns horizontally
  */
 
 type EndlessZenCardProps = {
@@ -10,38 +10,35 @@ export default function EndlessZenCard({ onStart }: EndlessZenCardProps) {
   return (
     <button
       onClick={onStart}
-      className="group relative col-span-2 md:col-span-2 flex flex-col gap-3 md:gap-4 text-left rounded-3xl border-2 border-border bg-gradient-to-br from-card via-mint/5 to-card p-5 md:p-6 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-mint/20 hover:border-mint/40 cursor-pointer shadow-md overflow-hidden"
+      className="group relative w-full flex flex-col justify-between text-left rounded-3xl border-2 border-border bg-gradient-to-br from-card via-mint/5 to-card p-6 md:p-7 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-mint/15 hover:border-mint/40 cursor-pointer shadow-sm overflow-hidden min-h-[160px]"
     >
-      {/* Animated zen pattern */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-mint/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-mint/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
+      {/* Ambient blobs */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-mint/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000 pointer-events-none" />
+      <div className="absolute -right-2 -bottom-4 text-[90px] font-bold font-jp text-mint/6 select-none pointer-events-none leading-none group-hover:text-mint/12 transition-colors duration-500">
+        禅
       </div>
-      
-      <div className="relative z-10 flex items-center gap-3 md:gap-4 flex-1">
-        <span className="flex h-14 w-14 md:h-16 md:w-16 shrink-0 items-center justify-center rounded-2xl bg-mint/15 text-3xl md:text-4xl group-hover:scale-110 group-hover:rotate-180 transition-transform duration-700">
+
+      <div className="relative z-10 flex items-start gap-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mint/15 text-2xl group-hover:scale-110 group-hover:rotate-180 transition-transform duration-700">
           🌀
         </span>
         <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-2 mb-1 md:mb-2">
-            <h3 className="font-display text-lg md:text-xl lg:text-2xl font-extrabold text-foreground">Endless Zen</h3>
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-mint/20 text-mint border border-mint/30">INFINITE</span>
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <h3 className="font-display text-lg md:text-xl font-extrabold text-foreground">Endless Zen</h3>
+            <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-mint/20 text-mint border border-mint/30 tracking-wide uppercase">
+              INFINITE
+            </span>
           </div>
-          <p className="text-xs md:text-sm leading-relaxed text-muted">
+          <p className="text-xs md:text-sm text-muted leading-relaxed">
             Continuous study mode with no limits. Perfect for deep practice sessions.
           </p>
         </div>
       </div>
-      
-      <div className="relative z-10 flex flex-wrap items-center gap-2">
-        <span className="inline-block px-3 md:px-4 py-1.5 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wide bg-mint/15 text-mint border border-mint/20">
-          ∞ Continuous Mode
+
+      <div className="relative z-10 flex items-center gap-2.5 mt-5">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-mint/15 text-mint border border-mint/30 uppercase tracking-wide">
+          ∞ CONTINUOUS MODE
         </span>
-        <div className="flex items-center gap-1">
-          <div className="h-1.5 w-1.5 rounded-full bg-mint/60 animate-pulse" style={{ animationDelay: '0ms' }} />
-          <div className="h-1.5 w-1.5 rounded-full bg-mint/60 animate-pulse" style={{ animationDelay: '150ms' }} />
-          <div className="h-1.5 w-1.5 rounded-full bg-mint/60 animate-pulse" style={{ animationDelay: '300ms' }} />
-        </div>
       </div>
     </button>
   );

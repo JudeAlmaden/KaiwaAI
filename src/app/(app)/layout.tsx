@@ -5,6 +5,7 @@ import { currentStreak } from "@/lib/streak";
 import { Sidebar, BottomTabs, MobileTopBar } from "./AppNav";
 import OnboardingCheck from "@/components/OnboardingCheck";
 import ReviewNotificationManager from "@/components/ReviewNotificationManager";
+import OfflineBanner from "@/components/OfflineBanner";
 
 export default async function AppLayout({
   children,
@@ -35,6 +36,7 @@ export default async function AppLayout({
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <MobileTopBar streak={streak} />
+        <OfflineBanner />
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {children}
         </main>
