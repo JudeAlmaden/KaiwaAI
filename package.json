@@ -1,8 +1,11 @@
 {
   "name": "kaiwaai",
-  "version": "1.4.1",
+  "version": "1.5.1",
   "private": true,
   "scripts": {
+    "postinstall": "prisma generate --schema prisma/schema.prisma",
+    "predev": "node scripts/write-app-version-env.mjs && prisma generate --schema prisma/schema.prisma",
+    "prebuild": "node scripts/write-app-version-env.mjs && prisma generate --schema prisma/schema.prisma",
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",

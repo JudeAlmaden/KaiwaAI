@@ -47,20 +47,14 @@ export async function GET(req: Request) {
     ];
   }
 
-  // Determine sort order
-  let orderBy:
-    | { nextReview: "asc" }
-    | { createdAt: "desc" }
-    | { easeFactor: "asc" }
-    | { timesReviewed: "desc" } = { nextReview: "asc" };
-
-  if (studyMode === "all" || studyMode === "recent") {
-    orderBy = { createdAt: "desc" };
-  } else if (studyMode === "struggling") {
-    orderBy = { easeFactor: "asc" };
-  } else if (studyMode === "leeches") {
-    orderBy = { timesReviewed: "desc" };
-  }
+  // Determine sort order.
+  // For review queues, oldest items are surfaced first and SRS timing is used as the next tie-breaker.
+  const orderBy =
+    studyMode === "struggling"
+      ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
+      : studyMode === "leeches"
+        ? [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }]
+        : [{ createdAt: "asc" as const }, { nextReview: "asc" as const }];
 
   // Fetch vocabulary cards
   const vocabCards = await prisma.userFlashcard.findMany({

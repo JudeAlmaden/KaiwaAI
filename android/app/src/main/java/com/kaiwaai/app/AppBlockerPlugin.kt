@@ -134,6 +134,9 @@ class AppBlockerPlugin : Plugin() {
     @PluginMethod
     fun getAppBlockerConfig(call: PluginCall) {
         val prefs = activity.getSharedPreferences("AppBlocker", android.content.Context.MODE_PRIVATE)
+        val hasUsageStats = PermissionHelper.hasUsageStatsPermission(activity)
+        val hasOverlay = PermissionHelper.hasOverlayPermission(activity)
+        val serviceRunning = AppMonitorService.isRunning
 
         val ret = com.getcapacitor.JSObject().apply {
             put("count", prefs.getInt("flashcard_requirement", 10))
@@ -144,6 +147,9 @@ class AppBlockerPlugin : Plugin() {
             put("studyMode", prefs.getString("study_mode", "due") ?: "due")
             put("practice", prefs.getBoolean("practice_mode", false))
             put("noDueAction", prefs.getString("no_due_action", "autoOpen") ?: "autoOpen")
+            put("hasUsageStatsPermission", hasUsageStats)
+            put("hasOverlayPermission", hasOverlay)
+            put("monitoringActive", serviceRunning)
         }
         call.resolve(ret)
     }

@@ -204,16 +204,54 @@ export async function POST(req: Request) {
     }
 
     const formIds = [...new Set(body.wordFormIds)];
-    const forms = await prisma.wordForm.findMany({
+    const wordForms = await prisma.wordForm.findMany({
       where: { wordId: body.wordId, id: { in: formIds } },
       select: { id: true },
     });
-    if (forms.length !== formIds.length) {
+    if (wordForms.length !== formIds.length) {
       return NextResponse.json({ error: "One or more forms were not found" }, { status: 404 });
     }
 
+    // For regular verbs (godan/ichidan) and regular adjectives (i/na), the
+    // base-word insert path already auto-creates all conjugated flashcards in
+    // one shot, so the batch button in chat has been hidden for those types.
+    // If any caller still reaches this path redundantly, first ensure the
+    // BASE card (wordFormId = null) exists so `getAppBlockerConfig / rules
+    // counts / ReviewClient savedWords.has()` etc. don't report a partially
+    // saved deck — then fall through to createMany (still skipDupes safe).
+    const wordForBatch = await prisma.word.findUnique({
+      where: { id: body.wordId },
+      select: {
+        id: true,
+        dictionary: true,
+        verbType: true,
+        adjectiveType: true,
+        partOfSpeech: true,
+      },
+    });
+    if (wordForBatch) {
+      const baseCard = await prisma.userFlashcard.findFirst({
+        where: { userId: user.id, wordId: body.wordId, wordFormId: null },
+      });
+      if (!baseCard) {
+        await prisma.userFlashcard.create({
+          data: {
+            userId: user.id,
+            wordId: body.wordId!,
+            status: FlashcardStatus.learning,
+          },
+        });
+      }
+      try {
+        const { autoAddKanjiFromWord } = await import("@/lib/auto-add-kanji");
+        await autoAddKanjiFromWord(user.id, wordForBatch.dictionary);
+      } catch (error) {
+        console.error("Failed to auto-add kanji:", error);
+      }
+    }
+
     const result = await prisma.userFlashcard.createMany({
-      data: forms.map((form) => ({
+      data: wordForms.map((form) => ({
         userId: user.id,
         wordId: body.wordId!,
         wordFormId: form.id,
@@ -221,16 +259,6 @@ export async function POST(req: Request) {
       })),
       skipDuplicates: true,
     });
-
-    const word = await prisma.word.findUnique({ where: { id: body.wordId } });
-    if (word) {
-      try {
-        const { autoAddKanjiFromWord } = await import("@/lib/auto-add-kanji");
-        await autoAddKanjiFromWord(user.id, word.dictionary);
-      } catch (error) {
-        console.error("Failed to auto-add kanji:", error);
-      }
-    }
 
     return NextResponse.json({ added: result.count, formIds });
   }
@@ -332,7 +360,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid word" }, { status: 400 });
   }
 
-  // Check if already exists
+  // Load the full word record (with forms) once so we can decide whether to
+  // auto-insert conjugations for verbs/adjectives and avoid re-fetching below.
+  const wordRecord = await prisma.word.findUnique({
+    where: { id: wordId },
+    include: { forms: true },
+  });
+  const isVerbOrAdjective =
+    !!wordRecord &&
+    (wordRecord.verbType === "godan" ||
+      wordRecord.verbType === "ichidan" ||
+      wordRecord.adjectiveType === "i_adjective" ||
+      wordRecord.adjectiveType === "na_adjective");
+
+  // Check if already exists (the single card the caller asked for)
   const existing = await prisma.userFlashcard.findUnique({
     where: {
       userId_wordFormId: {
@@ -342,34 +383,60 @@ export async function POST(req: Request) {
     },
   });
 
-  if (existing) {
-    return NextResponse.json({
-      card: existing,
-      alreadyExisted: true,
-      meaningMerged: false,
+  const alreadyExisted = !!existing;
+  let card = existing;
+
+  if (!card) {
+    card = await prisma.userFlashcard.create({
+      data: {
+        userId: user.id,
+        wordId,
+        wordFormId,
+        status: FlashcardStatus.learning,
+      },
+      include: {
+        word: true,
+        wordForm: true,
+      },
     });
   }
 
-  // Create new flashcard
-  const card = await prisma.userFlashcard.create({
-    data: {
-      userId: user.id,
-      wordId,
-      wordFormId,
-      status: FlashcardStatus.learning,
-    },
-    include: {
-      word: true,
-      wordForm: true,
-    },
-  });
+  let addedConjugations = 0;
+
+  // Default behaviour (no opt-out flags): when adding the BASE form of a
+  // regular verb (godan/ichidan) or regular adjective (i/na) from chat,
+  // also insert every available conjugated form as a separate flashcard so
+  // the user studies them all together.
+  if (
+    !alreadyExisted &&
+    wordFormId == null &&
+    isVerbOrAdjective &&
+    !body.baseOnly &&
+    !body.wordFormIds &&
+    wordRecord
+  ) {
+    const conjugateForms = wordRecord.forms.filter(
+      (f) => f.formType !== "dictionary"
+    );
+    if (conjugateForms.length > 0) {
+      const result = await prisma.userFlashcard.createMany({
+        data: conjugateForms.map((f) => ({
+          userId: user.id,
+          wordId: wordId!,
+          wordFormId: f.id,
+          status: FlashcardStatus.learning,
+        })),
+        skipDuplicates: true,
+      });
+      addedConjugations = result.count;
+    }
+  }
 
   // Auto-add kanji from this word to the user's review queue
-  const word = await prisma.word.findUnique({ where: { id: wordId } });
-  if (word) {
+  if (wordRecord) {
     try {
       const { autoAddKanjiFromWord } = await import("@/lib/auto-add-kanji");
-      await autoAddKanjiFromWord(user.id, word.dictionary);
+      await autoAddKanjiFromWord(user.id, wordRecord.dictionary);
     } catch (error) {
       console.error("Failed to auto-add kanji:", error);
     }
@@ -377,7 +444,8 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     card,
-    alreadyExisted: false,
+    alreadyExisted,
     meaningMerged: false,
+    addedConjugations,
   });
 }

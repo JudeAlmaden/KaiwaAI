@@ -39,19 +39,12 @@ export async function GET(req: Request) {
     ];
   }
 
-  let orderBy:
-    | { nextReview: "asc" }
-    | { createdAt: "desc" }
-    | { easeFactor: "asc" }
-    | { timesReviewed: "desc" } = { nextReview: "asc" };
-
-  if (studyMode === "all" || studyMode === "recent") {
-    orderBy = { createdAt: "desc" };
-  } else if (studyMode === "struggling") {
-    orderBy = { easeFactor: "asc" };
-  } else if (studyMode === "leeches") {
-    orderBy = { timesReviewed: "desc" };
-  }
+  const orderBy =
+    studyMode === "struggling"
+      ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
+      : studyMode === "leeches"
+        ? [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }]
+        : [{ createdAt: "asc" as const }, { nextReview: "asc" as const }];
 
   const userKanji = await prisma.userKanji.findMany({
     where,

@@ -9,6 +9,7 @@ import ReviewNotificationCard from "./ReviewNotificationCard";
 import UserSettingsTab from "./UserSettingsTab";
 import AppBlockerSettings from "./app-blocker/page";
 import MobileAppDownloadCard from "./MobileAppDownloadCard";
+import LearningResetCard from "./LearningResetCard";
 
 import { Capacitor } from "@capacitor/core";
 
@@ -62,11 +63,17 @@ export default function SettingsClient({ email }: { email: string }) {
           <ModelCard />
           <OutreachCard />
           <ReviewNotificationCard />
+          <LearningResetCard />
         </div>
       )}
 
       {/* Mobile Tab */}
-      {tab === "mobile" && (isAndroid ? <AppBlockerSettings /> : <MobileAppDownloadCard />)}
+      {tab === "mobile" && (
+        <div className="flex flex-col gap-5">
+          <MobileAppDownloadCard />
+          {isAndroid && <AppBlockerSettings />}
+        </div>
+      )}
     </div>
   );
 }

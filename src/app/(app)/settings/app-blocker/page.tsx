@@ -345,6 +345,8 @@ export default function AppBlockerSettings() {
           practice={practice}
           noDueAction={noDueAction}
           hasPermissions={hasPermissions}
+          usageStatsGranted={usageStatsGranted}
+          overlayGranted={overlayGranted}
           onToggleMonitoring={toggleMonitoring}
           onRequestPermissions={requestPermissions}
           onUpdateFlashcardCount={updateFlashcardCount}
