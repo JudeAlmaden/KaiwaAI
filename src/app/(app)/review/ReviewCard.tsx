@@ -53,6 +53,39 @@ export interface ReviewCardProps {
   onGenerateMnemonic?: (isRegenerate: boolean) => void;
 }
 
+function SpeakerButton({ text, title }: { text: string; title?: string }) {
+  if (!canSpeak() || !text) return null;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        speakJa(text);
+      }}
+      className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai hover:bg-indigo-ai/20 transition-colors z-10"
+      title={title || "Hear audio"}
+    >
+      <SpeakerHigh size={18} />
+    </button>
+  );
+}
+
+function ConjugationBadge({
+  formType,
+  dictionary,
+}: {
+  formType: string | null | undefined;
+  dictionary: string | null | undefined;
+}) {
+  if (!formLabel(formType) || !dictionary) return null;
+  return (
+    <p className="text-xs font-semibold text-indigo-ai">
+      {formLabel(formType)} · base:{" "}
+      <span className="font-jp">{dictionary}</span>
+    </p>
+  );
+}
+
 export default function ReviewCard({
   card,
   reviewType = "vocabulary",
@@ -68,100 +101,6 @@ export default function ReviewCard({
   const isVocab = cardType === "vocabulary";
   const isJpToEn = card._dir ? card._dir === "jp-to-en" : true;
 
-  const frontContent = isJpToEn
-    ? (isVocab ? card.word : card.character)
-    : (isVocab ? card.meaning : card.meanings?.[0]);
-
-  const backContent = isVocab
-    ? {
-        japanese: card.word,
-        reading: card.reading,
-        romaji: card.romaji,
-        english: card.meaning,
-        meta: card.partOfSpeech || "Vocabulary",
-        mnemonic: undefined as string | undefined,
-      }
-    : {
-        japanese: card.character,
-        reading: [...(card.readingsOn || []), ...(card.readingsKun || [])].join(", "),
-        romaji: "",
-        english: card.meanings?.join(", "),
-        meta: "Kanji",
-        mnemonic: card.mnemonic,
-      };
-
-  const backFace = (
-    <>
-      {isJpToEn ? (
-        <>
-          {backContent.reading && (
-            <p className="font-jp text-2xl font-bold text-indigo-ai">{backContent.reading}</p>
-          )}
-          {backContent.romaji && <p className="text-xs text-muted mt-0.5">{backContent.romaji}</p>}
-          <p className="mt-2.5 text-xl font-bold text-foreground">{backContent.english}</p>
-          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
-            {backContent.meta}
-          </p>
-          {isVocab && formLabel(card.formType) && card.dictionary && (
-            <p className="mt-2 text-xs font-semibold text-indigo-ai">
-              {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-            </p>
-          )}
-          {isVocab && card.word && <KanjiBreakdown word={card.word} />}
-          {!isVocab && card.radicals && card.radicals.length > 0 && (
-            <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2 w-full">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Radicals</p>
-              <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
-                {card.radicals.map((radical, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(`/kanji?search=${encodeURIComponent(radical)}`, "_blank");
-                    }}
-                    className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
-                    title={`Search for ${radical}`}
-                  >
-                    {radical}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {!isVocab && backContent.mnemonic && (
-            <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
-                <Lightbulb size={12} /> Mnemonic
-              </p>
-              <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          <p className="font-jp text-4xl font-bold text-indigo-ai">{backContent.japanese}</p>
-          {backContent.reading && (
-            <p className="mt-2 text-sm font-jp text-muted">{backContent.reading}</p>
-          )}
-          {isVocab && formLabel(card.formType) && card.dictionary && (
-            <p className="mt-2 text-xs font-semibold text-indigo-ai">
-              {formLabel(card.formType)} · base: <span className="font-jp">{card.dictionary}</span>
-            </p>
-          )}
-          {!isVocab && backContent.mnemonic && (
-            <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
-                <Lightbulb size={12} /> Mnemonic
-              </p>
-              <p className="mt-1 text-xs text-foreground leading-relaxed">{backContent.mnemonic}</p>
-            </div>
-          )}
-        </>
-      )}
-    </>
-  );
-
   return (
     <div className="flex flex-col items-center justify-center gap-6 w-full max-w-md">
       <div className="card-perspective w-full h-[380px] sm:h-[420px]">
@@ -169,103 +108,392 @@ export default function ReviewCard({
           onClick={onFlip}
           className={`card-inner cursor-pointer ${flipped ? "is-flipped" : ""}`}
         >
+          {/* ── FRONT ─────────────────────────────────────────────────── */}
           <div className="card-front select-none">
-            {canSpeak() && isJpToEn && backContent.japanese && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  speakJa(backContent.japanese || "");
-                }}
-                className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai hover:bg-indigo-ai/20 transition-colors"
-                title="Hear audio"
-              >
-                <SpeakerHigh size={18} />
-              </button>
-            )}
-            <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
-              {isJpToEn && isVocab && card.word && card.reading ? (
-                <Furigana word={card.word} reading={card.reading} className="text-5xl" />
+            {isVocab ? (
+              isJpToEn ? (
+                // Task 1: Vocab JP→EN front = JP word w/ furigana + speaker
+                <>
+                  <SpeakerButton text={card.word || ""} />
+                  <span className="font-bold font-jp text-5xl">
+                    {card.word && card.reading ? (
+                      <Furigana word={card.word} reading={card.reading} className="text-5xl" />
+                    ) : (
+                      card.word
+                    )}
+                  </span>
+                  {formLabel(card.formType) && (
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai font-display">
+                      {formLabel(card.formType)}
+                    </p>
+                  )}
+                  <p className="mt-5 text-xs text-muted/80">Tap or press Space to flip</p>
+                </>
               ) : (
-                frontContent
-              )}
-            </span>
-            {isVocab && formLabel(card.formType) && (
-              <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai font-display">
-                {formLabel(card.formType)}
-              </p>
-            )}
-            {!isVocab && card.radicals && card.radicals.length > 0 && (
-              <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display text-center">
-                  Radicals
-                </p>
-                <div className="mt-2 flex flex-wrap justify-center gap-2">
-                  {card.radicals.map((radical, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`/kanji?search=${encodeURIComponent(radical)}`, "_blank");
-                      }}
-                      className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
-                      title={`Search for ${radical}`}
-                    >
-                      {radical}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="mt-5 text-xs text-muted/80">Tap or press Space to flip</p>
-            {!isVocab && onToggleHint && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleHint();
-                }}
-                disabled={generatingMnemonic}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-full border-2 border-mint/30 bg-mint/5 px-4 py-2 text-xs font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50"
-              >
-                <Lightbulb size={14} />
-                <span>{generatingMnemonic ? "Generating..." : showHint ? "Hide hint" : "Show hint"}</span>
-              </button>
-            )}
-            {showHint && !isVocab && card.mnemonic && (
-              <div className="mt-3 w-full space-y-2" onClick={(e) => e.stopPropagation()}>
-                <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
-                    <Lightbulb size={12} /> Mnemonic
-                  </p>
-                  <p className="mt-1 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
-                    {card.mnemonic}
-                  </p>
-                </div>
-                {onGenerateMnemonic && (
+                // Task 2: Vocab EN→JP front = meaning only
+                <>
+                  <span className="font-bold text-3xl text-foreground text-center leading-snug max-w-[95%]">
+                    {card.meaning}
+                  </span>
+                  {card.partOfSpeech && (
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-ai font-display">
+                      {card.partOfSpeech}
+                    </p>
+                  )}
+                  <p className="mt-5 text-xs text-muted/80">Tap or press Space to flip</p>
+                </>
+              )
+            ) : (
+              // Task 3: Kanji front — keep existing (character + radicals + speaker + hint)
+              <>
+                {isJpToEn ? (
+                  <SpeakerButton text={card.character || ""} title="Hear kanji readings" />
+                ) : null}
+                <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
+                  {isJpToEn ? card.character : card.meanings?.[0]}
+                </span>
+                {!isJpToEn && card.radicals && card.radicals.length > 0 && (
+                  <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display text-center">
+                      Radicals
+                    </p>
+                    <div className="mt-2 flex flex-wrap justify-center gap-2">
+                      {card.radicals.map((radical, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(
+                              `/kanji?search=${encodeURIComponent(radical)}`,
+                              "_blank"
+                            );
+                          }}
+                          className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                          title={`Search for ${radical}`}
+                        >
+                          {radical}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {isJpToEn && card.radicals && card.radicals.length > 0 && (
+                  <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display text-center">
+                      Radicals
+                    </p>
+                    <div className="mt-2 flex flex-wrap justify-center gap-2">
+                      {card.radicals.map((radical, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(
+                              `/kanji?search=${encodeURIComponent(radical)}`,
+                              "_blank"
+                            );
+                          }}
+                          className="rounded-full bg-indigo-ai/20 px-3 py-1 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                          title={`Search for ${radical}`}
+                        >
+                          {radical}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <p className="mt-5 text-xs text-muted/80">Tap or press Space to flip</p>
+                {!isJpToEn && onToggleHint && (
                   <button
                     type="button"
-                    onClick={() => onGenerateMnemonic(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleHint();
+                    }}
                     disabled={generatingMnemonic}
-                    className="w-full inline-flex items-center justify-center gap-1 rounded-full border-2 border-mint/30 bg-mint/10 px-3 py-1.5 text-xs font-bold text-mint transition-all hover:bg-mint/20 disabled:opacity-50"
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full border-2 border-mint/30 bg-mint/5 px-4 py-2 text-xs font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50"
                   >
-                    <ArrowClockwise size={12} />
-                    <span>{generatingMnemonic ? "Regenerating..." : "Regenerate"}</span>
+                    <Lightbulb size={14} />
+                    <span>
+                      {generatingMnemonic
+                        ? "Generating..."
+                        : showHint
+                        ? "Hide hint"
+                        : "Show hint"}
+                    </span>
                   </button>
                 )}
-              </div>
+                {isJpToEn && onToggleHint && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleHint();
+                    }}
+                    disabled={generatingMnemonic}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full border-2 border-mint/30 bg-mint/5 px-4 py-2 text-xs font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-50"
+                  >
+                    <Lightbulb size={14} />
+                    <span>
+                      {generatingMnemonic
+                        ? "Generating..."
+                        : showHint
+                        ? "Hide hint"
+                        : "Show hint"}
+                    </span>
+                  </button>
+                )}
+                {showHint && !isJpToEn && card.mnemonic && (
+                  <div
+                    className="mt-3 w-full space-y-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
+                        <Lightbulb size={12} /> Mnemonic
+                      </p>
+                      <p className="mt-1 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                        {card.mnemonic}
+                      </p>
+                    </div>
+                    {onGenerateMnemonic && (
+                      <button
+                        type="button"
+                        onClick={() => onGenerateMnemonic(true)}
+                        disabled={generatingMnemonic}
+                        className="w-full inline-flex items-center justify-center gap-1 rounded-full border-2 border-mint/30 bg-mint/10 px-3 py-1.5 text-xs font-bold text-mint transition-all hover:bg-mint/20 disabled:opacity-50"
+                      >
+                        <ArrowClockwise size={12} />
+                        <span>
+                          {generatingMnemonic ? "Regenerating..." : "Regenerate"}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+                {showHint && isJpToEn && card.mnemonic && (
+                  <div
+                    className="mt-3 w-full space-y-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
+                        <Lightbulb size={12} /> Mnemonic
+                      </p>
+                      <p className="mt-1 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                        {card.mnemonic}
+                      </p>
+                    </div>
+                    {onGenerateMnemonic && (
+                      <button
+                        type="button"
+                        onClick={() => onGenerateMnemonic(true)}
+                        disabled={generatingMnemonic}
+                        className="w-full inline-flex items-center justify-center gap-1 rounded-full border-2 border-mint/30 bg-mint/10 px-3 py-1.5 text-xs font-bold text-mint transition-all hover:bg-mint/20 disabled:opacity-50"
+                      >
+                        <ArrowClockwise size={12} />
+                        <span>
+                          {generatingMnemonic ? "Regenerating..." : "Regenerate"}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
+          {/* ── BACK ──────────────────────────────────────────────────── */}
           <div className="card-back">
-            <div className="card-back-scroll" onClick={(e) => e.stopPropagation()}>
-              {backFace}
+            <div
+              className="card-back-scroll"
+              onClick={(e) => {
+                // Only stop propagation if click was on an interactive child.
+                // Otherwise bubble up to .card-inner -> onFlip -> flip-back works.
+                const target = e.target as HTMLElement | null;
+                if (
+                  target &&
+                  (target.closest("button") ||
+                    target.closest("a") ||
+                    target.hasAttribute("data-stop-flip"))
+                ) {
+                  e.stopPropagation();
+                }
+              }}
+            >
+              {isVocab ? (
+                isJpToEn ? (
+                  // Task 1: Vocab JP→EN back = LARGE JP word, base/conjugation,
+                  // then hiragana reading, NO romaji, then English meaning, POS, conjugation
+                  <div className="flex flex-col items-center w-full text-center gap-1.5">
+                    <SpeakerButton text={card.word || ""} />
+                    <span className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
+                      {card.word && card.reading ? (
+                        <Furigana word={card.word} reading={card.reading} className="text-4xl" size="normal" />
+                      ) : (
+                        card.word
+                      )}
+                    </span>
+                    <ConjugationBadge
+                      formType={card.formType}
+                      dictionary={card.dictionary}
+                    />
+                    {card.reading && (
+                      <p className="font-jp text-xl font-bold text-foreground mt-1">
+                        {card.reading}
+                      </p>
+                    )}
+                    <p className="mt-2.5 text-xl font-bold text-foreground">
+                      {card.meaning}
+                    </p>
+                    {card.partOfSpeech && (
+                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
+                        {card.partOfSpeech}
+                      </p>
+                    )}
+                    {formLabel(card.formType) && (
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-indigo-ai font-display">
+                        {formLabel(card.formType)}
+                      </p>
+                    )}
+                    {card.word && <KanjiBreakdown word={card.word} />}
+                  </div>
+                ) : (
+                  // Task 2: Vocab EN→JP back = JP word w/ furigana + speaker + conjugation
+                  <div className="flex flex-col items-center w-full text-center gap-1.5">
+                    <SpeakerButton text={card.word || ""} />
+                    <span className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
+                      {card.word && card.reading ? (
+                        <Furigana word={card.word} reading={card.reading} className="text-4xl" size="normal" />
+                      ) : (
+                        card.word
+                      )}
+                    </span>
+                    {card.reading && (
+                      <p className="font-jp text-xl font-bold text-muted mt-1">
+                        {card.reading}
+                      </p>
+                    )}
+                    <ConjugationBadge
+                      formType={card.formType}
+                      dictionary={card.dictionary}
+                    />
+                    {formLabel(card.formType) && (
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-indigo-ai font-display">
+                        {formLabel(card.formType)}
+                      </p>
+                    )}
+                    {card.word && <KanjiBreakdown word={card.word} />}
+                  </div>
+                )
+              ) : (
+                // Task 3: Kanji back — keep existing (readings + meanings + radicals + mnemonic)
+                isJpToEn ? (
+                  <div className="flex flex-col items-center w-full text-center gap-1.5">
+                    <SpeakerButton
+                      text={
+                        (card.readingsKun && card.readingsKun[0]) ||
+                        (card.readingsOn && card.readingsOn[0]) ||
+                        card.character ||
+                        ""
+                      }
+                    />
+                    {card.readingsOn && card.readingsOn.length > 0 && (
+                      <p className="font-jp text-2xl font-bold text-indigo-ai">
+                        {card.readingsOn.join(", ")}
+                      </p>
+                    )}
+                    {card.readingsKun && card.readingsKun.length > 0 && (
+                      <p className="font-jp text-xl font-bold text-foreground mt-0.5">
+                        {card.readingsKun.join(", ")}
+                      </p>
+                    )}
+                    <p className="mt-2.5 text-xl font-bold text-foreground">
+                      {card.meanings?.join(", ")}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
+                      Kanji
+                    </p>
+                    {card.radicals && card.radicals.length > 0 && (
+                      <div className="mt-3 rounded-2xl bg-surface/50 px-3 py-2 w-full" onClick={(e) => e.stopPropagation()} data-stop-flip>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">
+                          Radicals
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
+                          {card.radicals.map((radical, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(
+                                  `/kanji?search=${encodeURIComponent(radical)}`,
+                                  "_blank"
+                                );
+                              }}
+                              className="rounded-full bg-indigo-ai/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-ai transition-all hover:bg-indigo-ai/30 hover:scale-105"
+                              title={`Search for ${radical}`}
+                            >
+                              {radical}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {card.mnemonic && (
+                      <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
+                          <Lightbulb size={12} /> Mnemonic
+                        </p>
+                        <p className="mt-1 text-xs text-foreground leading-relaxed">
+                          {card.mnemonic}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center w-full text-center gap-1.5">
+                    <SpeakerButton
+                      text={
+                        (card.readingsKun && card.readingsKun[0]) ||
+                        (card.readingsOn && card.readingsOn[0]) ||
+                        card.character ||
+                        ""
+                      }
+                    />
+                    <p className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
+                      {card.character}
+                    </p>
+                    {(card.readingsOn || card.readingsKun) && (
+                      <p className="mt-2 text-sm font-jp text-muted">
+                        {[...(card.readingsOn || []), ...(card.readingsKun || [])].join(", ")}
+                      </p>
+                    )}
+                    <ConjugationBadge
+                      formType={card.formType}
+                      dictionary={card.dictionary}
+                    />
+                    {card.mnemonic && (
+                      <div className="mt-3 rounded-2xl border-2 border-mint/30 bg-mint/5 px-3 py-2 text-left w-full">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-mint font-display flex items-center gap-1">
+                          <Lightbulb size={12} /> Mnemonic
+                        </p>
+                        <p className="mt-1 text-xs text-foreground leading-relaxed">
+                          {card.mnemonic}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
+              )}
             </div>
           </div>
         </div>
       </div>
 
+      {/* Task 4: Grade buttons only when FLIPPED; hide again on flip-back */}
       {flipped ? (
         <div className="grid w-full max-w-md grid-cols-4 gap-2.5">
           {GRADES.map((g) => {
@@ -285,7 +513,13 @@ export default function ReviewCard({
         </div>
       ) : (
         <p className="text-sm font-medium text-muted">
-          {isJpToEn ? "What does this mean?" : "How do you say this in Japanese?"}
+          {isJpToEn
+            ? isVocab
+              ? "What does this mean?"
+              : "What does this kanji mean?"
+            : isVocab
+            ? "How do you say this in Japanese?"
+            : "Which kanji means this?"}
         </p>
       )}
     </div>

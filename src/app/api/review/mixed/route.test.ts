@@ -65,6 +65,25 @@ describe("/api/review/mixed GET", () => {
     expect(json.cards.some((c: { type: string }) => c.type === "kanji")).toBe(true);
   });
 
+  it("prioritizes oldest due cards before SRS timing", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
+
+    await GET(new Request("http://localhost/api/review/mixed?studyMode=due&limit=20"));
+
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+      })
+    );
+    expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+      })
+    );
+  });
+
   it("respects limit parameter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
     

@@ -2,6 +2,28 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.5.1] - 2026-07-27
+
+### Added
+
+- **Conjugation cheat-sheet tab** in Vocab — new "Conjugation" content tab with interactive tutorial covering godan, ichidan, i-adjective, and na-adjective forms with category picker, sample word selector, transformation rules, and per-category reminder cards.
+- **Learning reset modal** in Settings — new `LearningResetCard` lets users reset or delete their vocab/kanji SRS progress with a confirmation step (type "RESET" to confirm). Backed by new `/api/learning/reset` endpoint.
+- **Focus Guard permission diagnostics** — when the App Monitor service is running but overlay or usage-stats permissions were revoked, an amber warning banner now appears in the FocusGuardStatusCard with a "Grant Permissions" button, so users know exactly what went wrong instead of silently failing.
+
+### Changed
+
+- **ReviewCard component refactored** — extracted `SpeakerButton` and `ConjugationBadge` into standalone sub-components; simplified front/back content derivation with inline expressions instead of pre-computed variables; added conjugation badge display (formType + base dictionary form) on the review card front face.
+- **WordToken dual-button UX** — tapping a conjugated form that hasn't been saved now shows **both** "＋ Add base word" (primary, purple) and "＋ Study this form" (secondary, mint) side-by-side, instead of hiding one behind a mutually-exclusive if/else. The legacy "Add all N conjugations" batch button is now only shown for irregular verbs (suru/kuru); regular godan/ichidan verbs and adjectives auto-conjugate server-side when the base form is added.
+- **Flashcards API batch-add hardening** — the `POST /api/flashcards` batch conjugation endpoint now ensures the base dictionary card exists (creating it if missing) and auto-adds constituent kanji before inserting individual form cards, preventing a partially-saved deck state.
+- **App Monitor service reliability** — home-screen kick now runs on the main thread with `FLAG_ACTIVITY_CLEAR_TASK` so ActivityManager properly finishes the blocked task; overlay-window interception is attempted first (most reliable on modern Android) with full-screen Activity as fallback; all blocking modes now pass the complete config (studyMode, practice, noDueAction) through to the lock screen.
+- **`getAppBlockerConfig` now returns live permission status** — `hasUsageStatsPermission`, `hasOverlayPermission`, and `monitoringActive` fields are included in the Capacitor plugin response so the web layer can show accurate diagnostics without a separate permissions query.
+
+### Fixed
+
+- **WordToken `verbOrAdj` unused variable** — removed dead assignment that triggered `@typescript-eslint/no-unused-vars`.
+- **LearningResetCard `handleClose` accessed before declaration** — moved `handleClose` above the `useEffect` that references it and wrapped it in `useCallback` to satisfy `react-hooks/exhaustive-deps` and `react-hooks/immutability`.
+- **ConjugationTutorial unescaped entities** — replaced literal `'` and `"` in JSX text with `&apos;` / `&quot;` to fix `react/no-unescaped-entities` errors.
+
 ## [1.5.0] - 2026-07-27
 
 ### Added

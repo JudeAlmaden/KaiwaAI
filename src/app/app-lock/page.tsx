@@ -14,6 +14,8 @@ type InitResult =
   | { kind: 'redirect-home' }
   | { kind: 'auto-unlocked' };
 
+type Direction = 'jp-to-en' | 'en-to-jp' | 'mixed';
+
 export default function StandaloneAppLockPage() {
   const router = useRouter();
   const finishingRef = useRef(false);
@@ -137,6 +139,7 @@ export default function StandaloneAppLockPage() {
       const urlStudyMode = params.get('studyMode') as BlockerStudyMode | null;
       const urlPractice = params.get('practice');
       const urlNoDue = params.get('noDueAction') as BlockerNoDueAction | null;
+      const urlDirection = params.get('direction') as Direction | null;
 
       let savedConfig: AppBlockerConfig | null = null;
       try {
@@ -151,6 +154,7 @@ export default function StandaloneAppLockPage() {
         urlPractice !== null ? urlPractice === '1' || urlPractice === 'true' : (savedConfig?.practice ?? false);
       const noDueActionResolved: BlockerNoDueAction =
         urlNoDue ?? savedConfig?.noDueAction ?? 'autoOpen';
+      const direction: Direction = urlDirection ?? (savedConfig?.direction as Direction | undefined | null) ?? 'jp-to-en';
 
       setPractice(practiceEnabled);
 
@@ -189,7 +193,19 @@ export default function StandaloneAppLockPage() {
         }
       }
 
-      setCards(pulledCards);
+      setCards(
+        (pulledCards as (Card & { _dir?: 'jp-to-en' | 'en-to-jp' })[]).map((c) => ({
+          ...c,
+          _dir:
+            direction === 'jp-to-en'
+              ? 'jp-to-en'
+              : direction === 'en-to-jp'
+              ? 'en-to-jp'
+              : Math.random() < 0.5
+              ? 'jp-to-en'
+              : 'en-to-jp',
+        }))
+      );
       setInitResult({ kind: 'session' });
       setLoading(false);
     }
