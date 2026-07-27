@@ -85,6 +85,19 @@ describe("Kanji Review API - GET", () => {
     expect(data.cards[0].meanings).toEqual(["cat"]);
   });
 
+  it("should prioritize oldest due kanji before SRS timing", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
+
+    await GET(new Request("http://localhost/api/kanji/review"));
+
+    expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+      })
+    );
+  });
+
   it("should handle all study modes", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
@@ -95,7 +108,7 @@ describe("Kanji Review API - GET", () => {
     expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId: "user-123" },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
       })
     );
   });
@@ -130,7 +143,7 @@ describe("Kanji Review API - GET", () => {
           userId: "user-123",
           easeFactor: { lt: 2.0 },
         }),
-        orderBy: { easeFactor: "asc" },
+        orderBy: [{ easeFactor: "asc" }, { createdAt: "asc" }],
       })
     );
   });
@@ -151,7 +164,7 @@ describe("Kanji Review API - GET", () => {
             { interval: { lt: 7 } },
           ],
         }),
-        orderBy: { timesReviewed: "desc" },
+        orderBy: [{ timesReviewed: "desc" }, { createdAt: "asc" }],
       })
     );
   });

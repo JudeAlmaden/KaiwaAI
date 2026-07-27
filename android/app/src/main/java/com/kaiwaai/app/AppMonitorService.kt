@@ -214,46 +214,115 @@ class AppMonitorService : Service() {
                 Log.i(TAG, "🚨 BLOCKING DETECTED: $lastAppPackage | Online: $isConnected | Requirement: $targetCount cards ($reviewType/$direction/$studyMode) practice=$practiceMode noDue=$noDueAction")
 
                 // 1. KICK THE BLOCKED APP OUT TO HOME SCREEN IMMEDIATELY
-                try {
-                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                        addCategory(Intent.CATEGORY_HOME)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                //    Do this on main thread with FLAG_ACTIVITY_CLEAR_TASK so ActivityManager actually
+                //    finishes the blocked task before we bring KaiwaAI forward.
+                handler.post {
+                    try {
+                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        }
+                        startActivity(homeIntent)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error launching home intent: ${e.message}")
                     }
-                    startActivity(homeIntent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error launching home intent: ${e.message}")
                 }
 
-                val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
+                val hasOverlayPerm = PermissionHelper.hasOverlayPermission(this)
+
+                // 2. PRIMARY — Show a full-screen overlay window over whatever app is in the
+                //    foreground. This is the single most reliable interception on modern Android
+                //    because WindowManager overlays (TYPE_APPLICATION_OVERLAY) are explicitly
+                //    permitted from background services if the user granted "Draw over other
+                //    apps" (the permission that the app blocker setup already asks for).
+                var overlayShown = false
+                if (hasOverlayPerm) {
+                    overlayShown = try {
+                        showOverlayWindow(
+                            targetPackage = lastAppPackage,
+                            targetCount = targetCount,
+                            reviewType = reviewType,
+                            direction = direction,
+                            studyMode = studyMode,
+                            practiceMode = practiceMode,
+                            noDueAction = noDueAction
+                        )
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "showOverlayWindow failed: ${e.message}")
+                        false
+                    }
+                } else {
+                    Log.w(TAG, "Overlay permission not granted — overlay interception skipped. " +
+                            "User must grant Draw over other apps (SYSTEM_ALERT_WINDOW) for " +
+                            "reliable instant redirect when app is in background.")
+                }
+
+                val route = buildString {
+                    append("/app-lock?autostart=true&mode=app-blocker")
+                    append("&count=$targetCount")
+                    append("&blocked_package=$lastAppPackage")
+                    append("&reviewType=$reviewType")
+                    append("&direction=$direction")
+                    append("&studyMode=$studyMode")
+                    append("&practice=$practiceQp")
+                    append("&noDueAction=$noDueAction")
+                }
+
+                val mainIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                             Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                    val route = buildString {
-                        append("/app-lock?autostart=true&mode=app-blocker")
-                        append("&count=$targetCount")
-                        append("&blocked_package=$lastAppPackage")
-                        append("&reviewType=$reviewType")
-                        append("&direction=$direction")
-                        append("&studyMode=$studyMode")
-                        append("&practice=$practiceQp")
-                        append("&noDueAction=$noDueAction")
-                    }
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
                     putExtra("route", route)
                     putExtra("blocked_package", lastAppPackage)
                     putExtra("is_online", isConnected)
                 }
 
-                // 2. Launch KaiwaAI Flashcard Review Screen directly (no overlay intermediate)
-                handler.postDelayed({
-                    try {
-                        startActivity(fullScreenIntent)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Direct startActivity failed: ${e.message}", e)
-                    }
-                }, 100L)
+                val blockActivityIntent = Intent(this, FlashcardBlockActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                    putExtra("route", route)
+                    putExtra("blocked_package", lastAppPackage)
+                    putExtra("is_online", isConnected)
+                }
 
-                // 3. Notification fallback (tap opens flashcards directly)
+                // 3. SECONDARY — Actually bring KaiwaAI forward via startActivity.
+                //    * Try both: direct MainActivity (fast path) and FlashcardBlockActivity
+                //      trampoline (more reliable for some OEMs that kill app tasks aggressively).
+                //    * Retry twice at 350ms / 800ms because ActivityManager can silently drop
+                //      the start request while it's still finishing the blocked/home task.
+                //    * If overlay was already displayed, the startActivity is best-effort only:
+                //      if the user taps the big "Start Review Session" button on the overlay it
+                //      will always bring MainActivity forward regardless.
+                val startAttempts = listOf(0L, 350L, 800L)
+                startAttempts.forEachIndexed { i, delayMs ->
+                    handler.postDelayed({
+                        try {
+                            if (i % 2 == 0) {
+                                startActivity(mainIntent)
+                                Log.d(TAG, "startActivity(main) attempt #${i + 1} @ ${delayMs}ms")
+                            } else {
+                                startActivity(blockActivityIntent)
+                                Log.d(TAG, "startActivity(block-trampoline) attempt #${i + 1} @ ${delayMs}ms")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "startActivity attempt #${i + 1} failed: ${e.message}", e)
+                        }
+                    }, 200L + delayMs)
+                }
+
+                // 4. TERTIARY — Full-screen heads-up notification.
+                //    This will always show as a fallback. On screen-locked devices it will
+                //    auto-expand and launch the app. On unlocked devices where both overlay
+                //    and direct activity launch have failed, it ensures the user at least
+                //    sees a tap-to-launch alert.
                 try {
                     val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -264,21 +333,38 @@ class AppMonitorService : Service() {
                     val fullScreenPendingIntent = PendingIntent.getActivity(
                         this,
                         0,
-                        fullScreenIntent,
+                        mainIntent,
                         pendingFlags
                     )
 
                     val alertNotification = NotificationCompat.Builder(this, CHANNEL_ID)
                         .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
                         .setContentTitle("🔒 KaiwaAI Focus Guard")
-                        .setContentText("Complete $targetCount flashcards to unlock app")
+                        .setContentText(
+                            if (overlayShown)
+                                "Finish $targetCount flashcards — KaiwaAI is ready to open."
+                            else
+                                "Complete $targetCount flashcards to unlock app"
+                        )
+                        .setStyle(NotificationCompat.BigTextStyle().bigText(
+                            if (overlayShown)
+                                "The blocker window is already on screen. Tap \"Start Review Session\" on it, or tap this notification to open KaiwaAI."
+                            else
+                                "KaiwaAI needs Draw over other apps permission to instantly block the app. " +
+                                "Tap this notification to open the review page now, or open Settings → " +
+                                "Focus Guard → grant Draw over other apps so future blocks are instant."
+                        ))
                         .setPriority(NotificationCompat.PRIORITY_MAX)
                         .setCategory(NotificationCompat.CATEGORY_ALARM)
                         .setFullScreenIntent(fullScreenPendingIntent, true)
+                        .setContentIntent(fullScreenPendingIntent)
+                        .setVibrate(longArrayOf(0, 180, 60, 180))
+                        .setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_LIGHTS)
                         .setAutoCancel(true)
                         .build()
 
-                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    val notificationManager =
+                        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                     notificationManager.notify(BLOCK_ALERT_NOTIFICATION_ID, alertNotification)
                 } catch (e: Exception) {
                     Log.e(TAG, "FullScreen notification trigger failed: ${e.message}", e)
@@ -314,8 +400,8 @@ class AppMonitorService : Service() {
                         WindowManager.LayoutParams.TYPE_PHONE
                     }
                     flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                             WindowManager.LayoutParams.FLAG_FULLSCREEN
                     format = PixelFormat.TRANSLUCENT
                     width = WindowManager.LayoutParams.MATCH_PARENT
@@ -323,10 +409,19 @@ class AppMonitorService : Service() {
                     gravity = Gravity.CENTER
                 }
 
+                // Full-screen clickable backdrop. Any tap anywhere (including outside the
+                // button) will dismiss the blocker overlay and bring KaiwaAI forward. This
+                // prevents the user from getting stuck behind an opaque overlay with no
+                // obvious escape hatch other than the primary CTA.
+                val backdrop = android.widget.FrameLayout(this).apply {
+                    setBackgroundColor(Color.parseColor("#EE0F172A"))
+                    isClickable = true
+                    isFocusable = true
+                }
+
                 val layout = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
-                    setBackgroundColor(Color.parseColor("#EE0F172A")) // Translucent dark slate background
                     setPadding(60, 60, 60, 60)
                 }
 
@@ -353,34 +448,60 @@ class AppMonitorService : Service() {
                     setPadding(0, 0, 0, 40)
                 }
 
+                val launchRunnable = Runnable {
+                    removeOverlayWindow()
+                    val route = buildString {
+                        append("/app-lock?autostart=true&mode=app-blocker")
+                        append("&count=$targetCount")
+                        append("&blocked_package=$targetPackage")
+                        append("&reviewType=$reviewType")
+                        append("&direction=$direction")
+                        append("&studyMode=$studyMode")
+                        append("&practice=$practiceQp")
+                        append("&noDueAction=$noDueAction")
+                    }
+                    val direct = Intent(this@AppMonitorService, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        putExtra("route", route)
+                        putExtra("blocked_package", targetPackage)
+                    }
+                    val trampoline =
+                        Intent(this@AppMonitorService, FlashcardBlockActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                            putExtra("route", route)
+                            putExtra("blocked_package", targetPackage)
+                        }
+                    val attempts = listOf(0L, 250L, 600L)
+                    attempts.forEachIndexed { i, delayMs ->
+                        handler.postDelayed({
+                            try {
+                                if (i % 2 == 0) startActivity(direct) else startActivity(trampoline)
+                            } catch (e: Exception) {
+                                Log.e(
+                                    TAG,
+                                    "overlay launch attempt #${i + 1} failed: ${e.message}",
+                                    e
+                                )
+                            }
+                        }, delayMs)
+                    }
+                }
+
                 val btn = Button(this).apply {
                     text = "Start Review Session 🚀"
                     setBackgroundColor(Color.parseColor("#6366F1"))
                     setTextColor(Color.WHITE)
                     textSize = 15f
                     setPadding(40, 20, 40, 20)
-                    setOnClickListener {
-                        removeOverlayWindow()
-                        val route = buildString {
-                            append("/app-lock?autostart=true&mode=app-blocker")
-                            append("&count=$targetCount")
-                            append("&blocked_package=$targetPackage")
-                            append("&reviewType=$reviewType")
-                            append("&direction=$direction")
-                            append("&studyMode=$studyMode")
-                            append("&practice=$practiceQp")
-                            append("&noDueAction=$noDueAction")
-                        }
-                        val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                            putExtra("route", route)
-                            putExtra("blocked_package", targetPackage)
-                        }
-                        startActivity(fullScreenIntent)
-                    }
+                    setOnClickListener { launchRunnable.run() }
                 }
 
                 layout.addView(lockIcon)
@@ -388,8 +509,18 @@ class AppMonitorService : Service() {
                 layout.addView(subtitleView)
                 layout.addView(btn)
 
-                windowManager.addView(layout, layoutParams)
-                overlayView = layout
+                backdrop.addView(
+                    layout,
+                    android.widget.FrameLayout.LayoutParams(
+                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                    )
+                )
+                backdrop.setOnClickListener { launchRunnable.run() }
+
+                windowManager.addView(backdrop, layoutParams)
+                overlayView = backdrop
             } catch (e: Exception) {
                 Log.e(TAG, "Error showing overlay window: ${e.message}", e)
             }
@@ -398,13 +529,15 @@ class AppMonitorService : Service() {
 
     private fun removeOverlayWindow() {
         overlayView?.let { view ->
-            try {
-                val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-                windowManager.removeView(view)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing overlay window: ${e.message}")
+            handler.post {
+                try {
+                    val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+                    windowManager.removeView(view)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing overlay window: ${e.message}")
+                }
+                overlayView = null
             }
-            overlayView = null
         }
     }
 }

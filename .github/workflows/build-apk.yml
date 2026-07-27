@@ -24,10 +24,57 @@ jobs:
         run: npm install
 
 
-      - name: Create stub web assets for cap sync
+      - name: Create fallback web assets for cap sync
         run: |
           mkdir -p out
-          echo '<html><body>KaiwaAI</body></html>' > out/index.html
+          cat > out/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>KaiwaAI</title>
+            <style>
+              html,body{margin:0;height:100%;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0}
+              .wrap{text-align:center;padding:2rem}
+              h1{font-size:1.5rem;margin:0 0 1rem;color:#818cf8}
+              p{margin:.5rem 0;color:#94a3b8;font-size:.95rem}
+              a{color:#818cf8;text-decoration:underline}
+              .spinner{width:40px;height:40px;border:3px solid #334155;border-top-color:#818cf8;border-radius:50%;animation:spin 1s linear infinite;margin:1.5rem auto}
+              @keyframes spin{to{transform:rotate(360deg)}}
+            </style>
+          </head>
+          <body>
+            <div class="wrap">
+              <h1>KaiwaAI</h1>
+              <div class="spinner"></div>
+              <p>Connecting to server…</p>
+              <p id="err" style="display:none;color:#f87171">Could not reach server.<br/>Tap <a href="https://kaiwa-ai.vercel.app/" style="color:#fca5a5">here</a> to open in browser.</p>
+            </div>
+            <script>
+              var TARGET = "https://kaiwa-ai.vercel.app/";
+              var start = Date.now();
+              function giveup() {
+                document.getElementById("err").style.display = "block";
+                document.querySelector(".spinner").style.display = "none";
+              }
+              var t = setTimeout(giveup, 8000);
+              try {
+                var img = new Image();
+                img.onload = img.onerror = function() {
+                  clearTimeout(t);
+                  var elapsed = Date.now() - start;
+                  setTimeout(function() { location.replace(TARGET); }, Math.max(0, 500 - elapsed));
+                };
+                img.src = TARGET + "icon.svg?cb=" + Date.now();
+              } catch (e) {
+                clearTimeout(t);
+                location.replace(TARGET);
+              }
+            </script>
+          </body>
+          </html>
+          HTML
 
       - uses: actions/setup-java@v4
         with:
@@ -35,6 +82,8 @@ jobs:
           java-version: 21
 
       - name: Sync Capacitor
+        env:
+          CAPACITOR_SERVER_URL: "https://kaiwa-ai.vercel.app"
         run: npx cap sync android
 
       - name: Decode and verify keystore

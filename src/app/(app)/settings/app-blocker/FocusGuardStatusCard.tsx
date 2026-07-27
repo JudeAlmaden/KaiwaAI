@@ -17,6 +17,8 @@ interface FocusGuardStatusCardProps {
   practice?: boolean;
   noDueAction?: BlockerNoDueAction;
   hasPermissions: boolean;
+  usageStatsGranted?: boolean;
+  overlayGranted?: boolean;
   onToggleMonitoring: () => void;
   onRequestPermissions: () => void;
   onUpdateFlashcardCount: (count: number) => void;
@@ -52,6 +54,8 @@ export default function FocusGuardStatusCard({
   practice = false,
   noDueAction = 'autoOpen',
   hasPermissions,
+  usageStatsGranted,
+  overlayGranted,
   onToggleMonitoring,
   onRequestPermissions,
   onUpdateFlashcardCount,
@@ -63,6 +67,9 @@ export default function FocusGuardStatusCard({
     onUpdateFlashcardCount(newCount);
     onUpdateAppBlockerConfig?.({ count: newCount });
   }
+
+  const overlayMissing = isMonitoring && overlayGranted === false;
+  const usageMissing = isMonitoring && usageStatsGranted === false;
 
   return (
     <>
@@ -123,6 +130,32 @@ export default function FocusGuardStatusCard({
             </button>
           </div>
         </div>
+
+        {/* Permission Diagnostic Banner */}
+        {(overlayMissing || usageMissing) && (
+          <div className="rounded-2xl border-2 border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-amber-800 dark:text-amber-200">
+            <p className="text-[11px] sm:text-xs font-bold leading-snug">
+              {overlayMissing && usageMissing
+                ? '⚠️ Usage Access + Display over other apps are both disabled.'
+                : usageMissing
+                ? '⚠️ Usage Access is disabled.'
+                : '⚠️ Display over other apps is disabled.'}
+            </p>
+            {overlayMissing && (
+              <p className="mt-1 text-[11px] sm:text-xs opacity-90 leading-relaxed">
+                When you open a blocked app, KaiwaAI will <strong>only show a notification</strong>,{' '}
+                not redirect you instantly. Tap <em>Permission ⚠️</em> above and enable{' '}
+                <strong>Display over other apps</strong> to get instant focus-guard blocking.
+              </p>
+            )}
+            {!overlayMissing && usageMissing && (
+              <p className="mt-1 text-[11px] sm:text-xs opacity-90 leading-relaxed">
+                KaiwaAI cannot tell which app you have open. Tap <em>Permission ⚠️</em> above and
+                enable <strong>Usage Access</strong>.
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Rules Options Modal */}

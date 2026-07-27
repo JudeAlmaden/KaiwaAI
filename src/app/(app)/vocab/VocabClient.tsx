@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import PageHeader from "../PageHeader";
 import LookupBox from "./LookupBox";
+import ConjugationTutorial from "./ConjugationTutorial";
 import { Chip, StatusBadge, STATUS_STYLE } from "../ui";
 import { speakJa, canSpeak } from "@/lib/speak";
 import KanjiBreakdown from "../chat/KanjiBreakdown";
@@ -31,7 +32,7 @@ type WordForm = { id: string; form: string; reading: string; formType: string; s
 
 const FILTERS = ["All", "New", "Learning", "Known"] as const;
 type Filter = (typeof FILTERS)[number];
-type ContentTab = "words" | "phrases";
+type ContentTab = "words" | "phrases" | "conjugation";
 
 const STORAGE_KEY = "kaiwa_vocab_cache";
 const ITEMS_PER_PAGE = 50;
@@ -365,13 +366,19 @@ export default function VocabClient() {
       <PageHeader
         title="Vocab"
         jp="単語"
-        subtitle={cards ? `${counts.total} ${contentTab} collected` : "Loading…"}
+        subtitle={
+          contentTab === "conjugation"
+            ? "Japanese verb & adjective conjugation"
+            : cards
+            ? `${counts.total} ${contentTab} collected`
+            : "Loading…"
+        }
       />
 
-      <LookupBox onAdded={load} />
+      {contentTab !== "conjugation" && <LookupBox onAdded={load} />}
 
       <div className="px-5 pt-3 sm:px-8">
-        <div className="mx-auto grid w-full max-w-3xl grid-cols-2 rounded-2xl bg-border/40 p-1">
+        <div className="mx-auto grid w-full max-w-3xl grid-cols-3 rounded-2xl bg-border/40 p-1">
           <button
             onClick={() => setContentTab("words")}
             className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
@@ -388,9 +395,23 @@ export default function VocabClient() {
           >
             Phrases
           </button>
+          <button
+            onClick={() => setContentTab("conjugation")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+              contentTab === "conjugation" ? "bg-card text-indigo-ai shadow-sm" : "text-muted"
+            }`}
+          >
+            Conjugation
+          </button>
         </div>
       </div>
 
+      {contentTab === "conjugation" ? (
+        <div className="flex-1 px-5 pt-5 sm:px-8">
+          <ConjugationTutorial />
+        </div>
+      ) : (
+        <>
       {/* overview bar */}
       {cards && cards.length > 0 && (
         <div className="px-5 pt-3 sm:px-8">
@@ -532,9 +553,11 @@ export default function VocabClient() {
           </div>
         </div>
       )}
+        </>
+      )}
 
       {/* detail sheet */}
-      {selected && (
+      {contentTab !== "conjugation" && selected && (
         <div
           className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 sm:items-center"
           onClick={() => setSelected(null)}

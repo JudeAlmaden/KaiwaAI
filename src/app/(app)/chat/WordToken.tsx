@@ -214,6 +214,49 @@ function SubWordChip({
   );
 }
 
+// Only show the legacy "+ Add all N conjugations" batch button for verbs that
+// don't auto-conjugate via base add (suru / kuru / irregular). Regular verbs
+// and i/na adjectives already get all forms auto-inserted by the server when
+// the base dictionary form is added via `addBase`, so a batch button is noise.
+function ShowAllConjugationsButtonForIrregulars({
+  wordLookup,
+  state,
+  studyAllForms,
+}: {
+  wordLookup: Extract<WordLookupResult, { type: "word" }>;
+  state: SaveState;
+  studyAllForms: () => void;
+}) {
+  const word = wordLookup.word;
+  if (word.partOfSpeech !== "verb") return null;
+
+  // Best-effort: if the Word record has no explicit verbType, play it safe
+  // and assume it might be irregular so user still has the batch option.
+  const explicitRegular =
+    (word as unknown as Record<string, unknown>).verbType === "godan" ||
+    (word as unknown as Record<string, unknown>).verbType === "ichidan";
+  if (explicitRegular) return null;
+
+  const hasUnsaved = wordLookup.forms.some(
+    (form) => form.formType !== "dictionary" && !form.saved
+  );
+  if (!hasUnsaved) return null;
+
+  const count = wordLookup.forms.filter(
+    (form) => form.formType !== "dictionary" && !form.saved
+  ).length;
+
+  return (
+    <button
+      onClick={studyAllForms}
+      disabled={state === "saving"}
+      className="w-full rounded-full border border-indigo-ai/30 px-3 py-1.5 text-xs font-bold text-indigo-ai transition-colors hover:bg-indigo-ai/10 disabled:opacity-60"
+    >
+      {state === "saving" ? "Adding…" : `+ Add all ${count} conjugations`}
+    </button>
+  );
+}
+
 // ── Shared body: dictionary + add-to-deck button ──────────────────────────────
 
 function WordTokenBody({
@@ -267,6 +310,29 @@ function WordTokenBody({
       )
     : undefined;
   const tappedFormLabel = formLabel(tappedForm?.formType);
+  const userHasBase = wordLookup ? wordLookup.userHasBaseWord : alreadySaved;
+
+  async function addBase() {
+    if (!wordLookup) return;
+    setState("saving");
+    const res = await fetch("/api/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wordId: wordLookup.word.id, wordFormId: null }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setState(data.alreadyExisted ? "exists" : "saved");
+      onSaved(token.dictForm);
+      setLookupResult((current) =>
+        current?.type === "word"
+          ? { ...current, userHasBaseWord: true, forms: current.forms.map((f) => ({ ...f, saved: true })) }
+          : current
+      );
+    } else {
+      setState("idle");
+    }
+  }
 
   async function addQuick() {
     setState("saving");
@@ -295,14 +361,16 @@ function WordTokenBody({
     if (res.ok) {
       const data = await res.json();
       setState(data.alreadyExisted ? "exists" : "saved");
-      setLookupResult((current) => current?.type === "word"
-        ? {
-            ...current,
-            forms: current.forms.map((form) =>
-              form.id === tappedForm.id ? { ...form, saved: true } : form
-            ),
-          }
-        : current);
+      setLookupResult((current) =>
+        current?.type === "word"
+          ? {
+              ...current,
+              forms: current.forms.map((form) =>
+                form.id === tappedForm.id ? { ...form, saved: true } : form
+              ),
+            }
+          : current
+      );
     } else {
       setState("idle");
     }
@@ -401,27 +469,38 @@ function WordTokenBody({
       <div className="mt-2">
         {tappedForm && tappedFormLabel ? (
           <div className="space-y-2">
-            {tappedForm.saved || state === "saved" || state === "exists" ? (
+            {!userHasBase && state !== "saved" && state !== "exists" && state !== "merged" && (
+              <button
+                onClick={addBase}
+                disabled={state === "saving"}
+                className="w-full rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
+              >
+                {state === "saving"
+                  ? "Adding…"
+                  : `+ Add base word (${
+                      wordLookup?.word.dictionary || token.dictForm
+                    })`}
+              </button>
+            )}
+            {(tappedForm.saved || state === "saved" || state === "exists") ? (
               <div className="flex items-center gap-1 text-xs font-bold text-mint">
-                âœ“ this form is in your review deck
+                ✓ this form is in your review deck
               </div>
             ) : (
               <button
                 onClick={studyForm}
                 disabled={state === "saving"}
-                className="w-full rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
+                className="w-full rounded-full border border-mint/30 bg-mint/5 px-3 py-1.5 text-xs font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-60"
               >
-                {state === "saving" ? "Addingâ€¦" : `+ Study this form (${tappedFormLabel})`}
+                {state === "saving" ? "Adding…" : `+ Study this form (${tappedFormLabel})`}
               </button>
             )}
-            {wordLookup && wordLookup.forms.some((form) => form.formType !== "dictionary" && !form.saved) && (
-              <button
-                onClick={studyAllForms}
-                disabled={state === "saving"}
-                className="w-full rounded-full border border-indigo-ai/30 px-3 py-1.5 text-xs font-bold text-indigo-ai transition-colors hover:bg-indigo-ai/10 disabled:opacity-60"
-              >
-                {state === "saving" ? "Addingâ€¦" : `+ Add all ${wordLookup.forms.filter((form) => form.formType !== "dictionary" && !form.saved).length} conjugations`}
-              </button>
+            {userHasBase && wordLookup && (
+              <ShowAllConjugationsButtonForIrregulars
+                wordLookup={wordLookup}
+                state={state}
+                studyAllForms={studyAllForms}
+              />
             )}
           </div>
         ) : alreadySaved ? (
