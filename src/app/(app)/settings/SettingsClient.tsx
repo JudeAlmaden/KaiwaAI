@@ -66,7 +66,12 @@ export default function SettingsClient({ email }: { email: string }) {
       )}
 
       {/* Mobile Tab */}
-      {tab === "mobile" && (isAndroid ? <AppBlockerSettings /> : <MobileAppDownloadCard />)}
+      {tab === "mobile" && (
+        <div className="flex flex-col gap-5">
+          <MobileAppDownloadCard />
+          {isAndroid && <AppBlockerSettings />}
+        </div>
+      )}
     </div>
   );
 }
