@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext (HTTP) traffic for development -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    
-    <!-- For production, specify your domain -->
+
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">your-production-domain.com</domain>
+        <domain includeSubdomains="true">kaiwa-ai.vercel.app</domain>
     </domain-config>
 </network-security-config>
