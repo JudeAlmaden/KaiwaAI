@@ -12,6 +12,6 @@ jobs:
     steps:
       - name: Call Outreach API
         run: |
-          curl -X POST https://your-domain.vercel.app/api/triggers/kai-opener \
+          curl -X POST https://kaiwa-ai.vercel.app/api/triggers/kai-opener \
             -H "Authorization: Bearer ${{ secrets.TRIGGER_SECRET }}" \
             -H "Content-Type: application/json"

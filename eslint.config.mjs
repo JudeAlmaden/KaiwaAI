@@ -22,6 +22,11 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Generated Prisma client — not our code to lint.
     "src/generated/**",
+    // Android build intermediates (generated Capacitor bridge files).
+    "android/**/build/**",
+    // iOS build intermediates (if ever added).
+    "ios/**/build/**",
+    "ios/Pods/**",
   ]),
 ]);
 
