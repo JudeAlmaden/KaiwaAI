@@ -103,7 +103,7 @@ export default function ReviewCard({
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 w-full max-w-md">
-      <div className="card-perspective w-full h-[380px] sm:h-[420px]">
+      <div className="card-perspective w-full h-[420px] sm:h-[450px]">
         <div
           onClick={onFlip}
           className={`card-inner cursor-pointer ${flipped ? "is-flipped" : ""}`}

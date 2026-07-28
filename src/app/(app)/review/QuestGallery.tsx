@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from "@phosphor-icons/react";
 import Link from "next/link";
+import { buildCustomSessionStartParams, type CustomSessionFormValues } from "./customSession";
 
 export type QuestStartParams = {
   studyMode: "all" | "struggling" | "due" | "new" | "custom";
@@ -57,8 +58,21 @@ export default function QuestGallery({
   onToggleMonitoring,
   onUpdateAppBlockerConfig,
 }: QuestGalleryProps) {
-  const [, setShowCustomModal] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
   const [showAppBlockerModal, setShowAppBlockerModal] = useState(false);
+  const [customDraft, setCustomDraft] = useState<CustomSessionFormValues>({
+    reviewType: "mixed",
+    studyMode: "all",
+    direction: "mixed",
+    limit: 20,
+    isContinuous: false,
+    activeLimit: 5,
+  });
+
+  const handleStartCustomSession = () => {
+    onStartQuest(buildCustomSessionStartParams(customDraft));
+    setShowCustomModal(false);
+  };
 
   return (
     <div className="w-full space-y-6">
@@ -175,6 +189,160 @@ export default function QuestGallery({
           </>
         )}
       </div>
+
+      {/* Custom Session Modal */}
+      {showCustomModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowCustomModal(false)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-base font-bold text-foreground">
+                  Build a custom session
+                </h2>
+                <p className="text-xs text-muted">
+                  Pick the cards and pace that fit your current focus.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCustomModal(false)}
+                className="w-8 h-8 rounded-xl bg-muted/15 text-muted hover:text-foreground flex items-center justify-center text-xs font-bold transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1.5 text-sm font-semibold text-foreground">
+                <span>Review type</span>
+                <select
+                  value={customDraft.reviewType}
+                  onChange={(e) =>
+                    setCustomDraft((prev) => ({
+                      ...prev,
+                      reviewType: e.target.value as CustomSessionFormValues["reviewType"],
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="mixed">Mixed</option>
+                  <option value="vocabulary">Vocabulary</option>
+                  <option value="kanji">Kanji</option>
+                </select>
+              </label>
+
+              <label className="space-y-1.5 text-sm font-semibold text-foreground">
+                <span>Study mode</span>
+                <select
+                  value={customDraft.studyMode}
+                  onChange={(e) =>
+                    setCustomDraft((prev) => ({
+                      ...prev,
+                      studyMode: e.target.value as CustomSessionFormValues["studyMode"],
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All cards</option>
+                  <option value="due">Due now</option>
+                  <option value="new">New cards</option>
+                  <option value="struggling">Struggling</option>
+                </select>
+              </label>
+
+              <label className="space-y-1.5 text-sm font-semibold text-foreground">
+                <span>Direction</span>
+                <select
+                  value={customDraft.direction}
+                  onChange={(e) =>
+                    setCustomDraft((prev) => ({
+                      ...prev,
+                      direction: e.target.value as CustomSessionFormValues["direction"],
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="mixed">Mixed</option>
+                  <option value="jp-to-en">Japanese → English</option>
+                  <option value="en-to-jp">English → Japanese</option>
+                </select>
+              </label>
+
+              <label className="space-y-1.5 text-sm font-semibold text-foreground">
+                <span>Card limit</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="200"
+                  value={customDraft.limit}
+                  onChange={(e) =>
+                    setCustomDraft((prev) => ({
+                      ...prev,
+                      limit: Number(e.target.value || 1),
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-background/70 p-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <input
+                  type="checkbox"
+                  checked={customDraft.isContinuous}
+                  onChange={(e) =>
+                    setCustomDraft((prev) => ({
+                      ...prev,
+                      isContinuous: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-border"
+                />
+                Continuous mode
+              </label>
+
+              <label className="space-y-1 text-sm font-semibold text-foreground">
+                <span className="block text-xs uppercase tracking-wide text-muted">Active pool</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={customDraft.activeLimit}
+                  onChange={(e) =>
+                    setCustomDraft((prev) => ({
+                      ...prev,
+                      activeLimit: Number(e.target.value || 1),
+                    }))
+                  }
+                  className="w-24 rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowCustomModal(false)}
+                className="rounded-2xl border border-border bg-card/60 px-4 py-2 text-sm font-bold text-muted transition hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleStartCustomSession}
+                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-ai px-4 py-2 text-sm font-bold text-white transition hover:brightness-105"
+              >
+                Start session
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Focus Guard Simplified Minimal Modal */}
       {showAppBlockerModal && (

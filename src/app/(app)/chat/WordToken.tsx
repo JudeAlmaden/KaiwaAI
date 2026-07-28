@@ -278,7 +278,10 @@ function WordTokenBody({
   useEffect(() => {
     if (lookupResult || loading || lookupFailed) return;
     setTimeout(() => setLoading(true), 0);
-    const params = new URLSearchParams({ dictForm: token.dictForm });
+    const params = new URLSearchParams({
+      dictForm: token.dictForm,
+      surface: token.surface,
+    });
     params.set(
       "metadata",
       JSON.stringify({ reading: token.reading, meaning: token.meaning, pos: token.pos })
@@ -411,14 +414,9 @@ function WordTokenBody({
 
       {lookupResult && (
         <div className={compact ? "" : "mt-3 border-t border-border pt-2"}>
-          {tappedFormLabel && (
+          {(tappedFormLabel || (token.surface !== token.dictForm && tappedForm)) && (
             <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-ai">
-              {tappedFormLabel}
-            </div>
-          )}
-          {!tappedFormLabel && token.surface !== token.dictForm && (
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-amber">
-              Form: {token.surface} (base: {token.dictForm})
+              {tappedFormLabel || `Form: ${token.surface} (base: ${token.dictForm})`}
             </div>
           )}
           {!compact && <div className="text-xs font-bold text-muted mb-1">Dictionary entry</div>}
@@ -492,7 +490,7 @@ function WordTokenBody({
                 disabled={state === "saving"}
                 className="w-full rounded-full border border-mint/30 bg-mint/5 px-3 py-1.5 text-xs font-bold text-mint transition-colors hover:bg-mint/10 disabled:opacity-60"
               >
-                {state === "saving" ? "Adding…" : `+ Study this form (${tappedFormLabel})`}
+                {state === "saving" ? "Adding…" : "+ Add this conjugation"}
               </button>
             )}
             {userHasBase && wordLookup && (

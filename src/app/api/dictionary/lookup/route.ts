@@ -70,7 +70,12 @@ export async function GET(req: Request) {
         });
       }
 
-      // 3. Not in dictionary or phrases – prepare a transient representation (no DB writes on GET)
+      // 3. If dictForm lookup failed, try the surface form too (covers conjugated forms)
+      if (!word && surface) {
+        word = await lookupWordBySurface(surface);
+      }
+
+      // 4. Not in dictionary or phrases – prepare a transient representation (no DB writes on GET)
       if (!word && !phrase && metadata) {
         try {
           const { reading, meaning, pos } = JSON.parse(metadata) as {

@@ -16,7 +16,7 @@ export default function AppBlockerCard({
   return (
     <button
       onClick={onClick}
-      className="group relative w-full flex flex-col justify-between text-left rounded-3xl border-2 border-border bg-gradient-to-br from-indigo-ai/6 via-card to-card p-4 md:p-5 transition-all hover:-translate-y-1 hover:shadow-lg hover:border-indigo-ai/45 cursor-pointer shadow-sm overflow-hidden break-inside-avoid mb-4"
+      className="group relative w-full flex flex-col justify-between text-left rounded-3xl border-2 border-border bg-gradient-to-br from-indigo-ai/6 via-card to-card p-5 md:p-6 transition-all hover:-translate-y-1 hover:shadow-lg hover:border-indigo-ai/45 cursor-pointer shadow-sm overflow-hidden min-h-[160px]"
     >
       {/* Hover shimmer */}
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-ai/0 via-indigo-ai/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
@@ -43,15 +43,15 @@ export default function AppBlockerCard({
           </span>
         </div>
 
-        <h3 className="font-display text-sm md:text-base font-extrabold text-foreground group-hover:text-indigo-ai transition-colors mb-1">
+        <h3 className="font-display text-lg md:text-xl font-extrabold text-foreground group-hover:text-indigo-ai transition-colors mb-1">
           Focus Guard
         </h3>
-        <p className="text-[10px] md:text-xs text-muted leading-relaxed">
+        <p className="text-xs md:text-sm text-muted leading-relaxed">
           Require {requirementCount} cards before unlocking blocked apps.
         </p>
       </div>
 
-      <div className="relative z-10 mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11px] font-bold text-indigo-ai">
+      <div className="relative z-10 mt-3 pt-2 border-t border-border/60 flex items-center justify-between text-[11px] font-bold text-indigo-ai">
         <span>Configure Rules →</span>
         <ShieldCheck size={15} />
       </div>

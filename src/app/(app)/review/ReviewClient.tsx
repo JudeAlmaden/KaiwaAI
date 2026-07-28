@@ -242,10 +242,12 @@ export default function ReviewClient() {
       ? "/api/review/mixed"
       : `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
       
+    const resolvedStudyMode = setup.studyMode === "new" || setup.studyMode === "custom" ? "all" : setup.studyMode;
     const params = new URLSearchParams({ 
-      studyMode: setup.studyMode, 
+      studyMode: resolvedStudyMode, 
       limit: "100"
     });
+    if (setup.studyMode === "new") params.set("status", "new");
     if (setup.practice) params.set("practice", "true");
     
     try {
@@ -278,10 +280,12 @@ export default function ReviewClient() {
       ? "/api/review/mixed"
       : `/api/${s.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
       
+    const resolvedStudyMode = s.studyMode === "new" || s.studyMode === "custom" ? "all" : s.studyMode;
     const params = new URLSearchParams({ 
-      studyMode: s.studyMode, 
+      studyMode: resolvedStudyMode, 
       limit: String(s.limit) 
     });
+    if (s.studyMode === "new") params.set("status", "new");
     if (s.practice) params.set("practice", "true");
     
     let cards: Card[] = [];

@@ -366,12 +366,6 @@ export async function POST(req: Request) {
     where: { id: wordId },
     include: { forms: true },
   });
-  const isVerbOrAdjective =
-    !!wordRecord &&
-    (wordRecord.verbType === "godan" ||
-      wordRecord.verbType === "ichidan" ||
-      wordRecord.adjectiveType === "i_adjective" ||
-      wordRecord.adjectiveType === "na_adjective");
 
   // Check if already exists (the single card the caller asked for)
   const existing = await prisma.userFlashcard.findUnique({
@@ -401,36 +395,7 @@ export async function POST(req: Request) {
     });
   }
 
-  let addedConjugations = 0;
-
-  // Default behaviour (no opt-out flags): when adding the BASE form of a
-  // regular verb (godan/ichidan) or regular adjective (i/na) from chat,
-  // also insert every available conjugated form as a separate flashcard so
-  // the user studies them all together.
-  if (
-    !alreadyExisted &&
-    wordFormId == null &&
-    isVerbOrAdjective &&
-    !body.baseOnly &&
-    !body.wordFormIds &&
-    wordRecord
-  ) {
-    const conjugateForms = wordRecord.forms.filter(
-      (f) => f.formType !== "dictionary"
-    );
-    if (conjugateForms.length > 0) {
-      const result = await prisma.userFlashcard.createMany({
-        data: conjugateForms.map((f) => ({
-          userId: user.id,
-          wordId: wordId!,
-          wordFormId: f.id,
-          status: FlashcardStatus.learning,
-        })),
-        skipDuplicates: true,
-      });
-      addedConjugations = result.count;
-    }
-  }
+  const addedConjugations = 0;
 
   // Auto-add kanji from this word to the user's review queue
   if (wordRecord) {

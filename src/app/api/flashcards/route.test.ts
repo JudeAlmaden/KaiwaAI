@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const userFlashcardFindUnique = vi.fn();
 const userFlashcardCreate = vi.fn();
+const userFlashcardCreateMany = vi.fn();
 const wordFindUnique = vi.fn();
 const wordCreate = vi.fn();
 const wordAggregate = vi.fn();
@@ -15,6 +16,7 @@ vi.mock("@/lib/prisma", () => ({
     userFlashcard: {
       findUnique: (...a: unknown[]) => userFlashcardFindUnique(...a),
       create: (...a: unknown[]) => userFlashcardCreate(...a),
+      createMany: (...a: unknown[]) => userFlashcardCreateMany(...a),
     },
     word: {
       findUnique: (...a: unknown[]) => wordFindUnique(...a),
@@ -73,6 +75,7 @@ describe("POST /api/flashcards", () => {
   beforeEach(() => {
     userFlashcardFindUnique.mockReset();
     userFlashcardCreate.mockReset();
+    userFlashcardCreateMany.mockReset();
     wordFindUnique.mockReset();
     wordCreate.mockReset();
     wordAggregate.mockReset();
@@ -133,6 +136,31 @@ describe("POST /api/flashcards", () => {
     const res = await POST(req({ token }));
     const data = await res.json();
     expect(data.alreadyExisted).toBe(true);
+  });
+
+  it("does not auto-add every conjugation when saving a base form from chat", async () => {
+    const verbToken = {
+      ...token,
+      surface: "食べる",
+      reading: "たべる",
+      dictForm: "食べる",
+      pos: "verb",
+    };
+    const verbWord = {
+      ...mockWord,
+      id: 456,
+      dictionary: "食べる",
+      verbType: "godan",
+      forms: [
+        { id: "f1", formType: "dictionary", form: "食べる", reading: "たべる" },
+        { id: "f2", formType: "te", form: "食べて", reading: "たべて" },
+      ],
+    };
+    wordFindUnique.mockResolvedValue(verbWord);
+
+    await POST(req({ token: verbToken }));
+
+    expect(userFlashcardCreateMany).not.toHaveBeenCalled();
   });
 
   it("rejects a body with no word", async () => {
