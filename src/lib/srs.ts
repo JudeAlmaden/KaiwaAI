@@ -22,7 +22,14 @@ const QUALITY: Record<ReviewGrade, number> = { 0: 2, 1: 3, 2: 4, 3: 5 };
 const KNOWN_REPETITIONS = 3;
 const KNOWN_INTERVAL = 21; // days
 
-export function applyReview(state: SrsState, grade: ReviewGrade): SrsResult {
+export function applyReview(
+  state: SrsState,
+  grade: ReviewGrade,
+  options?: {
+    isEarly?: boolean;
+    daysElapsed?: number;
+  }
+): SrsResult {
   const q = QUALITY[grade];
   let { easeFactor, interval, repetitions } = state;
 
@@ -34,7 +41,15 @@ export function applyReview(state: SrsState, grade: ReviewGrade): SrsResult {
     repetitions += 1;
     if (repetitions === 1) interval = 1;
     else if (repetitions === 2) interval = 6;
-    else interval = Math.round(interval * easeFactor);
+    else {
+      if (options?.isEarly && options.daysElapsed !== undefined) {
+        // Proportional interval scaling
+        const scaledInterval = options.daysElapsed + (interval - options.daysElapsed) * (easeFactor - 1);
+        interval = Math.round(Math.max(interval, scaledInterval));
+      } else {
+        interval = Math.round(interval * easeFactor);
+      }
+    }
 
     easeFactor = easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
     if (easeFactor < 1.3) easeFactor = 1.3;

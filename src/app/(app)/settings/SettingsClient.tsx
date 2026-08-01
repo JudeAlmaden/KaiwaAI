@@ -71,7 +71,9 @@ export default function SettingsClient({ email }: { email: string }) {
       {tab === "mobile" && (
         <div className="flex flex-col gap-5">
           <MobileAppDownloadCard />
-          {isAndroid && <AppBlockerSettings />}
+          {(isAndroid || process.env.NEXT_PUBLIC_APP_BLOCKER_DEBUG === "true" || process.env.NODE_ENV === "development") && (
+            <AppBlockerSettings />
+          )}
         </div>
       )}
     </div>

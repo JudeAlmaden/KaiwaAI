@@ -45,4 +45,17 @@ describe("srs (SM-2)", () => {
     expect(progress(fresh)).toBe(0);
     expect(progress({ easeFactor: 2.5, interval: 30, repetitions: 5 })).toBe(1);
   });
+
+  it("early reviews with proportional scaling adjust interval based on elapsed days", () => {
+    const seasoned = { easeFactor: 2.5, interval: 10, repetitions: 3 };
+    // Normal review: interval = 10 * 2.5 = 25
+    const normal = applyReview(seasoned, 2);
+    expect(normal.interval).toBe(25);
+
+    // Early review with 2 elapsed days (instead of 10):
+    // newInterval = max(10, Math.round(2 + (10 - 2) * (2.5 - 1)))
+    // = max(10, Math.round(2 + 8 * 1.5)) = max(10, Math.round(2 + 12)) = max(10, 14) = 14
+    const early = applyReview(seasoned, 2, { isEarly: true, daysElapsed: 2 });
+    expect(early.interval).toBe(14);
+  });
 });

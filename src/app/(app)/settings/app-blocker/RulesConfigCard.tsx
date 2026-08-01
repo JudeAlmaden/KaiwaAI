@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, X, Minus, Plus, Sliders } from '@phosphor-icons/react';
+import { Target, X, Minus, Plus, Sliders, Question } from '@phosphor-icons/react';
 import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
 
 interface RulesConfigCardProps {
@@ -13,6 +13,7 @@ interface RulesConfigCardProps {
   studyMode?: BlockerStudyMode;
   practice?: boolean;
   noDueAction?: BlockerNoDueAction;
+  earlyReviewStrategy?: 'practice' | 'proportional';
   onUpdateFlashcardCount: (count: number) => void;
   onUpdateAppBlockerConfig?: (updates: {
     count?: number;
@@ -23,6 +24,7 @@ interface RulesConfigCardProps {
     studyMode?: BlockerStudyMode;
     practice?: boolean;
     noDueAction?: BlockerNoDueAction;
+    earlyReviewStrategy?: 'practice' | 'proportional';
   }) => void;
 }
 
@@ -40,9 +42,10 @@ export default function RulesConfigCard({
   unlockDurationMinutes = 15,
   reviewType = 'mixed',
   direction = 'mixed',
-  studyMode = 'due',
+  studyMode = 'all',
   practice = false,
   noDueAction = 'autoOpen',
+  earlyReviewStrategy = 'practice',
   onUpdateFlashcardCount,
   onUpdateAppBlockerConfig,
 }: RulesConfigCardProps) {
@@ -281,27 +284,40 @@ export default function RulesConfigCard({
 
               {/* Practice + No Due Action */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
-                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-2xl border-2 text-xs font-bold transition ${
-                    practice
-                      ? 'border-violet-400 bg-violet-500/10 text-violet-600'
-                      : 'border-border bg-card text-muted hover:text-foreground'
-                  }`}
-                >
-                  <span>Practice Mode</span>
-                  <span
-                    className={`w-9 h-5 rounded-full relative transition ${
-                      practice ? 'bg-violet-500' : 'bg-muted/40'
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                      Practice Mode
+                    </span>
+                    <div className="group relative cursor-pointer text-muted hover:text-foreground">
+                      <Question size={12} weight="bold" />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
+                        Disables database/SRS updates for ALL reviews in the session, even if cards are due.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border-2 text-xs font-bold transition ${
+                      practice
+                        ? 'border-violet-400 bg-violet-500/10 text-violet-600'
+                        : 'border-border bg-card text-muted hover:text-foreground'
                     }`}
                   >
+                    <span>{practice ? 'Active' : 'Disabled'}</span>
                     <span
-                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-                        practice ? 'left-4' : 'left-0.5'
+                      className={`w-9 h-5 rounded-full relative transition shrink-0 ${
+                        practice ? 'bg-violet-500' : 'bg-muted/40'
                       }`}
-                    />
-                  </span>
-                </button>
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                          practice ? 'left-4' : 'left-0.5'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </div>
 
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
@@ -330,6 +346,48 @@ export default function RulesConfigCard({
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Early Review Strategy Section */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                    Early Review Strategy
+                  </span>
+                  <div className="group relative cursor-pointer text-muted hover:text-foreground">
+                    <Question size={12} weight="bold" />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
+                      How SRS behaves when reviewing cards before they are due (e.g. via &apos;Study Any&apos;).
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'practice' })}
+                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
+                      earlyReviewStrategy === 'practice'
+                        ? 'bg-indigo-ai text-white border-indigo-ai'
+                        : 'border-border bg-background text-muted hover:text-foreground'
+                    }`}
+                  >
+                    Skip SRS (Practice)
+                  </button>
+                  <button
+                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'proportional' })}
+                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
+                      earlyReviewStrategy === 'proportional'
+                        ? 'bg-indigo-ai text-white border-indigo-ai'
+                        : 'border-border bg-background text-muted hover:text-foreground'
+                    }`}
+                  >
+                    Proportional (Scale)
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted leading-snug">
+                  {earlyReviewStrategy === 'practice'
+                    ? '🔒 Early reviews act as practice and do not alter existing intervals/SRS schedules.'
+                    : '📈 Intervals are adjusted proportionally based on how early you reviewed the card.'}
+                </p>
               </div>
 
               {(practice || noDueAction === 'studyAny') && (

@@ -8,9 +8,10 @@ export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
     unlockDurationMinutes: 15,
     reviewType: 'vocabulary',
     direction: 'jp-to-en',
-    studyMode: 'due',
+    studyMode: 'all',
     practice: false,
     noDueAction: 'autoOpen',
+    earlyReviewStrategy: 'practice',
   };
 
   async startMonitoring(): Promise<void> {

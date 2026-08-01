@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { Capacitor } from '@capacitor/core';
 import { AppBlocker } from '@/plugins/app-blocker';
 import type { BlockerStudyMode, BlockerNoDueAction, AppBlockerConfig } from '@/plugins/app-blocker/definitions';
 import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
@@ -30,24 +31,30 @@ export default function StandaloneAppLockPage() {
   const [initResult, setInitResult] = useState<InitResult | null>(null);
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [practice, setPractice] = useState(false);
+  const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>('practice');
 
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
+
+  const isWeb = Capacitor.getPlatform() === 'web';
 
   const finishUnlock = useCallback(async (pkg: string | null) => {
     if (finishingRef.current) return;
     finishingRef.current = true;
 
-    await grantUnlock();
+    // Skip native unlock call on web — it would throw
+    if (!isWeb) {
+      await grantUnlock().catch(() => {});
+    }
 
-    if (pkg) {
+    if (pkg && !isWeb) {
       setTimeout(() => {
         AppBlocker.launchApp({ packageName: pkg }).catch(() => {});
       }, 300);
     }
 
     router.replace('/home');
-  }, [router]);
+  }, [router, isWeb]);
 
   const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
     if (isRegenerate) {
@@ -90,7 +97,7 @@ export default function StandaloneAppLockPage() {
   const fetchCards = useCallback(async (
     reviewType: 'vocabulary' | 'kanji' | 'mixed',
     studyMode: BlockerStudyMode,
-  ): Promise<Card[]> => {
+  ): Promise<Card[] | { offline: true }> => {
     const endpoint = reviewType === 'mixed'
       ? '/api/review/mixed'
       : `/api/${reviewType === 'kanji' ? 'kanji' : 'flashcards'}/review`;
@@ -101,118 +108,154 @@ export default function StandaloneAppLockPage() {
         const data = await res.json();
         return data.cards ?? [];
       }
+      // Non-OK response but reachable — treat as empty
+      return [];
     } catch {
-      // Failed to load cards
+      // Network error — user is offline
+      return { offline: true };
     }
-    return [];
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
-      const params = new URLSearchParams(window.location.search);
-      const pkg = params.get('blocked_package');
-      const countParam = params.get('count');
-      const isBlockIntercept = params.get('mode') === 'app-blocker' || !!pkg;
-
-      // Stale /app-lock URL (e.g. reopening KaiwaAI after unlock expired) — go home
-      if (!isBlockIntercept) {
-        if (!cancelled) {
-          setInitResult({ kind: 'redirect-home' });
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (pkg) setBlockedPackage(pkg);
-      if (countParam) {
-        setRequiredCount(parseInt(countParam, 10) || 10);
-      } else {
-        AppBlocker.getFlashcardRequirement()
-          .then((res) => { if (res?.count) setRequiredCount(res.count); })
-          .catch(() => {});
-      }
-
-      // Pull full config (URL params take precedence, then saved native prefs)
-      const urlReviewType = params.get('reviewType') as AppBlockerConfig['reviewType'] | null;
-      const urlStudyMode = params.get('studyMode') as BlockerStudyMode | null;
-      const urlPractice = params.get('practice');
-      const urlNoDue = params.get('noDueAction') as BlockerNoDueAction | null;
-      const urlDirection = params.get('direction') as Direction | null;
-
-      let savedConfig: AppBlockerConfig | null = null;
       try {
-        savedConfig = await AppBlocker.getAppBlockerConfig().catch(() => null);
-      } catch {
-        savedConfig = null;
-      }
+        const params = new URLSearchParams(window.location.search);
+        const pkg = params.get('blocked_package');
+        const countParam = params.get('count');
+        const isBlockIntercept = isWeb || params.get('mode') === 'app-blocker' || !!pkg;
 
-      const reviewType: AppBlockerConfig['reviewType'] = urlReviewType ?? savedConfig?.reviewType ?? 'vocabulary';
-      const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'due';
-      const practiceEnabled: boolean =
-        urlPractice !== null ? urlPractice === '1' || urlPractice === 'true' : (savedConfig?.practice ?? false);
-      const noDueActionResolved: BlockerNoDueAction =
-        urlNoDue ?? savedConfig?.noDueAction ?? 'autoOpen';
-      const direction: Direction = urlDirection ?? (savedConfig?.direction as Direction | undefined | null) ?? 'jp-to-en';
-
-      setPractice(practiceEnabled);
-
-      const unlock = await getUnlockStatus();
-      if (unlock.active) {
-        if (!cancelled) {
-          setInitResult({ kind: 'auto-unlocked' });
-          setLoading(false);
+        // Stale /app-lock URL (e.g. reopening KaiwaAI after unlock expired) — go home
+        // On web/PC we skip this guard so the page always works for previewing
+        if (!isBlockIntercept) {
+          if (!cancelled) {
+            setInitResult({ kind: 'redirect-home' });
+            setLoading(false);
+          }
+          return;
         }
-        finishUnlock(pkg);
-        return;
-      }
 
-      let pulledCards = await fetchCards(reviewType, studyMode);
-      if (cancelled) return;
+        if (pkg) setBlockedPackage(pkg);
+        if (countParam) {
+          setRequiredCount(parseInt(countParam, 10) || 10);
+        } else {
+          AppBlocker.getFlashcardRequirement()
+            .then((res) => { if (res?.count) setRequiredCount(res.count); })
+            .catch(() => {});
+        }
 
-      // If studyMode returned empty, honor noDueAction
-      if (pulledCards.length === 0) {
-        if (noDueActionResolved === 'autoOpen') {
-          setInitResult({ kind: 'auto-unlocked' });
-          setLoading(false);
+        // Pull full config (URL params take precedence, then saved native prefs)
+        const urlReviewType = params.get('reviewType') as AppBlockerConfig['reviewType'] | null;
+        const urlStudyMode = params.get('studyMode') as BlockerStudyMode | null;
+        const urlPractice = params.get('practice');
+        const urlNoDue = params.get('noDueAction') as BlockerNoDueAction | null;
+        const urlDirection = params.get('direction') as Direction | null;
+
+        let savedConfig: AppBlockerConfig | null = null;
+        try {
+          savedConfig = await AppBlocker.getAppBlockerConfig().catch(() => null);
+        } catch {
+          savedConfig = null;
+        }
+
+        const reviewType: AppBlockerConfig['reviewType'] = urlReviewType ?? savedConfig?.reviewType ?? 'vocabulary';
+        const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'all';
+        const practiceEnabled: boolean =
+          urlPractice !== null ? urlPractice === '1' || urlPractice === 'true' : (savedConfig?.practice ?? false);
+        const noDueActionResolved: BlockerNoDueAction =
+          urlNoDue ?? savedConfig?.noDueAction ?? 'autoOpen';
+        const direction: Direction = urlDirection ?? (savedConfig?.direction as Direction | undefined | null) ?? 'jp-to-en';
+        const urlEarlyStrategy = params.get('earlyReviewStrategy') as 'practice' | 'proportional' | null;
+        const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? 'practice';
+
+        setPractice(practiceEnabled);
+        setEarlyReviewStrategy(earlyStrategy);
+
+        // On web, skip native unlock check — always start a fresh session
+        if (!isWeb) {
+          const unlock = await getUnlockStatus();
+          if (unlock.active) {
+            if (!cancelled) {
+              setInitResult({ kind: 'auto-unlocked' });
+              setLoading(false);
+            }
+            finishUnlock(pkg);
+            return;
+          }
+        }
+
+        let pulledCards = await fetchCards(reviewType, studyMode);
+        if (cancelled) return;
+
+        // Offline: network error — let them pass
+        if ('offline' in pulledCards && pulledCards.offline) {
+          if (!cancelled) {
+            setInitResult({ kind: 'auto-unlocked' });
+            setLoading(false);
+          }
           finishUnlock(pkg);
           return;
         }
-        // studyAny: retry with mode=all so there's always something to review
-        if (noDueActionResolved === 'studyAny') {
-          const fallbackCards = await fetchCards(reviewType, 'all');
-          if (!cancelled && fallbackCards.length === 0) {
-            // Nothing at all — give up and unlock
+
+        // If no cards returned, honor noDueAction — but on web always try 'all' first
+        if ((pulledCards as Card[]).length === 0) {
+          if (!isWeb && noDueActionResolved === 'autoOpen') {
             setInitResult({ kind: 'auto-unlocked' });
             setLoading(false);
             finishUnlock(pkg);
             return;
           }
+          // On web, or when noDueAction=studyAny: retry with all cards
+          const fallbackResult = await fetchCards(reviewType, 'all');
+          if (cancelled) return;
+
+          if ('offline' in fallbackResult && fallbackResult.offline) {
+            // Offline on retry — let them pass
+            setInitResult({ kind: 'auto-unlocked' });
+            setLoading(false);
+            finishUnlock(pkg);
+            return;
+          }
+
+          const fallbackCards = fallbackResult as Card[];
+          if (!cancelled && fallbackCards.length === 0) {
+            // Nothing at all — nothing to review
+            setInitResult({ kind: 'session' });
+            setLoading(false);
+            return;
+          }
           pulledCards = fallbackCards;
         }
-      }
 
-      setCards(
-        (pulledCards as (Card & { _dir?: 'jp-to-en' | 'en-to-jp' })[]).map((c) => ({
-          ...c,
-          _dir:
-            direction === 'jp-to-en'
-              ? 'jp-to-en'
-              : direction === 'en-to-jp'
-              ? 'en-to-jp'
-              : Math.random() < 0.5
-              ? 'jp-to-en'
-              : 'en-to-jp',
-        }))
-      );
-      setInitResult({ kind: 'session' });
-      setLoading(false);
+        setCards(
+          (pulledCards as Card[]).map((c) => ({
+            ...c,
+            _dir:
+              direction === 'jp-to-en'
+                ? 'jp-to-en'
+                : direction === 'en-to-jp'
+                ? 'en-to-jp'
+                : Math.random() < 0.5
+                ? 'jp-to-en'
+                : 'en-to-jp',
+          }))
+        );
+        setInitResult({ kind: 'session' });
+        setLoading(false);
+      } catch (err) {
+        console.error('[app-lock] init error:', err);
+        if (!cancelled) {
+          // On error, try to show a session rather than infinite loading
+          setInitResult({ kind: 'session' });
+          setLoading(false);
+        }
+      }
     }
 
     init();
     return () => { cancelled = true; };
-  }, [fetchCards, finishUnlock]);
+  }, [fetchCards, finishUnlock, isWeb]);
 
   useEffect(() => {
     if (initResult?.kind === 'redirect-home') {
@@ -233,7 +276,7 @@ export default function StandaloneAppLockPage() {
         fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cardId: card.id, grade }),
+          body: JSON.stringify({ cardId: card.id, grade, earlyReviewStrategy }),
         }).catch(() => {});
       }
 
@@ -262,7 +305,7 @@ export default function StandaloneAppLockPage() {
         });
       }
     },
-    [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, finishUnlock]
+    [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, earlyReviewStrategy, finishUnlock]
   );
 
   useEffect(() => {

@@ -2,6 +2,33 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.5.3] - 2026-08-01
+
+### Changed
+
+- **Flashcard review algorithm refactored to session-composition system** — replaced simple age-based sorting with intelligent two-pool architecture: Active Pool (40%, new cards + weak short-interval cards) and Maintenance Pool (60%, due cards with 1-hour recency filter). New cards now get highest priority; old weak cards must meet both `easeFactor < 2.2` AND `interval < 3` to remain active, preventing starvation of genuinely new cards. Consecutive sessions show different cards via `lastReviewedAt` filtering.
+- **Session composition applies to all standard review modes** — `due`, `all`, and `recent` study modes now use the new session composer (`src/lib/session-composer.ts`); special diagnostic modes (`struggling`, `leeches`) retain legacy sorting for targeted practice.
+- **Default Focus Guard Study Mode changed to `all`** — changed fallback `studyMode` default from `due` to `all` across App Blocker settings (`DEFAULT_CONFIG`), status cards, rules configuration card, and `/app-lock` initialization so users without pending due cards still receive a review session instead of an immediate auto-unlock bypass.
+- **Documentation reorganized** — created `documentation/flashcard-session-composer/` subfolder containing technical documentation, visual diagrams, improvements summary, and deployment checklist for the session composition refactor. Updated `documentation/APP_BLOCKER.md` with PC preview, offline auto-unlock, and default studyMode details.
+
+### Added
+
+- **Focus Guard PC Preview mode** — added direct launcher button in `DebugFab` on `/settings/app-blocker` page allowing developers to preview `/app-lock` with live URL query parameters.
+- **Offline Auto-Unlock policy for App Lock** — when network requests fail due to missing internet connection, `/app-lock` gracefully auto-unlocks and grants access rather than stranding users on an error screen.
+- **Unit test suite for app-blocker-unlock** — added `src/lib/app-blocker-unlock.test.ts` (6 tests) covering native plugin integration, localStorage synchronization, fallback behavior, and storage clearing.
+
+### Fixed
+
+- **App Lock URL parameter requirement bypassed on Web/PC** — on web environments, `/app-lock` now launches a session directly without requiring `?mode=app-blocker`, making PC development and UI testing seamless.
+- **ReviewCard back face TTS speaker positioning** — moved `SpeakerButton` outside the scroll container (`card-back-scroll`) so its absolute positioning anchors to the card face, fixing button visibility and clipping issues on card flip.
+
+### Technical
+
+- Modified files: `src/app/app-lock/page.tsx`, `src/app/(app)/settings/app-blocker/page.tsx`, `src/app/(app)/settings/app-blocker/FocusGuardStatusCard.tsx`, `src/app/(app)/settings/app-blocker/RulesConfigCard.tsx`, `src/app/(app)/review/ReviewCard.tsx`, `src/lib/app-blocker-unlock.test.ts`
+- Test coverage: 290 tests passing across 39 test suites (added `app-blocker-unlock.test.ts` with 6 unit tests). All linting, typechecking, and vitest runs 100% clean.
+- No database schema changes required
+- Fully backward compatible with existing frontend
+
 ## [1.5.1] - 2026-07-27
 
 ### Added

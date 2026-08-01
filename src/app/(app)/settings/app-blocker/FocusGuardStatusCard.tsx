@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Kai from '@/app/Kai';
-import { ShieldWarning, Sliders, X, Minus, Plus } from '@phosphor-icons/react';
+import { ShieldWarning, Sliders, X, Minus, Plus, Question, ArrowsClockwise, CheckCircle, XCircle } from '@phosphor-icons/react';
 import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
 
 interface FocusGuardStatusCardProps {
@@ -16,11 +16,13 @@ interface FocusGuardStatusCardProps {
   studyMode?: BlockerStudyMode;
   practice?: boolean;
   noDueAction?: BlockerNoDueAction;
+  earlyReviewStrategy?: 'practice' | 'proportional';
   hasPermissions: boolean;
   usageStatsGranted?: boolean;
   overlayGranted?: boolean;
   onToggleMonitoring: () => void;
   onRequestPermissions: () => void;
+  onCheckPermissionStatus?: () => void;
   onUpdateFlashcardCount: (count: number) => void;
   onUpdateAppBlockerConfig?: (updates: {
     count?: number;
@@ -31,6 +33,7 @@ interface FocusGuardStatusCardProps {
     studyMode?: BlockerStudyMode;
     practice?: boolean;
     noDueAction?: BlockerNoDueAction;
+    earlyReviewStrategy?: 'practice' | 'proportional';
   }) => void;
 }
 
@@ -50,26 +53,51 @@ export default function FocusGuardStatusCard({
   unlockDurationMinutes = 15,
   reviewType = 'mixed',
   direction = 'mixed',
-  studyMode = 'due',
+  studyMode = 'all',
   practice = false,
   noDueAction = 'autoOpen',
+  earlyReviewStrategy = 'practice',
   hasPermissions,
   usageStatsGranted,
   overlayGranted,
   onToggleMonitoring,
   onRequestPermissions,
+  onCheckPermissionStatus,
   onUpdateFlashcardCount,
   onUpdateAppBlockerConfig,
 }: FocusGuardStatusCardProps) {
   const [showModal, setShowModal] = useState(false);
+  const [isRechecking, setIsRechecking] = useState(false);
 
   function handleCountChange(newCount: number) {
     onUpdateFlashcardCount(newCount);
     onUpdateAppBlockerConfig?.({ count: newCount });
   }
 
-  const overlayMissing = isMonitoring && overlayGranted === false;
-  const usageMissing = isMonitoring && usageStatsGranted === false;
+  async function handleRecheck() {
+    if (!onCheckPermissionStatus) return;
+    setIsRechecking(true);
+    try {
+      await onCheckPermissionStatus();
+    } finally {
+      setIsRechecking(false);
+    }
+  }
+
+  // Auto-recheck when user returns from Android Settings
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible' && !hasPermissions) {
+        onCheckPermissionStatus?.();
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [hasPermissions, onCheckPermissionStatus]);
+
+  const overlayMissing = overlayGranted === false;
+  const usageMissing = usageStatsGranted === false;
+  const anyPermissionMissing = overlayMissing || usageMissing;
 
   return (
     <>
@@ -114,10 +142,10 @@ export default function FocusGuardStatusCard({
             {!hasPermissions && (
               <button
                 onClick={onRequestPermissions}
-                className="text-amber-600 flex items-center gap-0.5 text-[10px] sm:text-[11px] whitespace-nowrap"
+                className="text-amber-600 hover:underline flex items-center gap-0.5 text-[10px] sm:text-[11px] whitespace-nowrap"
               >
                 <ShieldWarning size={12} className="shrink-0" />
-                <span>Permission ⚠️</span>
+                <span>Permissions ⚠️</span>
               </button>
             )}
 
@@ -132,28 +160,57 @@ export default function FocusGuardStatusCard({
         </div>
 
         {/* Permission Diagnostic Banner */}
-        {(overlayMissing || usageMissing) && (
-          <div className="rounded-2xl border-2 border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-amber-800 dark:text-amber-200">
-            <p className="text-[11px] sm:text-xs font-bold leading-snug">
-              {overlayMissing && usageMissing
-                ? '⚠️ Usage Access + Display over other apps are both disabled.'
-                : usageMissing
-                ? '⚠️ Usage Access is disabled.'
-                : '⚠️ Display over other apps is disabled.'}
+        {anyPermissionMissing && (
+          <div className="rounded-2xl border-2 border-rose-500/25 bg-rose-500/8 px-3.5 py-3 space-y-2">
+            <p className="text-xs font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+              <ShieldWarning size={14} className="shrink-0" />
+              Permissions Required
             </p>
-            {overlayMissing && (
-              <p className="mt-1 text-[11px] sm:text-xs opacity-90 leading-relaxed">
-                When you open a blocked app, KaiwaAI will <strong>only show a notification</strong>,{' '}
-                not redirect you instantly. Tap <em>Permission ⚠️</em> above and enable{' '}
-                <strong>Display over other apps</strong> to get instant focus-guard blocking.
-              </p>
-            )}
-            {!overlayMissing && usageMissing && (
-              <p className="mt-1 text-[11px] sm:text-xs opacity-90 leading-relaxed">
-                KaiwaAI cannot tell which app you have open. Tap <em>Permission ⚠️</em> above and
-                enable <strong>Usage Access</strong>.
-              </p>
-            )}
+
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-[11px]">
+                {usageStatsGranted
+                  ? <CheckCircle size={13} weight="fill" className="text-emerald-500 shrink-0" />
+                  : <XCircle size={13} weight="fill" className="text-rose-500 shrink-0" />}
+                <span className={usageStatsGranted ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-foreground font-semibold'}>
+                  Usage Access
+                </span>
+                <span className="text-muted">
+                  {usageStatsGranted ? '— Granted' : '— Detects which app is open'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px]">
+                {overlayGranted
+                  ? <CheckCircle size={13} weight="fill" className="text-emerald-500 shrink-0" />
+                  : <XCircle size={13} weight="fill" className="text-rose-500 shrink-0" />}
+                <span className={overlayGranted ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-foreground font-semibold'}>
+                  Display Over Apps
+                </span>
+                <span className="text-muted">
+                  {overlayGranted ? '— Granted' : '— Shows flashcard overlay on intercept'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-0.5">
+              <button
+                onClick={onRequestPermissions}
+                className="flex-1 py-1.5 rounded-xl bg-rose-500 text-white text-[11px] font-bold transition active:scale-95"
+              >
+                Open Settings
+              </button>
+              {onCheckPermissionStatus && (
+                <button
+                  onClick={handleRecheck}
+                  disabled={isRechecking}
+                  className="flex-1 py-1.5 rounded-xl border border-border bg-card text-foreground text-[11px] font-bold transition active:scale-95 flex items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <ArrowsClockwise size={12} className={isRechecking ? 'animate-spin' : ''} />
+                  Re-check
+                </button>
+              )}
+            </div>
           </div>
         )}
       </section>
@@ -353,29 +410,42 @@ export default function FocusGuardStatusCard({
                 </div>
               </div>
 
-              {/* Practice Toggle + No Due Action */}
+              {/* Practice Mode + Early Review Strategy */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
-                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-2xl border-2 text-xs font-bold transition ${
-                    practice
-                      ? 'border-violet-400 bg-violet-500/10 text-violet-600'
-                      : 'border-border bg-card text-muted hover:text-foreground'
-                  }`}
-                >
-                  <span>Practice Mode</span>
-                  <span
-                    className={`w-9 h-5 rounded-full relative transition ${
-                      practice ? 'bg-violet-500' : 'bg-muted/40'
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                      Practice Mode
+                    </span>
+                    <div className="group relative cursor-pointer text-muted hover:text-foreground">
+                      <Question size={12} weight="bold" />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
+                        Disables database/SRS updates for ALL reviews in the session, even if cards are due.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border-2 text-xs font-bold transition ${
+                      practice
+                        ? 'border-violet-400 bg-violet-500/10 text-violet-600'
+                        : 'border-border bg-card text-muted hover:text-foreground'
                     }`}
                   >
+                    <span>{practice ? 'Active' : 'Disabled'}</span>
                     <span
-                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-                        practice ? 'left-4' : 'left-0.5'
+                      className={`w-9 h-5 rounded-full relative transition shrink-0 ${
+                        practice ? 'bg-violet-500' : 'bg-muted/40'
                       }`}
-                    />
-                  </span>
-                </button>
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                          practice ? 'left-4' : 'left-0.5'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </div>
 
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
@@ -404,6 +474,48 @@ export default function FocusGuardStatusCard({
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Early Review Strategy Section */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                    Early Review Strategy
+                  </span>
+                  <div className="group relative cursor-pointer text-muted hover:text-foreground">
+                    <Question size={12} weight="bold" />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
+                      How SRS behaves when reviewing cards before they are due (e.g. via &apos;Study Any&apos;).
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'practice' })}
+                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
+                      earlyReviewStrategy === 'practice'
+                        ? 'bg-indigo-ai text-white border-indigo-ai'
+                        : 'border-border bg-background text-muted hover:text-foreground'
+                    }`}
+                  >
+                    Skip SRS (Practice)
+                  </button>
+                  <button
+                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'proportional' })}
+                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
+                      earlyReviewStrategy === 'proportional'
+                        ? 'bg-indigo-ai text-white border-indigo-ai'
+                        : 'border-border bg-background text-muted hover:text-foreground'
+                    }`}
+                  >
+                    Proportional (Scale)
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted leading-snug">
+                  {earlyReviewStrategy === 'practice'
+                    ? '🔒 Early reviews act as practice and do not alter existing intervals/SRS schedules.'
+                    : '📈 Intervals are adjusted proportionally based on how early you reviewed the card.'}
+                </p>
               </div>
 
               {(practice || noDueAction === 'studyAny') && (

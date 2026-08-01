@@ -12,12 +12,50 @@ export default function OnboardingClient({}: { email: string }) {
   const [label, setLabel] = useState("");
   const [error, setError] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(true);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [enableServerSync, setEnableServerSync] = useState(true); // Default to enabled for convenience
 
-  // Check if user already has keys (in case they navigate back)
+  // Check if user already has keys or try to sync from server
   useEffect(() => {
+    // If user already has keys locally, skip to chat
     if (hasAnyKey()) {
       router.push("/chat");
+      return;
     }
+
+    // Try to auto-sync keys from server on first login
+    async function tryAutoSync() {
+      try {
+        const res = await fetch("/api/settings/server-key?sync=true");
+        const data = await res.json();
+        
+        if (res.ok && data.keys && data.keys.length > 0) {
+          // Found server keys, sync them to localStorage
+          let addedCount = 0;
+          data.keys.forEach((k: string, idx: number) => {
+            addKey(k, `Synced Key ${idx + 1}`);
+            addedCount++;
+          });
+          
+          if (addedCount > 0) {
+            setSyncMessage(`Found ${addedCount} API key${addedCount > 1 ? 's' : ''} from your account. Syncing...`);
+            // Wait a moment to show the message, then redirect
+            setTimeout(() => {
+              router.push("/chat");
+            }, 1500);
+            return;
+          }
+        }
+      } catch {
+        // Silent fail - just continue to manual setup
+      }
+      
+      // No server keys found, continue with manual setup
+      setIsSyncing(false);
+    }
+
+    tryAutoSync();
   }, [router]);
 
   const validateAndAddKey = async () => {
@@ -58,6 +96,20 @@ export default function OnboardingClient({}: { email: string }) {
       // Key is valid, add it
       addKey(trimmed, label || "Primary Key");
       
+      // If user opted for server sync, enable it
+      if (enableServerSync) {
+        try {
+          await fetch("/api/settings/server-key", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keys: [trimmed] }),
+          });
+          // Silent success - don't block on this
+        } catch {
+          // Silent fail - user can enable later in settings
+        }
+      }
+      
       // Trigger Kai's welcome message (fire and forget - don't block on it)
       fetch("/api/onboarding/welcome", { method: "POST" }).catch(() => {
         // Silently fail - user can still use the app
@@ -80,6 +132,30 @@ export default function OnboardingClient({}: { email: string }) {
       }
     }
   };
+
+  // Show loading state while checking for server keys
+  if (isSyncing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-ai/5 via-background to-mint/5 px-4">
+        <div className="w-full max-w-md text-center">
+          <div className="rounded-3xl border-2 border-border bg-card p-8 shadow-xl">
+            <div className="mb-4 text-6xl">🔄</div>
+            <h2 className="font-display text-2xl font-bold">
+              {syncMessage || "Checking for saved API keys..."}
+            </h2>
+            <p className="mt-3 text-muted">
+              {syncMessage ? "Redirecting you to chat..." : "This will only take a moment"}
+            </p>
+            <div className="mt-6 flex justify-center">
+              <div className="h-2 w-32 overflow-hidden rounded-full bg-border">
+                <div className="h-full w-full animate-pulse bg-indigo-ai" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-ai/5 via-background to-mint/5 px-4">
@@ -275,6 +351,28 @@ export default function OnboardingClient({}: { email: string }) {
                   />
                 </div>
 
+                {/* Server Sync Checkbox */}
+                <div className="rounded-2xl border-2 border-indigo-ai/20 bg-indigo-ai/5 p-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enableServerSync}
+                      onChange={(e) => setEnableServerSync(e.target.checked)}
+                      className="mt-1 h-4 w-4 cursor-pointer accent-indigo-ai"
+                    />
+                    <div className="flex-1 text-sm">
+                      <span className="font-bold text-indigo-ai">
+                        Enable Account Sync (Recommended)
+                      </span>
+                      <p className="mt-1 text-xs text-muted">
+                        Securely save your API key to your account for multi-device sync and 
+                        background features like AI personas and scheduled messages. 
+                        Your key is encrypted (AES-256-GCM) before storage.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
                 {error && (
                   <div className="rounded-2xl border-2 border-sakura/20 bg-sakura/5 p-3 text-sm text-sakura">
                     <strong>⚠️ Error:</strong> {error}
@@ -304,14 +402,6 @@ export default function OnboardingClient({}: { email: string }) {
                   <strong className="text-amber">💡 Tip:</strong> You can add
                   more API keys later in Settings. KaiwaAI will automatically
                   rotate between them if one hits its rate limit.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border-2 border-indigo-ai/20 bg-indigo-ai/5 p-4 text-xs text-muted">
-                <p>
-                  <strong className="text-indigo-ai">🌐 Optional:</strong> After setup, you can enable{" "}
-                  <strong>server-side features</strong> (group AI chats, scheduled messages) in Settings.
-                  This stores an encrypted copy of your key on our server.
                 </p>
               </div>
             </div>

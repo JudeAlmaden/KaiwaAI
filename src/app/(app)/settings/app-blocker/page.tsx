@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { AppBlocker, type AppInfo, type AppBlockerConfig } from '@/plugins/app-blocker';
 import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
@@ -10,6 +11,7 @@ import Kai from '@/app/Kai';
 import FocusGuardStatusCard from './FocusGuardStatusCard';
 import AppManagerCard from './AppManagerCard';
 import SystemPermissionsCard from './SystemPermissionsCard';
+import DebugFab from '@/components/DebugFab';
 
 // Recommended popular apps for quick one-tap blocking
 interface RecommendedApp {
@@ -30,15 +32,16 @@ const RECOMMENDED_APPS: RecommendedApp[] = [
   { appName: 'Netflix', packageName: 'com.netflix.mediaclient', domain: 'netflix.com', category: 'Media' },
 ];
 
-const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction'>> = {
+const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction' | 'earlyReviewStrategy'>> = {
   count: 10,
   blockChance: 100,
   unlockDurationMinutes: 15,
   reviewType: 'vocabulary',
   direction: 'jp-to-en',
-  studyMode: 'due',
+  studyMode: 'all',
   practice: false,
   noDueAction: 'autoOpen',
+  earlyReviewStrategy: 'practice',
 };
 
 export default function AppBlockerSettings() {
@@ -56,15 +59,34 @@ export default function AppBlockerSettings() {
   const [studyMode, setStudyMode] = useState<BlockerStudyMode>(DEFAULT_CONFIG.studyMode);
   const [practice, setPractice] = useState<boolean>(DEFAULT_CONFIG.practice);
   const [noDueAction, setNoDueAction] = useState<BlockerNoDueAction>(DEFAULT_CONFIG.noDueAction);
+  const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>(DEFAULT_CONFIG.earlyReviewStrategy);
   const [loading, setLoading] = useState(true);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [modalFeedback, setModalFeedback] = useState<string | null>(null);
+
+  // Debug mode — available on PC during development or when NEXT_PUBLIC_APP_BLOCKER_DEBUG is true
+  const isAndroid = Capacitor.getPlatform() === 'android';
+  const debugEnabled =
+    process.env.NEXT_PUBLIC_APP_BLOCKER_DEBUG === 'true' ||
+    (process.env.NODE_ENV === 'development' && !isAndroid);
+
+  const [debugMode, setDebugMode] = useState(true);
+  const [debugMonitoring, setDebugMonitoring] = useState(true);
+  const [debugHasPermissions, setDebugHasPermissions] = useState(false);
+  const [debugUsageGranted, setDebugUsageGranted] = useState(false);
+  const [debugOverlayGranted, setDebugOverlayGranted] = useState(false);
+  const [debugBlockedCount, setDebugBlockedCount] = useState(3);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'recommended' | 'all' | 'blocked' | 'unblocked'>('recommended');
 
-  const isAndroid = Capacitor.getPlatform() === 'android';
+  // When debug mode is active, override the real state with debug values
+  const effectiveIsMonitoring = debugEnabled && debugMode ? debugMonitoring : isMonitoring;
+  const effectiveHasPermissions = debugEnabled && debugMode ? debugHasPermissions : hasPermissions;
+  const effectiveUsageGranted = debugEnabled && debugMode ? debugUsageGranted : usageStatsGranted;
+  const effectiveOverlayGranted = debugEnabled && debugMode ? debugOverlayGranted : overlayGranted;
+  const effectiveBlockedCount = debugEnabled && debugMode ? debugBlockedCount : blockedApps.length;
 
   const loadSettings = useCallback(async () => {
     try {
@@ -91,9 +113,10 @@ export default function AppBlockerSettings() {
         setUnlockDurationMinutes(config.unlockDurationMinutes ?? 15);
         setReviewType(config.reviewType ?? 'vocabulary');
         setDirection(config.direction ?? 'jp-to-en');
-        setStudyMode(config.studyMode ?? 'due');
+        setStudyMode(config.studyMode ?? 'all');
         setPractice(config.practice ?? false);
         setNoDueAction(config.noDueAction ?? 'autoOpen');
+        setEarlyReviewStrategy(config.earlyReviewStrategy ?? 'practice');
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -173,6 +196,7 @@ export default function AppBlockerSettings() {
           studyMode,
           practice,
           noDueAction,
+          earlyReviewStrategy,
         });
         await AppBlocker.startMonitoring();
         setIsMonitoring(true);
@@ -218,6 +242,7 @@ export default function AppBlockerSettings() {
     studyMode?: BlockerStudyMode;
     practice?: boolean;
     noDueAction?: BlockerNoDueAction;
+    earlyReviewStrategy?: 'practice' | 'proportional';
   }) => {
     // Apply optimistic UI state
     if (updates.count !== undefined) setFlashcardCount(updates.count);
@@ -228,6 +253,7 @@ export default function AppBlockerSettings() {
     if (updates.studyMode !== undefined) setStudyMode(updates.studyMode);
     if (updates.practice !== undefined) setPractice(updates.practice);
     if (updates.noDueAction !== undefined) setNoDueAction(updates.noDueAction);
+    if (updates.earlyReviewStrategy !== undefined) setEarlyReviewStrategy(updates.earlyReviewStrategy);
 
     try {
       // count has its own legacy setter; mirror in config too
@@ -314,6 +340,9 @@ export default function AppBlockerSettings() {
     });
   }, [allAvailableApps, searchQuery, activeTab, blockedApps]);
 
+  const pathname = usePathname();
+  const isStandalonePage = pathname === '/settings/app-blocker';
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -324,18 +353,21 @@ export default function AppBlockerSettings() {
   }
 
   return (
-    <div className="pb-28 sm:pb-10">
-      <PageHeader
-        title="App Blocker"
-        jp="アプリブロッカー"
-        subtitle="Intercept distracting apps while studying Japanese."
-      />
+    <div className={isStandalonePage ? "pb-28 sm:pb-10" : ""}>
+      {isStandalonePage && (
+        <PageHeader
+          title="App Blocker"
+          jp="アプリブロッカー"
+          subtitle="Intercept distracting apps while studying Japanese."
+        />
+      )}
 
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-4 sm:px-8">
+      <div className={isStandalonePage ? "mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-4 sm:px-8" : "flex w-full flex-col gap-4"}>
+
         {/* Status Card + Rules Summary & Edit Trigger */}
         <FocusGuardStatusCard
-          isMonitoring={isMonitoring}
-          blockedCount={blockedApps.length}
+          isMonitoring={effectiveIsMonitoring}
+          blockedCount={effectiveBlockedCount}
           flashcardCount={flashcardCount}
           blockChance={blockChance}
           unlockDurationMinutes={unlockDurationMinutes}
@@ -344,11 +376,13 @@ export default function AppBlockerSettings() {
           studyMode={studyMode}
           practice={practice}
           noDueAction={noDueAction}
-          hasPermissions={hasPermissions}
-          usageStatsGranted={usageStatsGranted}
-          overlayGranted={overlayGranted}
-          onToggleMonitoring={toggleMonitoring}
+          earlyReviewStrategy={earlyReviewStrategy}
+          hasPermissions={effectiveHasPermissions}
+          usageStatsGranted={effectiveUsageGranted}
+          overlayGranted={effectiveOverlayGranted}
+          onToggleMonitoring={debugEnabled && debugMode ? () => setDebugMonitoring(v => !v) : toggleMonitoring}
           onRequestPermissions={requestPermissions}
+          onCheckPermissionStatus={checkPermissionStatus}
           onUpdateFlashcardCount={updateFlashcardCount}
           onUpdateAppBlockerConfig={handleUpdateConfig}
         />
@@ -379,6 +413,112 @@ export default function AppBlockerSettings() {
           onCheckPermissionStatus={checkPermissionStatus}
         />
       </div>
+
+      {/* Floating Debugger Button & Modal */}
+      <DebugFab
+        title="App Blocker Debugger"
+        enabled={debugEnabled}
+        active={debugMode}
+        onToggleActive={setDebugMode}
+      >
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Monitoring</span>
+            <div className="flex gap-1">
+              {([true, false] as const).map((v) => (
+                <button
+                  key={String(v)}
+                  onClick={() => setDebugMonitoring(v)}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
+                    debugMonitoring === v ? 'bg-indigo-ai text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                  }`}
+                >
+                  {v ? 'Active' : 'Paused'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Blocked Count</span>
+            <div className="flex gap-1">
+              {[0, 3, 8].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setDebugBlockedCount(n)}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
+                    debugBlockedCount === n ? 'bg-amber-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Usage Access</span>
+            <div className="flex gap-1">
+              {([true, false] as const).map((v) => (
+                <button
+                  key={String(v)}
+                  onClick={() => {
+                    setDebugUsageGranted(v);
+                    setDebugHasPermissions(v && debugOverlayGranted);
+                  }}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
+                    debugUsageGranted === v ? 'bg-emerald-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                  }`}
+                >
+                  {v ? '✓ Granted' : '✗ Needed'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Display Over Apps</span>
+            <div className="flex gap-1">
+              {([true, false] as const).map((v) => (
+                <button
+                  key={String(v)}
+                  onClick={() => {
+                    setDebugOverlayGranted(v);
+                    setDebugHasPermissions(debugUsageGranted && v);
+                  }}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
+                    debugOverlayGranted === v ? 'bg-emerald-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                  }`}
+                >
+                  {v ? '✓ Granted' : '✗ Needed'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1 col-span-2 pt-2 border-t border-border">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">App Lock Preview</span>
+            <button
+              onClick={() => {
+                const params = new URLSearchParams({
+                  mode: 'app-blocker',
+                  count: String(flashcardCount),
+                  reviewType,
+                  direction,
+                  studyMode,
+                  practice: practice ? '1' : '0',
+                  noDueAction,
+                  earlyReviewStrategy,
+                });
+                window.open(`/app-lock?${params.toString()}`, '_blank');
+              }}
+              className="w-full py-2 rounded-xl text-xs font-bold bg-indigo-ai text-white hover:bg-indigo-ai/90 transition"
+            >
+              Open App Lock Page →
+            </button>
+            <p className="text-[10px] text-muted text-center">Opens with current config settings</p>
+          </div>
+        </div>
+      </DebugFab>
     </div>
   );
 }

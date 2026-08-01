@@ -26,15 +26,20 @@ describe("/api/review/mixed GET", () => {
   it("fetches and shuffles vocabulary and kanji cards", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
     
+    const now = new Date();
     const mockVocab = [
       {
         id: "v1",
-        word: "猫",
+        word: { dictionary: "猫", reading: "ねこ", meanings: '["cat"]', partOfSpeech: "noun" },
         reading: "ねこ",
-        romaji: "neko",
         meaning: "cat",
         partOfSpeech: "noun",
         status: "learning",
+        repetitions: 0,
+        easeFactor: 2.5,
+        interval: 0,
+        nextReview: now,
+        createdAt: now,
       },
     ];
     
@@ -49,6 +54,11 @@ describe("/api/review/mixed GET", () => {
         },
         mnemonic: "A cat with claws",
         status: "learning",
+        repetitions: 0,
+        easeFactor: 2.5,
+        interval: 0,
+        nextReview: now,
+        createdAt: now,
       },
     ];
 
@@ -65,7 +75,7 @@ describe("/api/review/mixed GET", () => {
     expect(json.cards.some((c: { type: string }) => c.type === "kanji")).toBe(true);
   });
 
-  it("prioritizes oldest due cards before SRS timing", async () => {
+  it("uses session composition ordering for due cards", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
     vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
@@ -74,12 +84,12 @@ describe("/api/review/mixed GET", () => {
 
     expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
       })
     );
     expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
       })
     );
   });

@@ -44,8 +44,18 @@ describe("Review API - GET", () => {
 
   it("should fetch due cards by default", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    const now = new Date();
     vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([
-      { id: "1", word: "猫", userId: "user-123" } as never,
+      {
+        id: "1",
+        word: { dictionary: "猫", reading: "ねこ", meanings: '["cat"]', partOfSpeech: "noun" },
+        userId: "user-123",
+        repetitions: 0,
+        easeFactor: 2.5,
+        interval: 0,
+        nextReview: now,
+        createdAt: now,
+      } as never,
     ]);
 
     const req = new Request("http://localhost/api/flashcards/review");
@@ -71,7 +81,7 @@ describe("Review API - GET", () => {
 
     expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
       })
     );
   });
@@ -88,7 +98,8 @@ describe("Review API - GET", () => {
         where: {
           userId: "user-123",
         },
-        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
+        take: 200,
       })
     );
   });
@@ -106,7 +117,8 @@ describe("Review API - GET", () => {
           userId: "user-123",
           createdAt: { gte: expect.any(Date) },
         }),
-        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
+        take: 200,
       })
     );
   });
@@ -286,7 +298,7 @@ describe("Review API - GET", () => {
 
     expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        take: 10,
+        take: 40, // limit * 4 for session composition
       })
     );
   });
@@ -314,7 +326,7 @@ describe("Review API - GET", () => {
 
     expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        take: 1,
+        take: 4, // 1 * 4 (minimum limit is 1)
       })
     );
   });
@@ -328,7 +340,7 @@ describe("Review API - GET", () => {
 
     expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        take: 50,
+        take: 200, // 50 * 4 (default limit is 50, capped at 200)
       })
     );
   });

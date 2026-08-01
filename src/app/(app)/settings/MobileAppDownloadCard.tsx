@@ -48,12 +48,12 @@ export default function MobileAppDownloadCard() {
             href={primaryHint}
             target="_blank"
             rel="noopener noreferrer"
-            className="group inline-flex h-13 flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-ai px-5 text-sm font-bold text-white shadow-sm transition-all hover:bg-indigo-ai/90 active:scale-[0.98]"
+            className="group inline-flex min-h-[56px] flex-1 items-center justify-center gap-2.5 rounded-2xl bg-indigo-ai px-6 text-base font-bold text-white shadow-sm transition-all hover:bg-indigo-ai/90 active:scale-[0.98]"
           >
-            <DownloadSimple size={18} weight="bold" />
+            <DownloadSimple size={20} weight="bold" />
             {primaryLabel}
             <ArrowSquareOut
-              size={16}
+              size={18}
               weight="bold"
               className="opacity-70 transition-opacity group-hover:opacity-100"
             />
@@ -62,41 +62,74 @@ export default function MobileAppDownloadCard() {
             href={GITHUB_DOWNLOAD_URLS.all}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-13 flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-border bg-card px-5 text-sm font-bold text-foreground transition-all hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
+            className="inline-flex min-h-[56px] flex-1 items-center justify-center gap-2.5 rounded-2xl border-2 border-border bg-card px-6 text-base font-bold text-foreground transition-all hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
           >
-            <GithubLogo size={18} weight="bold" />
+            <GithubLogo size={20} weight="bold" />
             All Releases
           </a>
         </div>
 
-        <div className="mt-5 space-y-2 rounded-2xl bg-muted/30 p-4 text-xs text-muted">
-          <p className="font-semibold text-foreground/80">
-            {downloaded ? "Update notes" : "Installation notes"}
-          </p>
-          <ul className="list-disc space-y-1 pl-5">
+        {/* Installation / Update Guide */}
+        <div className="mt-5 rounded-2xl border border-border/80 bg-background/60 p-4 sm:p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold text-xs shrink-0">
+              ℹ
+            </div>
+            <h3 className="font-display text-sm font-bold text-foreground">
+              {downloaded ? "How to Update" : "How to Install"}
+            </h3>
+          </div>
+
+          <div className="space-y-2.5 pt-1">
             {downloaded ? (
-              <>
-                <li>
-                  Installed version: <strong className="font-semibold">{installed.version}</strong>
-                  {installed.build ? <> (build {installed.build})</> : null}
-                </li>
-                <li>
-                  The in-app banner also prompts you whenever a new release is published on <code className="rounded bg-card px-1 py-0.5 text-[11px]">main</code>.
-                </li>
-                <li>
-                  Download the new <code className="rounded bg-card px-1 py-0.5 text-[11px]">.apk</code> and tap it to upgrade in place.
-                  Your local settings and account stay intact.
-                </li>
-              </>
+              <div className="space-y-2 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-indigo-ai/10 text-indigo-ai font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <span className="text-foreground/90">
+                    Installed version: <strong className="font-semibold text-foreground">{installed.version}</strong>
+                    {installed.build ? <> (build {installed.build})</> : null}
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-indigo-ai/10 text-indigo-ai font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <span className="text-foreground/90 leading-snug">
+                    Download the latest <code className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-foreground font-semibold">.apk</code> and tap to upgrade. Your local settings and account remain intact.
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-indigo-ai/10 text-indigo-ai font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <span className="text-foreground/90 leading-snug">
+                    In-app banner also notifies you whenever new updates are released on <code className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-foreground font-semibold">main</code>.
+                  </span>
+                </div>
+              </div>
             ) : (
-              <>
-                <li>Tap the downloaded <code className="rounded bg-card px-1 py-0.5 text-[11px]">.apk</code> file to install.</li>
-                <li>You may need to allow &ldquo;Install from this source&rdquo; in Settings.</li>
-                <li>On newer Android versions, you can also install via ADB or your file manager.</li>
-                <li>Use the same account you use here to log in on the app.</li>
-              </>
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-indigo-ai/10 text-indigo-ai font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <span className="text-foreground/90 leading-snug">
+                    Tap <strong className="font-semibold text-foreground">Download APK</strong> above to get the signed <code className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-foreground font-semibold">.apk</code> file.
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-indigo-ai/10 text-indigo-ai font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <span className="text-foreground/90 leading-snug">
+                    Tap the downloaded file to install. Allow <strong className="font-semibold text-foreground">&ldquo;Install from this source&rdquo;</strong> in Android Settings if prompted.
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-indigo-ai/10 text-indigo-ai font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <span className="text-foreground/90 leading-snug">
+                    Log in with your existing KaiwaAI account to sync your flashcards and study progress.
+                  </span>
+                </div>
+              </div>
             )}
-          </ul>
+          </div>
         </div>
       </section>
     </div>

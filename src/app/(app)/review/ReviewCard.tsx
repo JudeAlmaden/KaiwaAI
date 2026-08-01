@@ -306,7 +306,21 @@ export default function ReviewCard({
           </div>
 
           {/* ── BACK ──────────────────────────────────────────────────── */}
-          <div className="card-back">
+          <div className="card-back" style={{ position: 'relative' }}>
+            {/* Speaker button sits outside the scroll container so its
+                absolute positioning anchors to the card face, not the scroll div */}
+            {isVocab ? (
+              <SpeakerButton text={card.word || ""} />
+            ) : (
+              <SpeakerButton
+                text={
+                  (card.readingsKun && card.readingsKun[0]) ||
+                  (card.readingsOn && card.readingsOn[0]) ||
+                  card.character ||
+                  ""
+                }
+              />
+            )}
             <div
               className="card-back-scroll"
               onClick={(e) => {
@@ -328,7 +342,6 @@ export default function ReviewCard({
                   // Task 1: Vocab JP→EN back = LARGE JP word, base/conjugation,
                   // then hiragana reading, NO romaji, then English meaning, POS, conjugation
                   <div className="flex flex-col items-center w-full text-center gap-1.5">
-                    <SpeakerButton text={card.word || ""} />
                     <span className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
                       {card.word && card.reading ? (
                         <Furigana word={card.word} reading={card.reading} className="text-4xl" size="normal" />
@@ -363,7 +376,6 @@ export default function ReviewCard({
                 ) : (
                   // Task 2: Vocab EN→JP back = JP word w/ furigana + speaker + conjugation
                   <div className="flex flex-col items-center w-full text-center gap-1.5">
-                    <SpeakerButton text={card.word || ""} />
                     <span className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
                       {card.word && card.reading ? (
                         <Furigana word={card.word} reading={card.reading} className="text-4xl" size="normal" />
@@ -392,14 +404,6 @@ export default function ReviewCard({
                 // Task 3: Kanji back — keep existing (readings + meanings + radicals + mnemonic)
                 isJpToEn ? (
                   <div className="flex flex-col items-center w-full text-center gap-1.5">
-                    <SpeakerButton
-                      text={
-                        (card.readingsKun && card.readingsKun[0]) ||
-                        (card.readingsOn && card.readingsOn[0]) ||
-                        card.character ||
-                        ""
-                      }
-                    />
                     {card.readingsOn && card.readingsOn.length > 0 && (
                       <p className="font-jp text-2xl font-bold text-indigo-ai">
                         {card.readingsOn.join(", ")}
@@ -455,14 +459,6 @@ export default function ReviewCard({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center w-full text-center gap-1.5">
-                    <SpeakerButton
-                      text={
-                        (card.readingsKun && card.readingsKun[0]) ||
-                        (card.readingsOn && card.readingsOn[0]) ||
-                        card.character ||
-                        ""
-                      }
-                    />
                     <p className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
                       {card.character}
                     </p>

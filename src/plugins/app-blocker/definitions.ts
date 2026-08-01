@@ -9,6 +9,8 @@ export type BlockerNoDueAction =
   | 'autoOpen'    // Nothing due — just unlock and launch the blocked app
   | 'studyAny';   // Fallback to studyMode="all" (use any available cards)
 
+export type BlockerEarlyReviewStrategy = 'practice' | 'proportional';
+
 export interface AppBlockerConfig {
   count: number; // Flashcard count requirement (e.g. 10)
   blockChance: number; // Interception probability percentage (1-100, default 100)
@@ -18,6 +20,7 @@ export interface AppBlockerConfig {
   studyMode: BlockerStudyMode;
   practice: boolean; // If true, don't update SRS / learning status
   noDueAction: BlockerNoDueAction;
+  earlyReviewStrategy?: BlockerEarlyReviewStrategy;
 }
 
 export interface AppBlockerPlugin {
