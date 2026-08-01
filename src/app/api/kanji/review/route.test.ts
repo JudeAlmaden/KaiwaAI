@@ -85,7 +85,7 @@ describe("Kanji Review API - GET", () => {
     expect(data.cards[0].meanings).toEqual(["cat"]);
   });
 
-  it("should prioritize oldest due kanji before SRS timing", async () => {
+  it("should fetch kanji with session composition ordering", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
@@ -93,12 +93,12 @@ describe("Kanji Review API - GET", () => {
 
     expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
       })
     );
   });
 
-  it("should handle all study modes", async () => {
+  it("should handle all study modes with session composition", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
@@ -108,7 +108,7 @@ describe("Kanji Review API - GET", () => {
     expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId: "user-123" },
-        orderBy: [{ createdAt: "asc" }, { nextReview: "asc" }],
+        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
       })
     );
   });
@@ -178,7 +178,7 @@ describe("Kanji Review API - GET", () => {
 
     expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        take: 10,
+        take: 40, // limit * 4 for session composition
       })
     );
   });

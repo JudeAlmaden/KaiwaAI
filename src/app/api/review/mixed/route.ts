@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { composeSession } from "@/lib/session-composer";
 
 // Fetch mixed cards (vocabulary + kanji) for review
 export async function GET(req: Request) {
@@ -47,36 +48,78 @@ export async function GET(req: Request) {
     ];
   }
 
-  // Determine sort order.
-  // For review queues, oldest items are surfaced first and SRS timing is used as the next tie-breaker.
-  const orderBy =
-    studyMode === "struggling"
-      ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
-      : studyMode === "leeches"
-        ? [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }]
-        : [{ createdAt: "asc" as const }, { nextReview: "asc" as const }];
+  // Use session composition for standard review modes
+  const useSessionComposition = studyMode === "due" || studyMode === "all" || studyMode === "recent";
 
-  // Fetch vocabulary cards
-  const vocabCards = await prisma.userFlashcard.findMany({
-    where: vocabWhere,
-    include: {
-      word: true,
-      wordForm: true,
-      phrase: true,
-    },
-    orderBy,
-    take: Math.ceil(limit / 2), // Aim for roughly 50/50 split
-  });
+  let vocabCards, userKanji;
 
-  // Fetch kanji cards
-  const userKanji = await prisma.userKanji.findMany({
-    where: kanjiWhere,
-    include: {
-      kanji: true,
-    },
-    orderBy,
-    take: Math.ceil(limit / 2), // Aim for roughly 50/50 split
-  });
+  if (useSessionComposition) {
+    // Fetch larger pools with deterministic ordering
+    const fetchLimit = Math.ceil(limit * 2); // Each type gets 2x for pool composition
+    
+    const allVocab = await prisma.userFlashcard.findMany({
+      where: vocabWhere,
+      include: {
+        word: true,
+        wordForm: true,
+        phrase: true,
+      },
+      orderBy: [
+        { easeFactor: "asc" },
+        { repetitions: "asc" },
+        { createdAt: "asc" },
+      ],
+      take: fetchLimit,
+    });
+
+    const allKanji = await prisma.userKanji.findMany({
+      where: kanjiWhere,
+      include: {
+        kanji: true,
+      },
+      orderBy: [
+        { easeFactor: "asc" },
+        { repetitions: "asc" },
+        { createdAt: "asc" },
+      ],
+      take: fetchLimit,
+    });
+
+    // Compose sessions for each type (split limit roughly 50/50)
+    const vocabSession = composeSession(allVocab, Math.ceil(limit / 2));
+    const kanjiSession = composeSession(allKanji, Math.ceil(limit / 2));
+
+    vocabCards = vocabSession.session;
+    userKanji = kanjiSession.session;
+  } else {
+    // Legacy behavior for struggling/leeches modes
+    const orderBy =
+      studyMode === "struggling"
+        ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
+        : studyMode === "leeches"
+          ? [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }]
+          : [{ createdAt: "asc" as const }, { nextReview: "asc" as const }];
+
+    vocabCards = await prisma.userFlashcard.findMany({
+      where: vocabWhere,
+      include: {
+        word: true,
+        wordForm: true,
+        phrase: true,
+      },
+      orderBy,
+      take: Math.ceil(limit / 2),
+    });
+
+    userKanji = await prisma.userKanji.findMany({
+      where: kanjiWhere,
+      include: {
+        kanji: true,
+      },
+      orderBy,
+      take: Math.ceil(limit / 2),
+    });
+  }
 
   // Transform vocabulary cards
   const vocabTransformed = vocabCards.map((card) => {

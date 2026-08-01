@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { applyReview, type ReviewGrade } from "@/lib/srs";
+import { composeSession } from "@/lib/session-composer";
 
 import { FlashcardStatus, PartOfSpeech, Prisma } from "@/generated/prisma/client";
 
@@ -76,25 +77,53 @@ export async function GET(req: Request) {
     }
   }
 
-  // Determine sort order based on study mode.
-  // For review queues, oldest items are surfaced first and SRS timing is used as the next tie-breaker.
-  const orderBy =
-    studyMode === "struggling"
-      ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
-      : studyMode === "leeches"
-        ? [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }]
-        : [{ createdAt: "asc" as const }, { nextReview: "asc" as const }];
+  // Use session composition for standard review modes
+  // Keep legacy sorting for special diagnostic modes
+  const useSessionComposition = studyMode === "due" || studyMode === "all" || studyMode === "recent";
 
-  const cards = await prisma.userFlashcard.findMany({
-    where,
-    include: {
-      word: true,
-      wordForm: true,
-      phrase: true,
-    },
-    orderBy,
-    take: limit,
-  });
+  let cards;
+
+  if (useSessionComposition) {
+    // Fetch larger pool for session composition (4x to ensure enough cards for both pools)
+    const fetchLimit = Math.min(limit * 4, 200);
+    
+    // Fetch with deterministic ordering for active pool prioritization
+    const allCards = await prisma.userFlashcard.findMany({
+      where,
+      include: {
+        word: true,
+        wordForm: true,
+        phrase: true,
+      },
+      orderBy: [
+        { easeFactor: "asc" },
+        { repetitions: "asc" },
+        { createdAt: "asc" },
+      ],
+      take: fetchLimit,
+    });
+
+    // Compose session: 40% active (focused learning), 60% maintenance (retention)
+    const { session } = composeSession(allCards, limit);
+    cards = session;
+  } else {
+    // Legacy behavior for struggling/leeches modes
+    const orderBy =
+      studyMode === "struggling"
+        ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
+        : [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }];
+
+    cards = await prisma.userFlashcard.findMany({
+      where,
+      include: {
+        word: true,
+        wordForm: true,
+        phrase: true,
+      },
+      orderBy,
+      take: limit,
+    });
+  }
 
   // Format cards for compatibility with existing frontend
   const formattedCards = cards.map((card) => {

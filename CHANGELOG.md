@@ -2,6 +2,32 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.5.3] - 2026-08-01
+
+### Changed
+
+- **Flashcard review algorithm refactored to session-composition system** — replaced simple age-based sorting with intelligent two-pool architecture: Active Pool (40%, new cards + weak short-interval cards) and Maintenance Pool (60%, due cards with 1-hour recency filter). New cards now get highest priority; old weak cards must meet both `easeFactor < 2.2` AND `interval < 3` to remain active, preventing starvation of genuinely new cards. Consecutive sessions show different cards via `lastReviewedAt` filtering.
+- **Session composition applies to all standard review modes** — `due`, `all`, and `recent` study modes now use the new session composer (`src/lib/session-composer.ts`); special diagnostic modes (`struggling`, `leeches`) retain legacy sorting for targeted practice.
+- **Documentation reorganized** — created `documentation/flashcard-session-composer/` subfolder containing technical documentation, visual diagrams, improvements summary, and deployment checklist for the session composition refactor.
+
+### Added
+
+- **Session composition logic** — new `composeSession()` function in `src/lib/session-composer.ts` with 10 comprehensive unit tests covering pool splitting, ratio calculation, recency filtering, and edge cases.
+- **Recency filtering for maintenance pool** — cards reviewed within the last hour are excluded from maintenance pool to prevent immediate repetition across consecutive sessions.
+- **New card priority logic** — active pool now prioritizes all new cards (`repetitions === 0`) first, then includes weak cards only if they meet both low ease factor AND short interval criteria.
+
+### Fixed
+
+- **Old cards no longer starve new cards** — changed active pool criteria from OR logic to prioritized logic, ensuring new cards always get first chance at active slots before old struggling cards.
+- **Consecutive sessions no longer show same cards** — maintenance pool now filters out recently reviewed cards (within 1 hour), providing better variety and reducing repetition fatigue.
+
+### Technical
+
+- Modified files: `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/review/mixed/route.ts`
+- Test coverage: 67 tests passing (10 new session-composer tests, 8 updated integration tests)
+- No database schema changes required
+- Fully backward compatible with existing frontend
+
 ## [1.5.1] - 2026-07-27
 
 ### Added

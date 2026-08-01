@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { applyReview, type ReviewGrade } from "@/lib/srs";
+import { composeSession } from "@/lib/session-composer";
 
 // Fetch kanji for review with study modes
 export async function GET(req: Request) {
@@ -39,21 +40,47 @@ export async function GET(req: Request) {
     ];
   }
 
-  const orderBy =
-    studyMode === "struggling"
-      ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
-      : studyMode === "leeches"
-        ? [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }]
-        : [{ createdAt: "asc" as const }, { nextReview: "asc" as const }];
+  // Use session composition for standard review modes
+  const useSessionComposition = studyMode === "due" || studyMode === "all" || studyMode === "recent";
 
-  const userKanji = await prisma.userKanji.findMany({
-    where,
-    include: {
-      kanji: true,
-    },
-    orderBy,
-    take: limit,
-  });
+  let userKanji;
+
+  if (useSessionComposition) {
+    // Fetch larger pool with deterministic ordering
+    const fetchLimit = Math.min(limit * 4, 200);
+    
+    const allKanji = await prisma.userKanji.findMany({
+      where,
+      include: {
+        kanji: true,
+      },
+      orderBy: [
+        { easeFactor: "asc" },
+        { repetitions: "asc" },
+        { createdAt: "asc" },
+      ],
+      take: fetchLimit,
+    });
+
+    // Compose session: 40% active, 60% maintenance
+    const { session } = composeSession(allKanji, limit);
+    userKanji = session;
+  } else {
+    // Legacy behavior for struggling/leeches modes
+    const orderBy =
+      studyMode === "struggling"
+        ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
+        : [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }];
+
+    userKanji = await prisma.userKanji.findMany({
+      where,
+      include: {
+        kanji: true,
+      },
+      orderBy,
+      take: limit,
+    });
+  }
 
   // Transform to card format
   const cards = userKanji.map((uk) => ({
