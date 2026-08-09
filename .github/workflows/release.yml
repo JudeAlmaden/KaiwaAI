@@ -217,10 +217,11 @@ jobs:
 
       - name: Build signed release APK
         if: steps.version_check.outputs.skip != 'true'
-        run: chmod +x gradlew && ./gradlew assembleRelease
+        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon --max-workers=2
         working-directory: android
         env:
           KEYSTORE_PATH: kaiwaai-release.jks
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
 
       - name: Extract changelog for this version
         if: steps.version_check.outputs.skip != 'true'
