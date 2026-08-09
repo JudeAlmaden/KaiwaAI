@@ -23,6 +23,7 @@ android {
     }
     kotlinOptions {
         jvmTarget = '21'
+        freeCompilerArgs = ['-Xskip-metadata-version-check']
     }
     signingConfigs {
         release {
