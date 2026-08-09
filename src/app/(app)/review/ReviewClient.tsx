@@ -5,7 +5,6 @@ import Link from "next/link";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
 import { PopButton } from "../../PopButton";
-import { scheduleReviewNotifications } from "@/lib/review-notifications";
 import Petals from "../../Petals";
 import QuestGallery from "./QuestGallery";
 import { useAppBlockerCompletion } from "@/hooks/useAppBlockerCompletion";
@@ -426,20 +425,6 @@ export default function ReviewClient() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, flipped, grade]);
-
-  // Reschedule notifications after completing review
-  useEffect(() => {
-    if (phase !== "done") return;
-    // Fetch updated due count and reschedule notifications
-    fetch("/api/stats")
-      .then((res) => res.json())
-      .then((data) => {
-        void scheduleReviewNotifications(data.dueCount || 0);
-      })
-      .catch(() => {
-        // Silently fail - not critical
-      });
-  }, [phase]);
 
   // ── SETUP ──────────────────────────────────────────────────────────────
   if (phase === "setup") {

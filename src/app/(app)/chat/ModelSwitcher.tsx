@@ -33,9 +33,10 @@ export default function ModelSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+        className="flex items-center gap-1 rounded-full border-2 border-border bg-card px-2.5 py-1 text-xs font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai sm:px-3 sm:py-1.5"
       >
-        {current?.label ?? "Model"}
+        <span className="hidden sm:inline">{current?.label ?? "Model"}</span>
+        <span className="inline text-[11px] sm:hidden">{current?.label ? current.label.replace("Gemini ", "") : "Model"}</span>
         <span className="text-[10px]">▾</span>
       </button>
 

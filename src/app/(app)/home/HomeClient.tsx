@@ -52,12 +52,12 @@ export default function HomeClient() {
     setProverbIndex(Math.floor(Math.random() * PROVERBS.length));
 
     fetch("/api/activity", { method: "POST" })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         fetch("/api/stats")
           .then((r) => r.json())
           .then(setStats)
-          .catch(() => {});
+          .catch(() => { });
       });
   }, []);
 
@@ -75,7 +75,7 @@ export default function HomeClient() {
       <Petals />
 
       <div className="mx-auto w-full max-w-2xl px-4 py-5 sm:px-6 space-y-4 sm:space-y-5">
-        
+
         {/* ── 1. APPLE HEADER ── */}
         <div className="flex items-center justify-between gap-3 px-1">
           <div className="flex items-center gap-3.5 min-w-0">
@@ -109,10 +109,6 @@ export default function HomeClient() {
                 <p className="text-xs text-muted font-medium">Practice Japanese in real-time</p>
               </div>
             </div>
-
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-ai/10 text-indigo-ai uppercase tracking-wider">
-              AI Voice &amp; Text
-            </span>
           </div>
 
           <div className="p-3 rounded-2xl bg-muted/20 text-xs font-medium text-foreground flex items-center gap-2.5">
@@ -130,7 +126,7 @@ export default function HomeClient() {
 
         {/* ── 3. SECONDARY ACTIONS GRID ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          
+
           {/* Review Quests Card */}
           <div className="rounded-3xl border border-border/80 bg-card/90 p-5 shadow-xs flex flex-col justify-between space-y-3 backdrop-blur-xs">
             <div className="space-y-2">
@@ -139,9 +135,8 @@ export default function HomeClient() {
                   <Cards size={20} className="text-indigo-ai" />
                   <h3 className="font-display text-sm font-bold text-foreground">Review Quests</h3>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
-                  (stats?.dueNow ?? 0) > 0 ? 'bg-indigo-ai text-white' : 'bg-emerald-500/15 text-emerald-600'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${(stats?.dueNow ?? 0) > 0 ? 'bg-indigo-ai text-white' : 'bg-emerald-500/15 text-emerald-600'
+                  }`}>
                   {(stats?.dueNow ?? 0) > 0 ? (
                     `${stats?.dueNow} Due`
                   ) : (

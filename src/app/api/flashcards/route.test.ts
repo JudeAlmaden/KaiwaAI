@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const userFlashcardFindUnique = vi.fn();
+const userFlashcardFindFirst = vi.fn();
 const userFlashcardCreate = vi.fn();
 const userFlashcardCreateMany = vi.fn();
 const wordFindUnique = vi.fn();
@@ -15,6 +16,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     userFlashcard: {
       findUnique: (...a: unknown[]) => userFlashcardFindUnique(...a),
+      findFirst: (...a: unknown[]) => userFlashcardFindFirst(...a),
       create: (...a: unknown[]) => userFlashcardCreate(...a),
       createMany: (...a: unknown[]) => userFlashcardCreateMany(...a),
     },
@@ -74,6 +76,7 @@ function req(body: unknown) {
 describe("POST /api/flashcards", () => {
   beforeEach(() => {
     userFlashcardFindUnique.mockReset();
+    userFlashcardFindFirst.mockReset();
     userFlashcardCreate.mockReset();
     userFlashcardCreateMany.mockReset();
     wordFindUnique.mockReset();
@@ -85,6 +88,7 @@ describe("POST /api/flashcards", () => {
     getCurrentUser.mockReset();
     getCurrentUser.mockResolvedValue({ id: "u1" });
     userFlashcardFindUnique.mockResolvedValue(null);
+    userFlashcardFindFirst.mockResolvedValue(null);
     wordFindUnique.mockResolvedValue(mockWord);
     wordFormFindFirst.mockResolvedValue(null);
     userFlashcardCreate.mockImplementation(({ data }) => Promise.resolve({ id: "c1", ...data }));
@@ -132,7 +136,8 @@ describe("POST /api/flashcards", () => {
   });
 
   it("reports when the word already existed", async () => {
-    userFlashcardFindUnique.mockResolvedValue({ id: "c1", userId: "u1", wordId: 123 });
+    // token has no wordFormId so the route calls findFirst, not findUnique
+    userFlashcardFindFirst.mockResolvedValue({ id: "c1", userId: "u1", wordId: 123 });
     const res = await POST(req({ token }));
     const data = await res.json();
     expect(data.alreadyExisted).toBe(true);

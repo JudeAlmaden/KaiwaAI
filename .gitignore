@@ -51,6 +51,8 @@ next-env.d.ts
 
 # AI assistant artifacts
 CLAUDE.md
+documentation/RECENT_CHANGES.md
+documentation/LIVE_UPDATES_GUIDE.md
 
 # Keystore files
 *.jks

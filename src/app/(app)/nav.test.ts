@@ -12,9 +12,7 @@ describe("app nav", () => {
       "/home",
       "/chat",
       "/review",
-      "/vocab",
-      "/kanji",
-      "/memory",
+      "/study",
       "/settings",
     ]);
   });
@@ -28,11 +26,11 @@ describe("app nav", () => {
 
   it("marks the exact route active", () => {
     expect(isActive("/chat", "/chat")).toBe(true);
-    expect(isActive("/vocab", "/chat")).toBe(false);
+    expect(isActive("/study", "/chat")).toBe(false);
   });
 
   it("marks nested routes active for their section", () => {
-    expect(isActive("/vocab/verbs", "/vocab")).toBe(true);
+    expect(isActive("/study", "/study")).toBe(true);
     expect(isActive("/review/session/3", "/review")).toBe(true);
   });
 

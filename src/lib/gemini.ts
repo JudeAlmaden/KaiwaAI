@@ -62,7 +62,7 @@ Respond ONLY with valid JSON matching this schema:
   "english": "<English gloss of any Japanese in your reply; empty string if already fully English>",
   "tokens": [{ "surface": "<as written>", "reading": "<kana, or surface if not Japanese>", "romaji": "<romaji, or surface if not Japanese>", "meaning": "<English meaning, or surface if not Japanese>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|phrase|other", "dictForm": "<dictionary form>", "words": [<only for pos=phrase: array of the SAME token structure for each component word>] }],
   "newWords": ["<dictForm of any NEW Japanese words you introduced>"],
-  "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn worth remembering long-term — e.g. 'Has a cat named Pochi', 'Studying for JLPT N4'. Stable facts only, NOT small talk. Empty array if none. Short third-person notes.>"]
+  "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn worth remembering long-term — e.g. 'Has a cat named Pochi', 'Birthday is March 16, 2004', 'Is 20 years old'. Stable facts only, NOT small talk. Empty array if none. Short third-person notes. CRITICAL REQUIREMENT: MUST BE WRITTEN IN CLEAR ENGLISH ONLY. NEVER USE JAPANESE KANA/KANJI OR MIXED JAPANESE SCRIPT IN MEMORY SUGGESTIONS.>"]
 }
 Tokenize your ENTIRE reply into "tokens" in order. CRITICAL TOKENIZATION RULES:
 
@@ -80,13 +80,26 @@ JAPANESE TOKENIZATION (READ CAREFULLY):
   * "高かった" = ONE token (not "高" + "かった")
   * "静かです" = ONE token (not "静か" + "です")
 - Noun + particle = SEPARATE tokens (e.g. "猫" then "は")
-- Standalone particles are separate tokens (は, が, を, に, etc.)
+- Standalone particles are separate tokens (は, が, を, に, も, で, へ, と, か, や, よ, ね, の, etc.)
+
+KANJI + OKURIGANA WORDS (CRITICAL — READ CAREFULLY):
+- A kanji character immediately followed by hiragana that together form ONE dictionary word must NEVER be split.
+- Examples of CORRECT single tokens:
+  * 終わり (おわり) = ONE token (not 終 + わり)
+  * 始まり (はじまり) = ONE token (not 始 + まり)
+  * 帰り (かえり) = ONE token (not 帰 + り)
+  * 分かる (わかる) = ONE token (not 分 + かる)
+  * 向かい (むかい) = ONE token (not 向 + かい)
+  * 乗り換え (のりかえ) = ONE token (not 乗り + 換え)
+  * 待ち合わせ (まちあわせ) = ONE token (not 待ち + 合わせ)
+  * 終わった (おわった) = ONE token (not 終わ + った)
+- Rule: if kanji + hiragana together appear in the dictionary as a single entry, they are ONE token.
 
 PHRASES (TWO-LAYER TOKENS):
 - Fixed multi-word expressions (e.g. こんにちは, ありがとうございます, という, お願いします, どういたしまして) should be tokenized as ONE phrase token with pos="phrase"
 - For each phrase token, populate "words" with the component words: each entry has the SAME structure (surface, reading, romaji, meaning, pos, dictForm, no nested words)
 - Example: こんにちは → { surface: "こんにちは", reading: "こんにちは", romaji: "konnichiwa", meaning: "hello / good afternoon", pos: "phrase", dictForm: "こんにちは", words: [ { surface: "今", reading: "こん", romaji: "kon", meaning: "this", pos: "noun", dictForm: "今" }, { surface: "日", reading: "にち", romaji: "nichi", meaning: "day", pos: "noun", dictForm: "日" }, { surface: "は", reading: "は", romaji: "wa", meaning: "(topic particle)", pos: "particle", dictForm: "は" } ] }
-- If the phrase cannot be meaningfully broken down, "words" may be an empty array
+- "words" MUST be populated for any phrase that can be decomposed into recognisable component words. Only use "words": [] for truly indivisible units (e.g. はい, いいえ, うん) that have no meaningful sub-structure.
 
 ENGLISH & OTHER:
 - Each English word is one token
@@ -189,6 +202,38 @@ export function extractJsonString(text: string, key: string): string | null {
   return null; // never hit a closing quote — value was truncated
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+/** Cleans and converts any Japanese date/age patterns in memory suggestions into clear English. */
+export function cleanMemorySuggestion(raw: string): string {
+  let text = raw.trim();
+
+  // Convert YYYY年M月D日 -> Month D, YYYY
+  text = text.replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/g, (_, y, m, d) => {
+    const monthIdx = parseInt(m, 10) - 1;
+    const monthName = MONTH_NAMES[monthIdx] || `${m}/`;
+    return `${monthName} ${d}, ${y}`;
+  });
+
+  // Convert M月D日 -> Month D
+  text = text.replace(/(\d{1,2})月(\d{1,2})日/g, (_, m, d) => {
+    const monthIdx = parseInt(m, 10) - 1;
+    const monthName = MONTH_NAMES[monthIdx] || `${m}/`;
+    return `${monthName} ${d}`;
+  });
+
+  // Convert X歳 / X才 -> X years old
+  text = text.replace(/(\d+)(?:歳|才)/g, "$1 years old");
+
+  // Strip trailing Japanese copula/particles if present
+  text = text.replace(/(?:です|ですね|です！|です。)$/g, "").trim();
+
+  return text;
+}
+
 /** Last-ditch recovery when the model's JSON is cut off (usually mid-`tokens`).
  *  Salvages `reply`/`english` so the user still sees the message; drops tokens
  *  (no tap-to-translate for that message) rather than failing the whole turn.
@@ -265,6 +310,54 @@ export function stripRomajiShadows(parsed: KaiResponse): void {
   }
 }
 
+// Standalone particles — right-hand side must NOT be one of these or we'd
+// wrongly merge the preceding kanji into a particle.
+const STANDALONE_PARTICLES = new Set([
+  "は", "が", "を", "に", "も", "で", "へ", "と", "か", "や", "よ", "ね", "の",
+  "から", "まで", "より", "には", "では", "にも", "でも",
+]);
+
+/** Deterministic repair for kanji+okurigana splits that slip past the prompt.
+ *  Merges token[i] (lone kanji) into token[i+1] (hiragana-starting) when the
+ *  kanji is part of token[i+1]'s dictForm, confirming they belong together.
+ *  Re-checks each position so triple-splits (終 + わ + り) are also caught.
+ *  Exported for unit tests. */
+export function repairSplitTokens(parsed: KaiResponse): void {
+  const toks = parsed.tokens;
+  if (!Array.isArray(toks) || toks.length < 2) return;
+
+  const LONE_KANJI = /^[\u4e00-\u9fff]{1,2}$/;
+  const STARTS_HIRAGANA = /^[\u3040-\u309f]/;
+
+  let i = 0;
+  while (i < toks.length - 1) {
+    const tokA = toks[i];
+    const tokB = toks[i + 1];
+    if (!tokA || !tokB) { i++; continue; }
+
+    const isSplit =
+      LONE_KANJI.test(tokA.surface) &&
+      STARTS_HIRAGANA.test(tokB.surface) &&
+      // The kanji must be part of the next token's dictionary form
+      tokB.dictForm.includes(tokA.surface) &&
+      // The right-hand side must not be a standalone particle
+      !STANDALONE_PARTICLES.has(tokB.surface);
+
+    if (isSplit) {
+      const merged: (typeof toks)[0] = {
+        ...tokB,
+        surface: tokA.surface + tokB.surface,
+        // reading/romaji/meaning/pos/dictForm all come from tokB which already
+        // carries correct full-word data; we just prepend the kanji to surface.
+      };
+      toks.splice(i, 2, merged);
+      // Don't advance i — re-check this position in case of triple-splits
+    } else {
+      i++;
+    }
+  }
+}
+
 /** Shared request loop: try each model, rotate keys on rate limit, parse the
  *  structured KaiResponse. Used by both reactive and proactive turns. */
 async function executeKaiTurn(
@@ -331,12 +424,14 @@ async function executeKaiTurn(
         parsed.english = parsed.english ?? "";
         parsed.newWords = parsed.newWords ?? [];
         parsed.memorySuggestions = Array.isArray(parsed.memorySuggestions)
-          ? parsed.memorySuggestions.filter(
-              (s): s is string => typeof s === "string" && s.trim().length > 0
-            )
+          ? parsed.memorySuggestions
+              .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+              .map((s) => cleanMemorySuggestion(s))
+              .filter((s) => s.length > 0)
           : [];
         parsed.correction = normalizeCorrection(parsed.correction);
         stripRomajiShadows(parsed);
+        repairSplitTokens(parsed);
         parsed.usedModel = model;
         return parsed;
       }
@@ -484,10 +579,10 @@ export async function lookupWord(query: string): Promise<LookupResult> {
   const keys = keysForRequest();
   const models = getAutoFallback() ? modelFallbackOrder() : [getModel()];
 
-  const prompt = `Look up this Japanese word (or the Japanese for this English term): "${query}".
-Return the dictionary form, reading (kana), romaji, a concise English meaning, part of speech
-(verb|adjective|noun|particle|adverb|pronoun|expression|other), and one short, simple example
-sentence in Japanese with its English translation. Respond ONLY as JSON.`;
+  const prompt = `Look up or translate this Japanese word, phrase, or sentence (or English term): "${query}".
+Return the main dictionary form/word, reading in kana, romaji, concise English meaning/translation, part of speech
+(verb|adjective|noun|particle|adverb|pronoun|expression|phrase|other), and one short, simple example
+sentence in Japanese with its English translation. Respond ONLY as valid JSON.`;
 
   const requestBody = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],

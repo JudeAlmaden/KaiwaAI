@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import KanjiClient from "./KanjiClient";
+import { redirect } from "next/navigation";
 
 export default function KanjiPage() {
-  return (
-    <Suspense fallback={<div>Loading kanji...</div>}>
-      <KanjiClient />
-    </Suspense>
-  );
+  redirect("/study?tab=kanji");
 }

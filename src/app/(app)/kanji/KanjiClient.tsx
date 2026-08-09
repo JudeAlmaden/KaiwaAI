@@ -22,12 +22,6 @@ type KanjiCard = {
 const JLPT_LEVELS = ["All", "N5", "N4", "N3", "N2", "N1"] as const;
 type JlptFilter = (typeof JLPT_LEVELS)[number];
 
-const REVIEW_FILTERS = ["All", "In Reviews", "Not in Reviews"] as const;
-type ReviewFilter = (typeof REVIEW_FILTERS)[number];
-
-const SORT_OPTIONS = ["Frequency", "Mastery", "Strokes"] as const;
-type SortOption = (typeof SORT_OPTIONS)[number];
-
 const STORAGE_KEY = "kaiwa_kanji_cache";
 const ITEMS_PER_PAGE = 50;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -72,8 +66,6 @@ export default function KanjiClient() {
   const [kanji, setKanji] = useState<KanjiCard[] | null>(null);
   const [search, setSearch] = useState("");
   const [jlptFilter, setJlptFilter] = useState<JlptFilter>("All");
-  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("All");
-  const [sortBy, setSortBy] = useState<SortOption>("Frequency");
   const [loading, setLoading] = useState(true);
   
   // Infinite scroll state
@@ -85,8 +77,7 @@ export default function KanjiClient() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        sortBy: sortBy.toLowerCase(),
-        limit: "500", // Load more for client-side filtering
+        limit: "500",
       });
 
       const res = await fetch(`/api/kanji?${params}`);
@@ -113,7 +104,6 @@ export default function KanjiClient() {
     
     // Then fetch fresh data
     loadKanji();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Infinite scroll observer
@@ -148,7 +138,7 @@ export default function KanjiClient() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDisplayCount(ITEMS_PER_PAGE);
-  }, [jlptFilter, reviewFilter, search]);
+  }, [jlptFilter, search]);
 
   const filtered = useMemo(() => {
     if (!kanji) return [];
@@ -159,13 +149,6 @@ export default function KanjiClient() {
     if (jlptFilter !== "All") {
       const level = parseInt(jlptFilter.substring(1)); // "N5" -> 5
       list = list.filter((k) => k.jlptLevel === level);
-    }
-
-    // Review filter
-    if (reviewFilter === "In Reviews") {
-      list = list.filter((k) => k.inReviews);
-    } else if (reviewFilter === "Not in Reviews") {
-      list = list.filter((k) => !k.inReviews);
     }
 
     // Search filter
@@ -181,7 +164,7 @@ export default function KanjiClient() {
     }
 
     return list;
-  }, [kanji, jlptFilter, reviewFilter, search]);
+  }, [kanji, jlptFilter, search]);
 
   // Visible kanji with infinite scroll limit
   const visible = useMemo(() => {
@@ -276,36 +259,7 @@ export default function KanjiClient() {
           ))}
         </div>
 
-        {/* Review Status Filter */}
-        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto no-scrollbar scrollbar-none pb-1">
-          {REVIEW_FILTERS.map((filter) => (
-            <Chip
-              key={filter}
-              active={reviewFilter === filter}
-              onClick={() => setReviewFilter(filter)}
-            >
-              {filter}
-            </Chip>
-          ))}
-        </div>
 
-        {/* Sort Selector */}
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 text-xs">
-          <span className="font-semibold text-muted">Sort:</span>
-          {SORT_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => setSortBy(opt)}
-              className={`rounded-full px-3 py-1.5 font-bold transition-all ${
-                sortBy === opt
-                  ? "bg-indigo-ai text-white shadow-md shadow-indigo-ai/20 scale-105"
-                  : "text-muted hover:bg-border/50 hover:scale-105"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Kanji Grid */}
@@ -320,7 +274,6 @@ export default function KanjiClient() {
             onClick={() => {
               setSearch("");
               setJlptFilter("All");
-              setReviewFilter("All");
             }}
             className="mt-4 rounded-full border-2 border-indigo-ai px-5 py-2 text-sm font-bold text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white hover:scale-105"
           >

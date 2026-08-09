@@ -72,9 +72,9 @@ export default function AppBlockerSettings() {
 
   const [debugMode, setDebugMode] = useState(true);
   const [debugMonitoring, setDebugMonitoring] = useState(true);
-  const [debugHasPermissions, setDebugHasPermissions] = useState(false);
-  const [debugUsageGranted, setDebugUsageGranted] = useState(false);
-  const [debugOverlayGranted, setDebugOverlayGranted] = useState(false);
+  const [debugHasPermissions, setDebugHasPermissions] = useState(true);
+  const [debugUsageGranted, setDebugUsageGranted] = useState(true);
+  const [debugOverlayGranted, setDebugOverlayGranted] = useState(true);
   const [debugBlockedCount, setDebugBlockedCount] = useState(3);
 
   // Search & Filter state
@@ -92,14 +92,20 @@ export default function AppBlockerSettings() {
     try {
       const [monitorStatus, permStatus, blocked, installed, config] = await Promise.all([
         AppBlocker.isMonitoring().catch(() => ({ active: false })),
-        AppBlocker.checkPermissions().catch(() => ({ granted: false })),
+        AppBlocker.checkPermissions().catch(() => ({ granted: false, usageStats: false, overlay: false })),
         AppBlocker.getBlockedApps().catch(() => ({ apps: [] })),
         AppBlocker.getInstalledApps().catch(() => ({ apps: [] })),
         AppBlocker.getAppBlockerConfig().catch(() => DEFAULT_CONFIG as AppBlockerConfig),
       ]);
 
+      const granted = Boolean(permStatus.granted);
+      const usage = permStatus.usageStats !== undefined ? Boolean(permStatus.usageStats) : granted;
+      const overlay = permStatus.overlay !== undefined ? Boolean(permStatus.overlay) : granted;
+
       setIsMonitoring(monitorStatus.active);
-      setHasPermissions(permStatus.granted);
+      setHasPermissions(granted);
+      setUsageStatsGranted(usage);
+      setOverlayGranted(overlay);
       setBlockedApps(blocked.apps || []);
 
       const deviceApps = (installed.apps || []).sort((a, b) =>
@@ -134,8 +140,8 @@ export default function AppBlockerSettings() {
     try {
       const permStatus = await AppBlocker.checkPermissions();
       const granted = Boolean(permStatus.granted);
-      const usage = Boolean(permStatus.usageStats);
-      const overlay = Boolean(permStatus.overlay);
+      const usage = permStatus.usageStats !== undefined ? Boolean(permStatus.usageStats) : granted;
+      const overlay = permStatus.overlay !== undefined ? Boolean(permStatus.overlay) : granted;
 
       setHasPermissions(granted);
       setUsageStatsGranted(usage);
@@ -429,9 +435,8 @@ export default function AppBlockerSettings() {
                 <button
                   key={String(v)}
                   onClick={() => setDebugMonitoring(v)}
-                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
-                    debugMonitoring === v ? 'bg-indigo-ai text-white' : 'border border-border bg-background text-muted hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${debugMonitoring === v ? 'bg-indigo-ai text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                    }`}
                 >
                   {v ? 'Active' : 'Paused'}
                 </button>
@@ -446,9 +451,8 @@ export default function AppBlockerSettings() {
                 <button
                   key={n}
                   onClick={() => setDebugBlockedCount(n)}
-                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
-                    debugBlockedCount === n ? 'bg-amber-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${debugBlockedCount === n ? 'bg-amber-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                    }`}
                 >
                   {n}
                 </button>
@@ -466,9 +470,8 @@ export default function AppBlockerSettings() {
                     setDebugUsageGranted(v);
                     setDebugHasPermissions(v && debugOverlayGranted);
                   }}
-                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
-                    debugUsageGranted === v ? 'bg-emerald-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${debugUsageGranted === v ? 'bg-emerald-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                    }`}
                 >
                   {v ? '✓ Granted' : '✗ Needed'}
                 </button>
@@ -486,9 +489,8 @@ export default function AppBlockerSettings() {
                     setDebugOverlayGranted(v);
                     setDebugHasPermissions(debugUsageGranted && v);
                   }}
-                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${
-                    debugOverlayGranted === v ? 'bg-emerald-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition ${debugOverlayGranted === v ? 'bg-emerald-500 text-white' : 'border border-border bg-background text-muted hover:text-foreground'
+                    }`}
                 >
                   {v ? '✓ Granted' : '✗ Needed'}
                 </button>

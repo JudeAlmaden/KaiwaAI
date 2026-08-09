@@ -6,9 +6,8 @@ import {
   ArrowsDownUp,
   DownloadSimple,
   X,
-  ArrowSquareOut,
-  Info,
   CheckCircle,
+  Info,
 } from "@phosphor-icons/react";
 
 export default function AppUpdateBanner() {
@@ -21,70 +20,41 @@ export default function AppUpdateBanner() {
   if (status !== "update-available" || !latest) return null;
 
   const downloadUrl = latest.apkUrl || latest.htmlUrl;
-  const installedLabel = installed.build
-    ? `${installed.version} (build ${installed.build})`
-    : installed.version;
-  const latestLabel = latest.version === latest.tagName ? latest.tagName : `${latest.tagName} (${latest.version})`;
+  const latestLabel = latest.tagName;
 
   return (
-    <div className="w-full bg-indigo-500/15 border-b-2 border-indigo-500/30 px-3.5 py-2.5 text-xs text-indigo-900 dark:text-indigo-100 shadow-xs animate-in fade-in">
-      <div className="flex items-start gap-3 mx-auto max-w-3xl">
-        <div className="shrink-0 mt-0.5 hidden sm:block">
-          <ArrowsDownUp size={20} weight="duotone" className="text-indigo-500" />
+    <div className="w-full border-b border-indigo-ai/20 bg-indigo-ai/10 px-3.5 py-2 text-xs backdrop-blur-md animate-in fade-in">
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-2">
+        {/* Left info badge */}
+        <div className="flex items-center gap-2 min-w-0">
+          <ArrowsDownUp size={16} weight="bold" className="text-indigo-ai shrink-0" />
+          <span className="font-bold text-foreground truncate text-xs">
+            Update available <span className="font-mono text-[11px] font-bold text-indigo-ai">({latestLabel})</span>
+          </span>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-bold flex items-center gap-2">
-            <span className="inline-flex sm:hidden">
-              <ArrowsDownUp size={16} weight="bold" className="text-indigo-600 dark:text-indigo-300" />
-            </span>
-            Update available
-          </p>
-          <p className="mt-1 opacity-95 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <span>
-              Installed <strong className="font-semibold">{installedLabel}</strong>
-            </span>
-            <span aria-hidden>→</span>
-            <span>
-              Latest <strong className="font-semibold">{latestLabel}</strong>
-            </span>
-          </p>
-          {latest.publishedAt && (
-            <p className="mt-1 opacity-75">
-              <Info size={12} className="inline align-text-bottom mr-1 opacity-80" />
-              Released {new Date(latest.publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <a
-              href={downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-ai px-4 text-xs font-bold text-white shadow-sm transition-all hover:bg-indigo-ai/90 active:scale-[0.98]"
-            >
-              <DownloadSimple size={16} weight="bold" />
-              Download update APK
-              <ArrowSquareOut size={14} weight="bold" className="opacity-80" />
-            </a>
-            <a
-              href={latest.htmlUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-2 border-border bg-card px-4 text-xs font-bold text-foreground transition-all hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
-            >
-              View release notes
-            </a>
-            <button
-              type="button"
-              onClick={() => {
-                dismiss();
-                setHidden(true);
-              }}
-              className="ml-auto inline-flex h-10 items-center justify-center gap-1 rounded-xl px-3 text-xs font-semibold text-indigo-900/70 dark:text-indigo-100/70 transition-all hover:bg-indigo-500/10 hover:text-foreground"
-            >
-              <X size={15} weight="bold" />
-              Remind me later
-            </button>
-          </div>
+
+        {/* Right actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <a
+            href={downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg bg-indigo-ai px-3 text-[11px] font-bold text-white shadow-xs hover:bg-indigo-ai/90 active:scale-95 transition-all"
+          >
+            <DownloadSimple size={13} weight="bold" />
+            <span>Update APK</span>
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              dismiss();
+              setHidden(true);
+            }}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-border/40 hover:text-foreground transition-all"
+            aria-label="Dismiss banner"
+          >
+            <X size={14} weight="bold" />
+          </button>
         </div>
       </div>
     </div>

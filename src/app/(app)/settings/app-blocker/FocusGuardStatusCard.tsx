@@ -84,16 +84,20 @@ export default function FocusGuardStatusCard({
     }
   }
 
-  // Auto-recheck when user returns from Android Settings
+  // Auto-recheck when user returns from Android Settings or app comes into focus
   useEffect(() => {
     const handler = () => {
-      if (document.visibilityState === 'visible' && !hasPermissions) {
+      if (document.visibilityState === 'visible') {
         onCheckPermissionStatus?.();
       }
     };
     document.addEventListener('visibilitychange', handler);
-    return () => document.removeEventListener('visibilitychange', handler);
-  }, [hasPermissions, onCheckPermissionStatus]);
+    window.addEventListener('focus', handler);
+    return () => {
+      document.removeEventListener('visibilitychange', handler);
+      window.removeEventListener('focus', handler);
+    };
+  }, [onCheckPermissionStatus]);
 
   const overlayMissing = overlayGranted === false;
   const usageMissing = usageStatsGranted === false;

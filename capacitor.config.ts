@@ -11,6 +11,11 @@ const config: CapacitorConfig = {
   plugins: {
     AppBlocker: {
       enabled: true
+    },
+    CapacitorUpdater: {
+      autoUpdate: true,
+      statsUrl: "",
+      resetWhenUpdate: false
     }
   }
 };

@@ -93,7 +93,13 @@ Respond ONLY with valid JSON matching this schema:
   "english": "<English gloss of any Japanese in your reply; empty if already English>",
   "tokens": [{ "surface": "<as written>", "reading": "<kana or surface>", "romaji": "<romaji or surface>", "meaning": "<English or surface>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|other", "dictForm": "<dictionary form>" }]
 }
-If the most recent human turn contains Japanese, check it and fill "correction" (status none/correct/unnatural/incorrect). Tokenize your ENTIRE reply into "tokens" in order, including English, emoji, and punctuation (pos "other" for non-Japanese).`;
+If the most recent human turn contains Japanese, check it and fill "correction" (status none/correct/unnatural/incorrect). Tokenize your ENTIRE reply into "tokens" in order, including English, emoji, and punctuation (pos "other" for non-Japanese).
+
+JAPANESE TOKENIZATION RULES:
+- Each COMPLETE inflected/conjugated word is ONE token. Do NOT split verb/adjective stems from their endings.
+- KANJI + OKURIGANA: a kanji immediately followed by hiragana forming one dictionary word must NEVER be split.
+  Examples: 終わり=ONE token (not 終+わり), 帰り=ONE token (not 帰+り), 分かる=ONE token (not 分+かる).
+- Standalone particles (は, が, を, に, も, で, へ, と, か, や, よ, ね, の) are always SEPARATE tokens.`;
 }
 
 /** Generate the single persona's rich reply, using an owner key. */

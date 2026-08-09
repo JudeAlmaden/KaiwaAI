@@ -13,6 +13,8 @@ import { RichKaiText } from "../../chat/RichText";
 import Avatar from "../../chat/Avatar";
 import ModelSwitcher from "../../chat/ModelSwitcher";
 import MemorySuggestions from "../../chat/MemorySuggestions";
+import { BookBookmark } from "@phosphor-icons/react/dist/ssr";
+import PersonaProfileDrawer from "../../chat/PersonaProfileDrawer";
 import GroupKeyDialog from "./GroupKeyDialog";
 import ConvMenu from "./ConvMenu";
 import {
@@ -78,6 +80,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [hasKey, setHasKey] = useState(true);
   const [memSuggestions, setMemSuggestions] = useState<string[]>([]);
@@ -87,6 +90,22 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [atBottom, setAtBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [questState, setQuestState] = useState<ActiveQuestState | null>(null);
+  const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+
+  const handleSavedWord = useCallback((w: string) => {
+    setSavedWords((prev) => new Set(prev).add(w));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/flashcards?wordsOnly=true")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.words)) {
+          setSavedWords(new Set(d.words.map((w: { word: string }) => w.word)));
+        }
+      })
+      .catch(() => {});
+  }, []);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScroll = useRef(false);
@@ -634,32 +653,67 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* header */}
-      <div className="flex items-center gap-3 border-b-2 border-border px-5 py-3 sm:px-8">
-        <Link href="/chat" className="text-muted hover:text-indigo-ai">
+      <div className="flex items-center gap-2 border-b-2 border-border px-3 py-2.5 sm:gap-3 sm:px-8 sm:py-3">
+        <Link href="/chat" className="p-1 text-muted hover:text-indigo-ai shrink-0">
           ←
         </Link>
-        {group?.persona ? (
-          <Avatar name={group.persona.name} emoji={group.persona.avatar} size={36} />
-        ) : group?.kind === "group" ? (
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-lg">
-            👥
-          </span>
-        ) : (
-          <Avatar name={group?.name} size={36} />
-        )}
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate font-display text-sm font-extrabold">
-            {group?.name ?? "…"}
-          </p>
-          <p className="truncate text-xs text-muted">
-            {group?.members.map((m) => (m.kind === "persona" ? m.name : m.name)).join(", ")}
-          </p>
+        <div
+          onClick={() => group?.persona && setShowProfileDrawer(true)}
+          className={`flex min-w-0 flex-1 items-center gap-2 sm:gap-3 ${
+            group?.persona
+              ? "cursor-pointer rounded-xl p-1 transition-all hover:bg-indigo-ai/10 active:scale-[0.99]"
+              : ""
+          }`}
+          title={group?.persona ? `Click to view ${group.persona.name}'s profile & memories` : undefined}
+        >
+          <div className="relative shrink-0">
+            {group?.persona ? (
+              <Avatar name={group.persona.name} emoji={group.persona.avatar} size={36} />
+            ) : group?.kind === "group" ? (
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-ai/10 text-lg">
+                👥
+              </span>
+            ) : (
+              <Avatar name={group?.name} size={36} />
+            )}
+            {group?.persona && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai text-[9px] text-white ring-2 ring-card">
+                📖
+              </span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="truncate font-display text-sm font-extrabold">
+                {group?.name ?? "…"}
+              </p>
+              {group?.persona && (
+                <span className="hidden sm:inline-block rounded-full bg-indigo-ai/10 px-1.5 py-0.5 text-[9px] font-bold text-indigo-ai shrink-0">
+                  Profile
+                </span>
+              )}
+            </div>
+            <p className="truncate text-[11px] sm:text-xs text-muted">
+              {group?.persona ? "Tap for profile & memory" : group?.members.map((m) => m.name).join(", ")}
+            </p>
+          </div>
         </div>
+
+        {group?.persona && (
+          <button
+            onClick={() => setShowProfileDrawer(true)}
+            className="hidden md:flex items-center gap-1.5 shrink-0 rounded-full border-2 border-indigo-ai/20 bg-indigo-ai/5 px-3 py-1.5 text-xs font-bold text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white shadow-xs"
+            title="View Profile & Memory"
+          >
+            <BookBookmark size={15} weight="bold" />
+            <span>Profile & Memory</span>
+          </button>
+        )}
         {group?.clientGenerated && <ModelSwitcher />}
         {group?.isOwner && !group.clientGenerated && personaCount > 0 && (
           <button
             onClick={() => setShowKey(true)}
-            className="rounded-full border-2 border-border px-3 py-1 text-xs font-bold text-muted hover:border-indigo-ai hover:text-indigo-ai"
+            className="shrink-0 rounded-full border-2 border-border px-3 py-1 text-xs font-bold text-muted hover:border-indigo-ai hover:text-indigo-ai"
           >
             {group.hasKey ? "API key ✓" : "Set API key"}
           </button>
@@ -813,6 +867,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
                   startGroup={!sameAsPrev || !!divider}
                   endGroup={!sameAsNext}
                   onReply={() => setQuotedMessage(m)}
+                  savedWords={savedWords}
+                  onSavedWord={handleSavedWord}
                 />
               </div>
             );
@@ -938,6 +994,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           }}
         />
       )}
+
+      {showProfileDrawer && group?.persona && (
+        <PersonaProfileDrawer
+          persona={group.persona}
+          onClose={() => setShowProfileDrawer(false)}
+        />
+      )}
     </div>
   );
 }
@@ -977,11 +1040,15 @@ function GroupBubble({
   startGroup,
   endGroup,
   onReply,
+  savedWords,
+  onSavedWord,
 }: {
   msg: GMsg;
   startGroup: boolean;
   endGroup: boolean;
   onReply: () => void;
+  savedWords?: Set<string>;
+  onSavedWord?: (w: string) => void;
 }) {
   const [showReply, setShowReply] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -1144,6 +1211,8 @@ function GroupBubble({
               english={msg.english}
               correctionJson={msg.correction}
               messageId={msg.id}
+              savedWords={savedWords}
+              onSavedWord={onSavedWord}
             />
           ) : (
             <p className="font-jp leading-relaxed">{msg.content}</p>

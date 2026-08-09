@@ -4,9 +4,7 @@ import {
   House,
   ChatCircle,
   ArrowsClockwise,
-  Notebook,
-  BookBookmark,
-  TextAa,
+  Books,
   GearSix,
 } from "@phosphor-icons/react/dist/ssr";
 
@@ -21,8 +19,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/home", label: "Home", jp: "ホーム", icon: House },
   { href: "/chat", label: "Chat", jp: "会話", icon: ChatCircle },
   { href: "/review", label: "Review", jp: "復習", icon: ArrowsClockwise },
-  { href: "/vocab", label: "Vocab", jp: "単語", icon: BookBookmark },
-  { href: "/kanji", label: "Kanji", jp: "漢字", icon: TextAa },
-  { href: "/memory", label: "Memory", jp: "日記", icon: Notebook },
+  { href: "/study", label: "Study", jp: "学習", icon: Books },
   { href: "/settings", label: "You", jp: "設定", icon: GearSix },
 ];

@@ -26,7 +26,7 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r-2 border-border bg-card/50 px-3 py-5 lg:flex">
       <Link
-        href="/home"
+        href="/"
         className="mb-6 flex items-center gap-2 px-2 font-display text-xl font-extrabold tracking-tight"
       >
         <Kai size={32} />
@@ -137,7 +137,7 @@ export function MobileTopBar({ streak }: { streak: number }) {
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between border-b-2 border-border bg-card/95 px-4 py-3 backdrop-blur lg:hidden">
       <Link
-        href="/home"
+        href="/"
         className="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight"
       >
         <Kai size={26} />

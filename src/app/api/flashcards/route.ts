@@ -368,14 +368,22 @@ export async function POST(req: Request) {
   });
 
   // Check if already exists (the single card the caller asked for)
-  const existing = await prisma.userFlashcard.findUnique({
-    where: {
-      userId_wordFormId: {
-        userId: user.id,
-        wordFormId: wordFormId || "",
-      },
-    },
-  });
+  const existing = wordFormId
+    ? await prisma.userFlashcard.findUnique({
+        where: {
+          userId_wordFormId: {
+            userId: user.id,
+            wordFormId,
+          },
+        },
+      })
+    : await prisma.userFlashcard.findFirst({
+        where: {
+          userId: user.id,
+          wordId,
+          wordFormId: null,
+        },
+      });
 
   const alreadyExisted = !!existing;
   let card = existing;

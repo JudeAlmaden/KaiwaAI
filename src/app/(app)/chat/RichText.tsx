@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import WordToken from "./WordToken";
 import LookupToken from "./LookupToken";
+import { SelectionLookupPopup } from "./WordToken";
 import { hasFeedback, type CachedToken, type Correction } from "@/lib/types";
 
 const JP_CHAR = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/;
@@ -15,10 +16,17 @@ const JP_RUN = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFFー々]+/g;
 function spaceBetween(prev: string | undefined, curr: string): boolean {
   if (!prev) return false;
   if (JP_CHAR.test(prev) || JP_CHAR.test(curr)) return false;
-  if (/^[!?.,)\]}」』）、。…:;%]/.test(curr)) return false;
-  if (/[([{「『（]$/.test(prev)) return false;
+  if (/^[!?.,)\]}"」』）、。…:;%]/.test(curr)) return false;
+  if (/[([{"「『（]$/.test(prev)) return false;
   return true;
 }
+
+// ── Selection state types ─────────────────────────────────────────────────────
+
+type SelectionLookup = { text: string; rect: DOMRect } | null;
+type RangeState = { start: number; end: number } | null;
+
+const LONG_PRESS_MS = 400;
 
 /** Renders an AI message body with tap-to-translate tokens, an English toggle,
  *  and a grammar-correction card. Shared by Kai's 1:1 chat and group chats. */
@@ -28,59 +36,184 @@ export function RichKaiText({
   english,
   correctionJson,
   messageId,
+  savedWords: externalSavedWords,
+  onSavedWord: externalOnSavedWord,
 }: {
   content: string;
   tokensJson?: string | null;
   english?: string | null;
   correctionJson?: string | null;
   messageId: string;
+  savedWords?: Set<string>;
+  onSavedWord?: (word: string) => void;
 }) {
-  const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+  const [internalSavedWords, setInternalSavedWords] = useState<Set<string>>(new Set());
   const [openToken, setOpenToken] = useState<string | null>(null);
-  const [vocabLoaded, setVocabLoaded] = useState(false);
+  const [vocabLoaded, setVocabLoaded] = useState(Boolean(externalSavedWords));
 
-  // Pre-load user's saved vocabulary on mount
+  const savedWords = externalSavedWords ?? internalSavedWords;
+
+  const handleSaved = useCallback(
+    (w: string) => {
+      setInternalSavedWords((s) => new Set(s).add(w));
+      if (externalOnSavedWord) externalOnSavedWord(w);
+    },
+    [externalOnSavedWord]
+  );
+
+  // Desktop text-selection lookup
+  const [desktopSelection, setDesktopSelection] = useState<SelectionLookup>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Mobile long-press range selection
+  const [rangeState, setRangeState] = useState<RangeState>(null);
+  const [rangeLookup, setRangeLookup] = useState<SelectionLookup>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Detect coarse pointer (touch device) — initialised lazily so no effect needed
+  const [isMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(pointer: coarse)").matches
+      : false
+  );
+
+  // Pre-load user's saved vocabulary on mount only if not provided externally
   useEffect(() => {
+    if (externalSavedWords) {
+      // already have words — no fetch needed; flip the flag in microtask to
+      // avoid calling setState synchronously inside the effect body
+      Promise.resolve().then(() => setVocabLoaded(true));
+      return;
+    }
     fetch("/api/flashcards?wordsOnly=true")
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d.words)) {
-          setSavedWords(new Set(d.words.map((w: { word: string }) => w.word)));
+          setInternalSavedWords(new Set(d.words.map((w: { word: string }) => w.word)));
         }
         setVocabLoaded(true);
       })
       .catch(() => setVocabLoaded(true));
+  }, [externalSavedWords]);
+
+  // ── Desktop: selectionchange → popup (debounced 300ms) ─────────────────────
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    function onSelectionChange() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) {
+          setDesktopSelection(null);
+          return;
+        }
+        const text = sel.toString().trim();
+        if (!JP_CHAR.test(text)) { setDesktopSelection(null); return; }
+        if (!containerRef.current) return;
+        const range = sel.getRangeAt(0);
+        if (!containerRef.current.contains(range.commonAncestorContainer)) {
+          setDesktopSelection(null);
+          return;
+        }
+        setDesktopSelection({ text, rect: range.getBoundingClientRect() });
+      }, 300);
+    }
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("selectionchange", onSelectionChange);
+    };
   }, []);
 
   let tokens: CachedToken[] | null = null;
   if (tokensJson) {
-    try {
-      tokens = JSON.parse(tokensJson);
-    } catch {
-      tokens = null;
-    }
+    try { tokens = JSON.parse(tokensJson); } catch { tokens = null; }
   }
+
+  // ── Mobile: long-press → range-select ─────────────────────────────────────
+  const startLongPress = useCallback((idx: number) => {
+    longPressTimer.current = setTimeout(() => {
+      if (navigator.vibrate) navigator.vibrate(30);
+      setRangeState({ start: idx, end: idx });
+      setOpenToken(null);
+    }, LONG_PRESS_MS);
+  }, []);
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const extendRange = useCallback(
+    (idx: number, toks: CachedToken[]) => {
+      setRangeState((prev) => {
+        if (!prev) return prev;
+        const start = Math.min(prev.start, idx);
+        const end = Math.max(prev.end, idx);
+        const text = toks
+          .slice(start, end + 1)
+          .map((t) => t.surface)
+          .join("")
+          .trim();
+        if (JP_CHAR.test(text)) {
+          const el = document.getElementById(`tok-${messageId}-${idx}`);
+          const rect = el ? el.getBoundingClientRect() : new DOMRect(0, 200, 50, 24);
+          setRangeLookup({ text, rect });
+        }
+        return null;
+      });
+    },
+    [messageId]
+  );
+
+  const clearRange = useCallback(() => {
+    setRangeState(null);
+    setRangeLookup(null);
+  }, []);
 
   return (
     <>
-      <div className="font-jp text-lg leading-loose">
+      {/* On mobile, disable native text selection so the long-press isn't
+          hijacked by the OS copy toolbar. Desktop keeps native selection. */}
+      <div
+        ref={containerRef}
+        className={`font-jp text-lg leading-loose${isMobile ? " select-none" : ""}`}
+      >
         {tokens && tokens.length > 0 ? (
           tokens.map((t, i) => {
             const key = `${messageId}-${i}`;
+            const inRange =
+              rangeState !== null && i >= rangeState.start && i <= rangeState.end;
             return (
               <span key={i}>
                 {spaceBetween(tokens![i - 1]?.surface, t.surface) ? " " : ""}
-                <WordToken
-                  token={t}
-                  sourceMessageId={messageId}
-                  savedWords={savedWords}
-                  onSaved={(w) => setSavedWords((s) => new Set(s).add(w))}
-                  isOpen={openToken === key}
-                  onToggle={() =>
-                    setOpenToken((cur) => (cur === key ? null : key))
+                <span
+                  id={`tok-${messageId}-${i}`}
+                  className={inRange ? "rounded bg-indigo-ai/20" : ""}
+                  onTouchStart={isMobile ? () => startLongPress(i) : undefined}
+                  onTouchEnd={isMobile ? cancelLongPress : undefined}
+                  onTouchCancel={isMobile ? cancelLongPress : undefined}
+                  onClick={
+                    rangeState !== null && isMobile
+                      ? () => extendRange(i, tokens!)
+                      : undefined
                   }
-                  vocabLoaded={vocabLoaded}
-                />
+                >
+                  <WordToken
+                    token={t}
+                    sourceMessageId={messageId}
+                    savedWords={savedWords}
+                    onSaved={handleSaved}
+                    isOpen={openToken === key && rangeState === null}
+                    onToggle={() => {
+                      if (rangeState === null)
+                        setOpenToken((cur) => (cur === key ? null : key));
+                    }}
+                    vocabLoaded={vocabLoaded}
+                  />
+                </span>
               </span>
             );
           })
@@ -95,8 +228,49 @@ export function RichKaiText({
           />
         )}
       </div>
+
+      {/* Mobile range-mode hint banner */}
+      {rangeState !== null && (
+        <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-indigo-ai/30 bg-indigo-ai/5 px-3 py-1.5">
+          <span className="text-xs text-indigo-ai">
+            ✦ Tap another word to look up the selection
+          </span>
+          <button
+            onClick={clearRange}
+            className="ml-auto text-xs font-bold text-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {english && <EnglishToggle text={english} />}
       {correctionJson && <CorrectionCard raw={correctionJson} />}
+
+      {/* Desktop: selection drag popup */}
+      {desktopSelection && (
+        <SelectionLookupPopup
+          text={desktopSelection.text}
+          anchorRect={desktopSelection.rect}
+          savedWords={savedWords}
+          onSaved={handleSaved}
+          onClose={() => {
+            setDesktopSelection(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+        />
+      )}
+
+      {/* Mobile: range tap popup */}
+      {rangeLookup && (
+        <SelectionLookupPopup
+          text={rangeLookup.text}
+          anchorRect={rangeLookup.rect}
+          savedWords={savedWords}
+          onSaved={handleSaved}
+          onClose={clearRange}
+        />
+      )}
     </>
   );
 }
@@ -238,3 +412,4 @@ function CorrectionCard({ raw }: { raw: string }) {
     </div>
   );
 }
+

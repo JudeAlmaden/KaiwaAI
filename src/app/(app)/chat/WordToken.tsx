@@ -6,6 +6,8 @@ import { type CachedToken } from "@/lib/types";
 import KanjiBreakdown from "./KanjiBreakdown";
 import { formLabel } from "@/lib/form-label";
 import Furigana from "../review/Furigana";
+import { lookupWord, type LookupResult } from "@/lib/gemini";
+import { hasAnyKey } from "@/lib/api-keys";
 
 type SaveState = "idle" | "saving" | "saved" | "exists" | "merged";
 
@@ -629,10 +631,13 @@ export default function WordToken({
               </div>
             )}
 
-            {/* ── WORD ──────────────────────────────────────────────────── */}
-            {!isPhrase && (
+            {/* ── WORD / PHRASE LOOKUP ───────────────────────────────────── */}
+            {/* Always show dictionary body — for phrases this lets you look up
+                and save the full phrase expression even when words[] is empty */}
+            <div className={isPhrase ? "mt-3 border-t border-border pt-3" : ""}>
               <WordTokenBody token={token} savedWords={savedWords} onSaved={onSaved} />
-            )}
+            </div>
+
           </div>
         </PopupPortal>
       )}
@@ -678,5 +683,254 @@ function SavePhraseButton({
     >
       {state === "saving" ? "Adding…" : "+ Save phrase"}
     </button>
+  );
+}
+
+// ── Selection lookup popup ────────────────────────────────────────────────────
+// Shown when the user drag-selects (desktop) or long-press-ranges (mobile) text.
+
+export function SelectionLookupPopup({
+  text,
+  anchorRect,
+  savedWords,
+  onSaved,
+  onClose,
+}: {
+  /** The selected Japanese text to look up */
+  text: string;
+  /** Bounding rect of the selection / highlighted range */
+  anchorRect: DOMRect;
+  savedWords: Set<string>;
+  onSaved: (w: string) => void;
+  onClose: () => void;
+}) {
+  const [aiResult, setAiResult] = useState<LookupResult | null>(null);
+  const [dictLookup, setDictLookup] = useState<WordLookupResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+
+  useEffect(() => {
+    let cancelled = false;
+    // Batch reset via microtask so we don't call setState synchronously in effect body
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setFailed(false);
+      setAiResult(null);
+      setDictLookup(null);
+    });
+
+    async function fetchDefinition() {
+      const cleanSearchText = text.trim();
+
+      // 1. Try DB lookup first for exact word / phrase matches
+      try {
+        const params = new URLSearchParams({
+          dictForm: cleanSearchText,
+          surface: cleanSearchText,
+        });
+        const res = await fetch(`/api/dictionary/lookup?${params}`);
+        if (res.ok) {
+          const data: WordLookupResult = await res.json();
+          if (!cancelled) {
+            const hasRealMeaning =
+              data.type === "word" ||
+              (data.type === "phrase" &&
+                data.phrase.meanings.length > 0 &&
+                data.phrase.meanings[0] !== "(no definition)");
+            if (hasRealMeaning) {
+              setDictLookup(data);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Ignore DB lookup failure and proceed to AI lookup
+      }
+
+      // 2. Call Gemini AI lookup for multi-word phrases, sentences, or unknown words
+      if (hasAnyKey()) {
+        try {
+          const res = await lookupWord(cleanSearchText);
+          if (!cancelled) {
+            setAiResult(res);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error("Selection AI lookup error:", e);
+        }
+      }
+
+      if (!cancelled) {
+        setFailed(true);
+        setLoading(false);
+      }
+    }
+
+    void fetchDefinition();
+    return () => {
+      cancelled = true;
+    };
+  }, [text]);
+
+  const handleSaveAI = async () => {
+    if (!aiResult) return;
+    setSaveState("saving");
+    const token: CachedToken = {
+      surface: text,
+      reading: aiResult.reading || text,
+      romaji: aiResult.romaji || text,
+      meaning: aiResult.meaning,
+      pos: (aiResult.pos as unknown as CachedToken["pos"]) ?? "phrase",
+      dictForm: aiResult.word || text,
+      words: [],
+    };
+    try {
+      const res = await fetch("/api/flashcards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setSaveState(d.alreadyExisted ? "exists" : "saved");
+        onSaved(token.dictForm);
+      } else {
+        setSaveState("idle");
+      }
+    } catch {
+      setSaveState("idle");
+    }
+  };
+
+  const syntheticToken: CachedToken = {
+    surface: text,
+    reading: aiResult?.reading ?? text,
+    romaji: aiResult?.romaji ?? text,
+    meaning: aiResult?.meaning ?? "",
+    pos: (aiResult?.pos as unknown as CachedToken["pos"]) ?? "phrase",
+    dictForm: aiResult?.word ?? text,
+    words: [],
+  };
+
+  const isSaved =
+    saveState === "saved" ||
+    saveState === "exists" ||
+    savedWords.has(syntheticToken.dictForm) ||
+    savedWords.has(text);
+
+  // Position popup above the selection rect, same logic as calcPos
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+  const GAP = 8;
+  const EDGE = 12;
+  const spaceAbove = Math.max(0, anchorRect.top - GAP - EDGE);
+  const spaceBelow = Math.max(0, (typeof window !== "undefined" ? window.innerHeight : 800) - anchorRect.bottom - GAP - EDGE);
+  const openBelow = spaceBelow >= POPUP_MAX_H || spaceBelow > spaceAbove;
+  let left = anchorRect.left + anchorRect.width / 2 - POPUP_W / 2;
+  left = Math.max(EDGE, Math.min(left, vw - POPUP_W - EDGE));
+  const pos: PopupPos = openBelow
+    ? { top: anchorRect.bottom + GAP, left, maxHeight: Math.min(POPUP_MAX_H, spaceBelow) }
+    : { bottom: (typeof window !== "undefined" ? window.innerHeight : 800) - anchorRect.top + GAP, left, maxHeight: Math.min(POPUP_MAX_H, spaceAbove) };
+
+  return (
+    <PopupPortal pos={pos} onClose={onClose}>
+      <div className="p-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-ai/70">
+            Selected Text
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-full p-1 text-muted hover:bg-border/40 hover:text-foreground transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Selected Surface */}
+        <div className="font-jp text-xl font-bold text-foreground leading-snug break-words">
+          {aiResult?.reading && aiResult.reading !== text ? (
+            <Furigana word={text} reading={aiResult.reading} className="text-xl" size="normal" />
+          ) : (
+            text
+          )}
+        </div>
+
+        {loading && (
+          <div className="mt-3 flex items-center gap-2 text-xs font-bold text-indigo-ai animate-pulse">
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-ai border-t-transparent" />
+            Generating definition with AI…
+          </div>
+        )}
+
+        {failed && !loading && (
+          <div className="mt-3 rounded-xl border border-amber/30 bg-amber/5 p-2.5 text-xs text-amber">
+            Could not retrieve definition. Check your API key in Settings.
+          </div>
+        )}
+
+        {/* 1. DB Dictionary Match */}
+        {!loading && dictLookup && (
+          <div className="mt-2">
+            <WordTokenBody token={syntheticToken} savedWords={savedWords} onSaved={onSaved} />
+          </div>
+        )}
+
+        {/* 2. AI Lookup Result */}
+        {!loading && aiResult && !dictLookup && (
+          <div className="mt-3 space-y-2">
+            {aiResult.romaji && (
+              <div className="text-xs text-muted italic">{aiResult.romaji}</div>
+            )}
+            <div className="text-sm font-bold text-indigo-ai leading-relaxed">
+              {aiResult.meaning}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-indigo-ai/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-ai">
+                {aiResult.pos}
+              </span>
+              <span className="rounded bg-sakura/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sakura">
+                AI Translate
+              </span>
+            </div>
+
+            {aiResult.example && (
+              <div className="mt-2 rounded-xl bg-surface/50 p-2.5 text-xs border border-border/50">
+                <div className="font-jp font-semibold text-foreground">{aiResult.example}</div>
+                {aiResult.exampleEn && (
+                  <div className="text-muted text-[11px] mt-0.5">{aiResult.exampleEn}</div>
+                )}
+              </div>
+            )}
+
+            {/* Kanji Breakdown */}
+            <div className="mt-3 border-t border-border pt-2">
+              <KanjiBreakdown word={text} />
+            </div>
+
+            {/* Save to Vocabulary Button */}
+            <div className="mt-3">
+              {isSaved ? (
+                <div className="flex items-center gap-1 text-xs font-bold text-mint">
+                  ✓ in your review deck
+                </div>
+              ) : (
+                <button
+                  onClick={handleSaveAI}
+                  disabled={saveState === "saving"}
+                  className="w-full rounded-full bg-indigo-ai px-3 py-2 text-xs font-bold text-white shadow transition-all hover:scale-[1.02] hover:bg-indigo-soft disabled:opacity-60 cursor-pointer"
+                >
+                  {saveState === "saving" ? "Adding…" : "+ Add to vocabulary"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </PopupPortal>
   );
 }

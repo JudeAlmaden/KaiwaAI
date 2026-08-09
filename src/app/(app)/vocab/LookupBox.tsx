@@ -59,20 +59,19 @@ export default function LookupBox({ onAdded }: { onAdded: () => void }) {
 
   if (!open) {
     return (
-      <div className="px-5 pt-3 sm:px-8">
-        <button
-          onClick={() => setOpen(true)}
-          className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-indigo-ai/30 bg-indigo-ai/5 px-4 py-3 text-sm font-bold text-indigo-ai transition-all hover:border-indigo-ai hover:bg-indigo-ai/10 hover:scale-[1.01]"
-        >
-          ➕ Add a new word from dictionary
-        </button>
-      </div>
+      <button
+        onClick={() => setOpen(true)}
+        title="Add a word from dictionary"
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-ai text-white shadow-lg shadow-indigo-ai/30 transition-all hover:scale-110 hover:bg-indigo-soft active:scale-95"
+        aria-label="Add a new word from dictionary"
+      >
+        <span className="text-xl leading-none">＋</span>
+      </button>
     );
   }
 
   return (
-    <div className="px-5 pt-3 sm:px-8">
-      <div className="mx-auto max-w-3xl rounded-2xl border-2 border-indigo-ai/40 bg-card p-4">
+    <div className="w-80 sm:w-96 rounded-2xl border-2 border-indigo-ai/40 bg-card p-4 shadow-xl shadow-indigo-ai/10">
         <div className="flex items-center gap-2">
           <input
             autoFocus
@@ -139,6 +138,5 @@ export default function LookupBox({ onAdded }: { onAdded: () => void }) {
           </div>
         )}
       </div>
-    </div>
   );
 }

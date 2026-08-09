@@ -4,11 +4,9 @@ import { useState } from "react";
 import ApiKeyCard from "./ApiKeyCard";
 import ServerKeyCard from "./ServerKeyCard";
 import ModelCard from "./ModelCard";
-import OutreachCard from "./OutreachCard";
-import ReviewNotificationCard from "./ReviewNotificationCard";
+import ProactiveChatCard from "./ProactiveChatCard";
 import UserSettingsTab from "./UserSettingsTab";
 import AppBlockerSettings from "./app-blocker/page";
-import MobileAppDownloadCard from "./MobileAppDownloadCard";
 import LearningResetCard from "./LearningResetCard";
 
 import { Capacitor } from "@capacitor/core";
@@ -61,8 +59,7 @@ export default function SettingsClient({ email }: { email: string }) {
       {tab === "learning" && (
         <div className="flex flex-col gap-5">
           <ModelCard />
-          <OutreachCard />
-          <ReviewNotificationCard />
+          <ProactiveChatCard />
           <LearningResetCard />
         </div>
       )}
@@ -70,7 +67,6 @@ export default function SettingsClient({ email }: { email: string }) {
       {/* Mobile Tab */}
       {tab === "mobile" && (
         <div className="flex flex-col gap-5">
-          <MobileAppDownloadCard />
           {(isAndroid || process.env.NEXT_PUBLIC_APP_BLOCKER_DEBUG === "true" || process.env.NODE_ENV === "development") && (
             <AppBlockerSettings />
           )}

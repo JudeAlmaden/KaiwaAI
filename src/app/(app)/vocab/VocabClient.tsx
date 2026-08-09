@@ -30,8 +30,10 @@ type Card = {
 
 type WordForm = { id: string; form: string; reading: string; formType: string; saved: boolean };
 
-const FILTERS = ["All", "New", "Learning", "Known"] as const;
+const FILTERS = ["All", "Learning", "Known"] as const;
 type Filter = (typeof FILTERS)[number];
+type SortBy = "Default" | "Mastery ↑" | "Mastery ↓";
+const SORT_OPTIONS: SortBy[] = ["Default", "Mastery ↑", "Mastery ↓"];
 type ContentTab = "words" | "phrases" | "conjugation";
 
 const STORAGE_KEY = "kaiwa_vocab_cache";
@@ -83,6 +85,7 @@ export default function VocabClient() {
   const [cards, setCards] = useState<Card[] | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("words");
   const [filter, setFilter] = useState<Filter>("All");
+  const [sortBy, setSortBy] = useState<SortBy>("Default");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Card | null>(null);
   const [forms, setForms] = useState<WordForm[]>([]);
@@ -160,7 +163,7 @@ export default function VocabClient() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDisplayCount(ITEMS_PER_PAGE);
-  }, [contentTab, filter, query]);
+  }, [contentTab, filter, query, sortBy]);
 
   function openCard(card: Card) {
     setForms([]);
@@ -249,23 +252,27 @@ export default function VocabClient() {
 
   const filtered = useMemo(() => {
     let list = contentCards;
-    if (filter !== "All") list = list.filter((c) => c.status === filter.toLowerCase());
+    // "Learning" filter includes both new + learning status
+    if (filter === "Learning") list = list.filter((c) => c.status === "new" || c.status === "learning");
+    else if (filter === "Known") list = list.filter((c) => c.status === "known");
     const q = query.trim().toLowerCase();
     if (q) {
       // Convert romaji to hiragana for better search matching
       const qHiragana = romajiToHiragana(q);
-      
       list = list.filter(
         (c) =>
           c.word.includes(q) ||
           c.reading.includes(q) ||
-          c.reading.includes(qHiragana) || // Search with converted hiragana
+          c.reading.includes(qHiragana) ||
           (c.romaji && c.romaji.toLowerCase().includes(q)) ||
           c.meaning.toLowerCase().includes(q)
       );
     }
+    // Apply mastery sort
+    if (sortBy === "Mastery ↑") list = [...list].sort((a, b) => progressOf(a) - progressOf(b));
+    else if (sortBy === "Mastery ↓") list = [...list].sort((a, b) => progressOf(b) - progressOf(a));
     return list;
-  }, [contentCards, filter, query]);
+  }, [contentCards, filter, query, sortBy]);
 
   const groups = useMemo(() => {
     const m = new Map<string, Card[]>();
@@ -304,11 +311,10 @@ export default function VocabClient() {
   }, [filtered.length, displayCount]);
 
   const counts = useMemo(() => {
-    const c = { known: 0, learning: 0, neww: 0, total: contentCards.length };
+    const c = { known: 0, learning: 0, total: contentCards.length };
     contentCards.forEach((x) => {
       if (x.status === "known") c.known++;
-      else if (x.status === "learning") c.learning++;
-      else c.neww++;
+      else c.learning++; // treat 'new' as learning
     });
     return c;
   }, [contentCards]);
@@ -373,9 +379,27 @@ export default function VocabClient() {
             ? `${counts.total} ${contentTab} collected`
             : "Loading…"
         }
+        bar={
+          contentTab !== "conjugation" && cards && counts.total > 0 ? (
+            <div>
+              <div className="flex h-1.5 overflow-hidden rounded-full bg-border/40">
+                <Seg value={counts.learning} total={counts.total} className="bg-amber" />
+                <Seg value={counts.known} total={counts.total} className="bg-mint" />
+              </div>
+              <div className="mt-1.5 flex gap-3 text-xs font-semibold">
+                <span className="flex items-center gap-1 text-amber">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber" />
+                  {counts.learning} learning
+                </span>
+                <span className="flex items-center gap-1 text-mint">
+                  <span className="h-1.5 w-1.5 rounded-full bg-mint" />
+                  {counts.known} known
+                </span>
+              </div>
+            </div>
+          ) : undefined
+        }
       />
-
-      {contentTab !== "conjugation" && <LookupBox onAdded={load} />}
 
       <div className="px-5 pt-3 sm:px-8">
         <div className="mx-auto grid w-full max-w-3xl grid-cols-3 rounded-2xl bg-border/40 p-1">
@@ -412,35 +436,10 @@ export default function VocabClient() {
         </div>
       ) : (
         <>
-      {/* overview bar */}
-      {cards && cards.length > 0 && (
-        <div className="px-5 pt-3 sm:px-8">
-          <div className="mx-auto max-w-3xl">
-            <div className="flex h-3 overflow-hidden rounded-full bg-border/40">
-              <Seg value={counts.neww} total={counts.total} className="bg-sky" />
-              <Seg value={counts.learning} total={counts.total} className="bg-amber" />
-              <Seg value={counts.known} total={counts.total} className="bg-mint" />
-            </div>
-            <div className="mt-2 flex gap-4 text-xs font-semibold">
-              <span className="flex items-center gap-1.5 text-sky">
-                <span className="h-2 w-2 rounded-full bg-sky" />
-                {counts.neww} new
-              </span>
-              <span className="flex items-center gap-1.5 text-amber">
-                <span className="h-2 w-2 rounded-full bg-amber" />
-                {counts.learning} learning
-              </span>
-              <span className="flex items-center gap-1.5 text-mint">
-                <span className="h-2 w-2 rounded-full bg-mint" />
-                {counts.known} known
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* search + filters */}
-      <div className="flex flex-col gap-2.5 px-5 py-3 sm:px-8">
+      {/* Combined search + filter + sort toolbar */}
+      <div className="flex flex-col gap-2 px-5 py-3 sm:px-8">
+        {/* Search */}
         <div className="relative mx-auto w-full max-w-3xl">
           <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted/50">
             🔍
@@ -460,12 +459,25 @@ export default function VocabClient() {
             </button>
           )}
         </div>
-        <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto no-scrollbar scrollbar-none">
+        {/* Filter chips + sort on one row */}
+        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 overflow-x-auto no-scrollbar scrollbar-none">
           {FILTERS.map((f) => (
             <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
               {f}
             </Chip>
           ))}
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <span className="text-xs font-semibold text-muted">Sort:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortBy)}
+              className="rounded-xl border-2 border-border bg-card px-2.5 py-1 text-xs font-bold text-fg outline-none focus:border-indigo-ai"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -484,7 +496,7 @@ export default function VocabClient() {
           </p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-5 py-2 sm:px-8">
+        <div className="relative flex-1 overflow-y-auto px-5 py-2 sm:px-8">
           <div className="mx-auto max-w-3xl">
             {visibleGroups.map(([pos, items]) => (
               <div key={pos} className="mb-6">
@@ -550,6 +562,11 @@ export default function VocabClient() {
                 All {filtered.length} {contentTab} loaded
               </div>
             )}
+          </div>
+
+          {/* FAB — add word from dictionary */}
+          <div className="sticky bottom-4 flex justify-end pr-1 pt-2">
+            <LookupBox onAdded={load} />
           </div>
         </div>
       )}

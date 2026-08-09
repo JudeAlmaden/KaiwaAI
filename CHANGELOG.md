@@ -2,6 +2,49 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.6.0] - 2026-08-10
+
+### Added
+
+- **Organic Landing Page Overhaul (`/`)** — replaced static card grids with fluid, story-driven Framer Motion sections and Phosphor Icons. New components: `LandingInteractiveCanvas` (orbital live preview), `LandingLookupExperience` (AR-style kanji annotations), `LandingMemoryStory` (asymmetric persona memory split), `LandingQuestRPG` (RPG quest encounter prompt), `LandingDeckCascade` (fanning SRS deck stack), `LandingHowItWorks` (3-step routine flow), `LandingShowcaseTabs` (tabbed feature showcase).
+- **Persona Profile & Memory Drawer** — `PersonaProfileDrawer.tsx` slide-over drawer accessible from the chat header; shows persona bio, categorised memory cards, inline add/delete, and a **⚙ Settings** pill link.
+- **In-chat memory auto-save Settings reminder** — when memory chip panel is in *propose* mode a `💡 Auto-save memories automatically from Settings` hint link is shown beneath the chips.
+- **`cleanMemorySuggestion()` helper** — deterministic post-processor in `src/lib/gemini.ts` converts Japanese date/age patterns (`2004年3月16日` → `March 16, 2004`, `20歳` → `20 years old`) and strips trailing Japanese copula from extracted memory suggestions.
+- **Unified `/study` hub** — merged `/vocab` and `/kanji` into a single tabbed page with URL `?tab=` sync and `localStorage` persistence; `/vocab` and `/kanji` redirect for backward compatibility.
+- **Proactive Chat Settings card** — `ProactiveChatCard.tsx` replaces the removed outreach cards for managing Kai chat-initiative preferences.
+- **Capacitor Live OTA Updates** — added `@capgo/capacitor-updater` integration and `CapacitorUpdater` plugin config in `capacitor.config.ts` for automatic background app updates.
+
+### Changed
+
+- **Memory suggestions enforced to English** — `memorySuggestions` system prompt now includes `CRITICAL REQUIREMENT: MUST BE WRITTEN IN CLEAR ENGLISH ONLY`; `cleanMemorySuggestion` applied at parse time and in `MemorySuggestions.tsx` before display and API save.
+- **Navigation logo targets `/`** — `AppNav.tsx` logo now navigates to `/` (landing) instead of `/home`.
+- **Landing page accessible to logged-in users** — removed automatic `if (user) redirect("/chat")` from root `page.tsx`; returns dynamic CTA (*Open Chat* vs *Log In*) based on auth state.
+- **Kanji filter cleanup** — removed redundant *In Reviews / Not in Reviews* filter and unused client-side sort buttons from `KanjiClient.tsx`.
+- **Vocab layout declutter** — embedded progress bar into `PageHeader` subtitle; consolidated filters + sort into one toolbar row; replaced add-word bar with floating **⊕ FAB**.
+- **Vocab status consolidation** — merged *New* into *Learning*; added `Mastery ↑` / `Mastery ↓` sort options.
+- **Quest diversity engine** — `src/lib/quests.ts` upgraded with 4-axis diversity (life domains, scenario slots, interaction friction, rolling title blocklist) to prevent repetitive roleplay themes.
+- **Focus Guard settings permission recheck** — `FocusGuardStatusCard.tsx` now listens to both `visibilitychange` and `window.focus` and always re-checks status on app return, removing the `!hasPermissions` gate.
+- **GitHub Release APK Automation** — updated `.github/workflows/release.yml` so every release tag build compiles and attaches signed `app-release.apk` directly to GitHub Releases.
+
+### Removed
+
+- **Outreach & push notification subsystem** — removed `OutreachCard`, `ReviewNotificationCard`, `ReviewNotificationManager`, `useReviewNotifications`, `src/lib/outreach.ts`, `src/lib/run-outreach.ts`, `src/lib/review-notifications.ts`, `src/lib/push-server.ts`, `/api/cron/outreach`, `/api/settings/outreach`, `/api/push/subscribe`, `/api/triggers/kai-opener`, and associated `vercel.json` cron config.
+- **`/memory` nav item** — removed from primary `NAV_ITEMS`; memory management is now inline in the `PersonaProfileDrawer`.
+
+### Fixed
+
+- **Mobile responsive layout fix for `LandingInteractiveCanvas`** — fixed layout overflow on mobile screens where `flex` was defaulting to row orientation, causing the studio preview frame to squeeze to ~200px width. Converted orbital nodes container to a 2x2 touch-button grid on mobile/tablet (`< lg`), and centered full-width preview frame below it.
+- **`AppUpdateBanner` high-contrast styling overhaul** — fixed illegible, washed-out banner text (`Update available`, `Installed ...`) caused by low opacity on light/dark mode gradients. Redesigned with solid glassmorphic card backdrop (`bg-card/95`), high-contrast `text-foreground` typography, vibrant release badges, and responsive action button layout.
+- **Lint clean** — resolved all ESLint warnings/errors across landing components, `RichText.tsx`, `WordToken.tsx`, `ProactiveChatCard.tsx`, and `StudyClient.tsx`.
+- **Flashcard test suite** — `route.test.ts` mock updated with `userFlashcard.findFirst` to match new route code path; all 281 tests passing.
+
+### Technical
+
+- Modified: `src/lib/gemini.ts`, `src/app/(app)/chat/MemorySuggestions.tsx`, `src/app/(app)/chat/PersonaProfileDrawer.tsx`, `src/app/page.tsx`, `src/app/(app)/nav.ts`, `src/app/(app)/AppNav.tsx`, `src/app/(app)/study/StudyClient.tsx`, `src/app/(app)/vocab/VocabClient.tsx`, `src/app/(app)/kanji/KanjiClient.tsx`, `src/components/AppUpdateBanner.tsx`, `src/app/LandingInteractiveCanvas.tsx`, `.github/workflows/release.yml`, `capacitor.config.ts`, `package.json`
+- New: 8 Landing page components, `PersonaProfileDrawer.tsx`, `ProactiveChatCard.tsx`, `StudyClient.tsx`
+- Deleted: 10 outreach/notification files
+- Tests: 281 passing, 38 suites — fully lint/typecheck clean
+
 ## [1.5.3] - 2026-08-01
 
 ### Changed

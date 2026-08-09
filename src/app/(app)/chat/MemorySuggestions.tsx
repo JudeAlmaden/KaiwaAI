@@ -4,12 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { Brain } from "@phosphor-icons/react/dist/ssr";
 
+import { cleanMemorySuggestion } from "@/lib/gemini";
+
 /** Save a single memory for a persona (null = Kai/default tutor). */
 export async function saveMemory(content: string, personaId: string | null) {
+  const cleaned = cleanMemorySuggestion(content);
   await fetch("/api/memory", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, personaId, category: "fact" }),
+    body: JSON.stringify({ content: cleaned, personaId, category: "fact" }),
   }).catch(() => {});
 }
 
@@ -28,12 +31,13 @@ export default function MemorySuggestions({
   auto: boolean;
   onClear: () => void;
 }) {
+  const cleanedSuggestions = suggestions.map((s) => cleanMemorySuggestion(s));
   // Track per-item state: pending → saved.
   const [saved, setSaved] = useState<Set<string>>(
-    () => new Set(auto ? suggestions : [])
+    () => new Set(auto ? cleanedSuggestions : [])
   );
 
-  if (suggestions.length === 0) return null;
+  if (cleanedSuggestions.length === 0) return null;
 
   async function save(s: string) {
     setSaved((prev) => new Set(prev).add(s));
@@ -48,10 +52,10 @@ export default function MemorySuggestions({
           {auto ? "Saved to memory" : "Remember this?"}
         </span>
         <Link
-          href="/memory"
+          href="/study"
           className="ml-auto text-[11px] font-bold text-indigo-ai/70 underline hover:text-indigo-ai"
         >
-          View memory
+          View study
         </Link>
         <button
           onClick={onClear}
@@ -62,7 +66,7 @@ export default function MemorySuggestions({
         </button>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {suggestions.map((s) => {
+        {cleanedSuggestions.map((s) => {
           const isSaved = saved.has(s);
           return (
             <button
@@ -81,6 +85,14 @@ export default function MemorySuggestions({
           );
         })}
       </div>
+      {!auto && (
+        <p className="mt-1.5 text-[10px] font-semibold text-muted">
+          💡 Auto-save memories automatically from{" "}
+          <Link href="/settings" className="underline font-bold text-indigo-ai hover:text-indigo-soft">
+            Settings
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

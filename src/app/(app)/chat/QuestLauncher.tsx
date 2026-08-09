@@ -129,13 +129,13 @@ export default function QuestLauncher({
       </div>
 
       {/* Theme chips */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
         {QUEST_THEMES.map((t) => (
           <button
             key={t.id}
             onClick={() => handleThemeClick(t.id)}
             disabled={generating}
-            className={`rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 ${
+            className={`shrink-0 rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 ${
               selectedTheme === t.id && (quest || generating) && !customInput.trim()
                 ? "border-indigo-ai bg-indigo-ai/10 text-indigo-ai"
                 : "border-border bg-card text-muted hover:border-indigo-ai hover:text-indigo-ai"
