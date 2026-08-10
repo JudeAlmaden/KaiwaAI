@@ -2,6 +2,21 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.6.1] - 2026-08-10
+
+### Added
+
+- **Swipe-to-reply gestures** — `swipe-reply.ts` enables horizontal swipe detection on chat messages to trigger quote-reply actions
+- **Token selection & repair** — new `token-selection.ts` and `token-repair.ts` utilities for handling furigana-aware text selection and fixing malformed/orphaned ruby tags in chat messages
+- **Enhanced RichText rendering** — improved `RichText.tsx` with better ruby annotation handling, text selection support, and swipe gesture integration
+- **Group chat improvements** — `GroupChatClient.tsx` enhanced with swipe-reply support and better message interaction handling
+
+### Fixed
+
+- **Android build Kotlin compatibility** — resolved Kotlin compiler metadata version conflicts by using Kotlin 2.0.21 with `-Xskip-metadata-version-check` flag
+- **CI/CD workflow reliability** — consolidated Release job into CI workflow using job dependency (`needs: verify`) instead of unreliable `workflow_run` trigger
+- **Gradle memory optimization** — increased heap to 2GB, added `--no-daemon --max-workers=2` flags, and disabled Kotlin incremental compilation to prevent out-of-memory errors during Android APK builds
+
 ## [1.6.0] - 2026-08-10
 
 ### Added

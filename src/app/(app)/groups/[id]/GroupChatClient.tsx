@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/immutability */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -25,6 +26,7 @@ import {
   dropFromConvosCache,
   markConversationSeen,
 } from "@/lib/chat-cache";
+import { replySwipeOffset, shouldReplyFromSwipe } from "@/lib/swipe-reply";
 import {
   loadQuestForConv,
   updateQuestState,
@@ -1053,8 +1055,23 @@ function GroupBubble({
   const [showReply, setShowReply] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
+  const [isSelectingText, setIsSelectingText] = useState(false);
+
+  const handleSelectionModeChange = useCallback((isSelecting: boolean) => {
+    setIsSelectingText(isSelecting);
+    if (isSelecting) {
+      isSwipeTrackingRef.current = false;
+      swipeOffsetRef.current = 0;
+      setIsSwiping(false);
+      setSwipeOffset(0);
+    }
+  }, []);
+
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
+  const isSwipeTrackingRef = useRef(false);
+  const swipeOffsetRef = useRef(0);
+  const suppressTokenClickRef = useRef(false);
   const isPersona = msg.senderKind === "persona";
   const time = timeLabel(new Date(msg.createdAt));
 
@@ -1070,38 +1087,64 @@ function GroupBubble({
 
   // Handle touch events for swipe gesture
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isSelectingText) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    isSwipeTrackingRef.current = true;
+    swipeOffsetRef.current = 0;
+    suppressTokenClickRef.current = false;
     setIsSwiping(true);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
+    if (isSelectingText) return;
+    if (!isSwipeTrackingRef.current) return;
     const touchX = e.touches[0].clientX;
     const touchY = e.touches[0].clientY;
     const deltaX = touchX - touchStartX.current;
     const deltaY = touchY - touchStartY.current;
 
-    // Only swipe horizontally if more horizontal than vertical movement
-    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-      e.preventDefault();
-      // Determine swipe direction based on message position
-      const correctDirection = msg.isMe ? deltaX < 0 : deltaX > 0;
-      if (correctDirection) {
-        const offset = Math.min(Math.abs(deltaX), 80);
-        setSwipeOffset(msg.isMe ? -offset : offset);
-      }
+    const offset = replySwipeOffset({
+      deltaX,
+      deltaY,
+      isOwnMessage: msg.isMe,
+    });
+    if (offset !== 0) {
+      // A completed swipe must not also activate the word button underneath it.
+      suppressTokenClickRef.current = true;
+      swipeOffsetRef.current = offset;
+      setSwipeOffset(offset);
     }
   };
 
   const handleTouchEnd = () => {
+    if (isSelectingText) return;
+    isSwipeTrackingRef.current = false;
     setIsSwiping(false);
-    // If swiped enough (more than 50px), trigger reply
-    if (Math.abs(swipeOffset) > 50) {
+    if (shouldReplyFromSwipe(swipeOffsetRef.current)) {
       onReply();
     }
-    // Animate back to original position
+    // Let the synthetic click fire while this remains true, then restore taps.
+    if (suppressTokenClickRef.current) {
+      setTimeout(() => {
+        suppressTokenClickRef.current = false;
+      }, 250);
+    }
     setTimeout(() => setSwipeOffset(0), 100);
+  };
+
+  const handleTouchCancel = () => {
+    if (isSelectingText) return;
+    isSwipeTrackingRef.current = false;
+    setIsSwiping(false);
+    swipeOffsetRef.current = 0;
+    setSwipeOffset(0);
+  };
+
+  const suppressTokenClickAfterSwipe = (e: React.MouseEvent) => {
+    if (!suppressTokenClickRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   if (msg.isMe) {
@@ -1130,6 +1173,8 @@ function GroupBubble({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchCancel}
+          onClickCapture={suppressTokenClickAfterSwipe}
         >
           <div
             className={`rounded-3xl bg-indigo-ai px-4 py-2.5 text-white shadow-sm ${
@@ -1191,6 +1236,8 @@ function GroupBubble({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
+        onClickCapture={suppressTokenClickAfterSwipe}
       >
         {startGroup && (
           <span
@@ -1213,6 +1260,7 @@ function GroupBubble({
               messageId={msg.id}
               savedWords={savedWords}
               onSavedWord={onSavedWord}
+              onSelectionModeChange={handleSelectionModeChange}
             />
           ) : (
             <p className="font-jp leading-relaxed">{msg.content}</p>

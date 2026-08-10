@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import WordToken from "./WordToken";
 import LookupToken from "./LookupToken";
 import { SelectionLookupPopup } from "./WordToken";
 import { hasFeedback, type CachedToken, type Correction } from "@/lib/types";
+import { repairSplitTokenSurfaces } from "@/lib/token-repair";
+import { moveRangeEdge, rangeText, type RangeEdge, type TokenRange } from "@/lib/token-selection";
 
 const JP_CHAR = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/;
 
@@ -24,9 +27,10 @@ function spaceBetween(prev: string | undefined, curr: string): boolean {
 // ── Selection state types ─────────────────────────────────────────────────────
 
 type SelectionLookup = { text: string; rect: DOMRect } | null;
-type RangeState = { start: number; end: number } | null;
+type HandlePosition = { left: number; top: number };
+type HandlePositions = { start: HandlePosition; end: HandlePosition } | null;
 
-const LONG_PRESS_MS = 400;
+const LONG_PRESS_MS = 450;
 
 /** Renders an AI message body with tap-to-translate tokens, an English toggle,
  *  and a grammar-correction card. Shared by Kai's 1:1 chat and group chats. */
@@ -38,6 +42,7 @@ export function RichKaiText({
   messageId,
   savedWords: externalSavedWords,
   onSavedWord: externalOnSavedWord,
+  onSelectionModeChange,
 }: {
   content: string;
   tokensJson?: string | null;
@@ -46,6 +51,7 @@ export function RichKaiText({
   messageId: string;
   savedWords?: Set<string>;
   onSavedWord?: (word: string) => void;
+  onSelectionModeChange?: (active: boolean) => void;
 }) {
   const [internalSavedWords, setInternalSavedWords] = useState<Set<string>>(new Set());
   const [openToken, setOpenToken] = useState<string | null>(null);
@@ -64,18 +70,34 @@ export function RichKaiText({
   // Desktop text-selection lookup
   const [desktopSelection, setDesktopSelection] = useState<SelectionLookup>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Mobile long-press range selection
-  const [rangeState, setRangeState] = useState<RangeState>(null);
+  const [tokenRange, setTokenRange] = useState<TokenRange | null>(null);
   const [rangeLookup, setRangeLookup] = useState<SelectionLookup>(null);
+  const [handlePositions, setHandlePositions] = useState<HandlePositions>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressTokenClickRef = useRef(false);
+  const activeHandleRef = useRef<RangeEdge | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
+  const handleDragFrame = useRef<number | null>(null);
+  const pendingHandleUpdateRef = useRef<{
+    edge: RangeEdge;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const [isTouch] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
+  );
+
+  useEffect(() => {
+    onSelectionModeChange?.(tokenRange !== null);
+  }, [onSelectionModeChange, tokenRange]);
+
+  useEffect(
+    () => () => onSelectionModeChange?.(false),
+    [onSelectionModeChange]
+  );
+
 
   // Detect coarse pointer (touch device) — initialised lazily so no effect needed
-  const [isMobile] = useState(() =>
-    typeof window !== "undefined"
-      ? window.matchMedia("(pointer: coarse)").matches
-      : false
-  );
 
   // Pre-load user's saved vocabulary on mount only if not provided externally
   useEffect(() => {
@@ -100,6 +122,7 @@ export function RichKaiText({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     function onSelectionChange() {
+      if (isTouch) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         const sel = window.getSelection();
@@ -123,21 +146,16 @@ export function RichKaiText({
       if (timer) clearTimeout(timer);
       document.removeEventListener("selectionchange", onSelectionChange);
     };
-  }, []);
+  }, [isTouch]);
 
   let tokens: CachedToken[] | null = null;
   if (tokensJson) {
-    try { tokens = JSON.parse(tokensJson); } catch { tokens = null; }
+    try {
+      tokens = repairSplitTokenSurfaces(JSON.parse(tokensJson) as CachedToken[]);
+    } catch {
+      tokens = null;
+    }
   }
-
-  // ── Mobile: long-press → range-select ─────────────────────────────────────
-  const startLongPress = useCallback((idx: number) => {
-    longPressTimer.current = setTimeout(() => {
-      if (navigator.vibrate) navigator.vibrate(30);
-      setRangeState({ start: idx, end: idx });
-      setOpenToken(null);
-    }, LONG_PRESS_MS);
-  }, []);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -146,70 +164,221 @@ export function RichKaiText({
     }
   }, []);
 
-  const extendRange = useCallback(
-    (idx: number, toks: CachedToken[]) => {
-      setRangeState((prev) => {
-        if (!prev) return prev;
-        const start = Math.min(prev.start, idx);
-        const end = Math.max(prev.end, idx);
-        const text = toks
-          .slice(start, end + 1)
-          .map((t) => t.surface)
-          .join("")
-          .trim();
-        if (JP_CHAR.test(text)) {
-          const el = document.getElementById(`tok-${messageId}-${idx}`);
-          const rect = el ? el.getBoundingClientRect() : new DOMRect(0, 200, 50, 24);
-          setRangeLookup({ text, rect });
-        }
-        return null;
-      });
+  const startLongPress = useCallback(
+    (index: number) => {
+      if (!isTouch || tokenRange) return;
+      cancelLongPress();
+      longPressTimer.current = setTimeout(() => {
+        suppressTokenClickRef.current = true;
+        window.setTimeout(() => {
+          suppressTokenClickRef.current = false;
+        }, 250);
+        setOpenToken(null);
+        setTokenRange({ start: index, end: index });
+      }, LONG_PRESS_MS);
     },
-    [messageId]
+    [cancelLongPress, isTouch, tokenRange]
   );
 
-  const clearRange = useCallback(() => {
-    setRangeState(null);
+  const clearTokenRange = useCallback(() => {
+    setTokenRange(null);
     setRangeLookup(null);
+    setHandlePositions(null);
   }, []);
 
+  const updateTokenRangeFromPoint = useCallback(
+    (edge: RangeEdge, clientX: number, clientY: number) => {
+      const target = document
+        .elementFromPoint(clientX, clientY)
+        ?.closest<HTMLElement>("[data-token-index]");
+      const index = Number(target?.dataset.tokenIndex);
+      if (!Number.isInteger(index)) return;
+      setTokenRange((current) =>
+        current ? moveRangeEdge(current, edge, index) : current
+      );
+    },
+    []
+  );
+
+  const applyPendingHandleUpdate = useCallback(() => {
+    handleDragFrame.current = null;
+    const pending = pendingHandleUpdateRef.current;
+    pendingHandleUpdateRef.current = null;
+    if (!pending) return;
+    updateTokenRangeFromPoint(pending.edge, pending.clientX, pending.clientY);
+  }, [updateTokenRangeFromPoint]);
+
+  const scheduleHandleUpdate = useCallback(
+    (edge: RangeEdge, clientX: number, clientY: number) => {
+      pendingHandleUpdateRef.current = { edge, clientX, clientY };
+      if (handleDragFrame.current === null) {
+        handleDragFrame.current = requestAnimationFrame(applyPendingHandleUpdate);
+      }
+    },
+    [applyPendingHandleUpdate]
+  );
+
+  const finishHandleDrag = useCallback(() => {
+    if (handleDragFrame.current !== null) {
+      cancelAnimationFrame(handleDragFrame.current);
+      applyPendingHandleUpdate();
+    }
+    activeHandleRef.current = null;
+    activePointerIdRef.current = null;
+  }, [applyPendingHandleUpdate]);
+
+  const beginHandleDrag = useCallback(
+    (edge: RangeEdge, e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.pointerType !== "touch") return;
+      activeHandleRef.current = edge;
+      activePointerIdRef.current = e.pointerId;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    },
+    []
+  );
+
+  const moveHandleDrag = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.pointerId !== activePointerIdRef.current || !activeHandleRef.current) return;
+      scheduleHandleUpdate(activeHandleRef.current, e.clientX, e.clientY);
+      e.stopPropagation();
+    },
+    [scheduleHandleUpdate]
+  );
+
+  const endHandleDrag = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.pointerId !== activePointerIdRef.current) return;
+      scheduleHandleUpdate(activeHandleRef.current!, e.clientX, e.clientY);
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+      finishHandleDrag();
+      e.stopPropagation();
+    },
+    [finishHandleDrag, scheduleHandleUpdate]
+  );
+
+  useEffect(
+    () => () => {
+      if (handleDragFrame.current !== null) cancelAnimationFrame(handleDragFrame.current);
+    },
+    []
+  );
+
+  const updateHandlePositions = useCallback(() => {
+    if (!tokenRange || !containerRef.current) {
+      setHandlePositions(null);
+      return;
+    }
+    const start = containerRef.current.querySelector<HTMLElement>(
+      `[data-token-index="${tokenRange.start}"]`
+    );
+    const end = containerRef.current.querySelector<HTMLElement>(
+      `[data-token-index="${tokenRange.end}"]`
+    );
+    if (!start || !end) {
+      setHandlePositions(null);
+      return;
+    }
+    const startRect = start.getBoundingClientRect();
+    const endRect = end.getBoundingClientRect();
+    setHandlePositions({
+      start: { left: startRect.left - 6, top: startRect.top + startRect.height / 2 },
+      end: { left: endRect.right + 6, top: endRect.top + endRect.height / 2 },
+    });
+  }, [tokenRange]);
+
+  useLayoutEffect(() => {
+    if (!tokenRange) return;
+    updateHandlePositions();
+    let frame: number | null = null;
+    const requestPositionUpdate = () => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        updateHandlePositions();
+      });
+    };
+    window.addEventListener("resize", requestPositionUpdate);
+    window.addEventListener("scroll", requestPositionUpdate, true);
+    return () => {
+      window.removeEventListener("resize", requestPositionUpdate);
+      window.removeEventListener("scroll", requestPositionUpdate, true);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [tokenRange, updateHandlePositions]);
+
+  useEffect(() => {
+    if (!tokenRange) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (activePointerIdRef.current !== null) return;
+      const target = e.target as HTMLElement;
+      if (
+        containerRef.current?.contains(target) ||
+        target.closest("[data-token-selection-ui]")
+      ) {
+        return;
+      }
+      clearTokenRange();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [clearTokenRange, tokenRange]);
+
+  const lookUpTokenRange = useCallback(() => {
+    if (!tokenRange || !tokens) return;
+    const text = rangeText(tokens, tokenRange);
+    if (!JP_CHAR.test(text)) return;
+    const anchor = containerRef.current?.querySelector<HTMLElement>(
+      `[data-token-index="${tokenRange.end}"]`
+    );
+    setRangeLookup({
+      text,
+      rect: anchor?.getBoundingClientRect() ?? new DOMRect(0, 200, 50, 24),
+    });
+    setTokenRange(null);
+    setHandlePositions(null);
+  }, [tokenRange, tokens]);
+
+  // ── Mobile: long-press → range-select ─────────────────────────────────────
   return (
     <>
-      {/* On mobile, disable native text selection so the long-press isn't
-          hijacked by the OS copy toolbar. Desktop keeps native selection. */}
       <div
         ref={containerRef}
-        className={`font-jp text-lg leading-loose${isMobile ? " select-none" : ""}`}
+        className={`font-jp text-lg leading-loose${
+          isTouch ? " select-none [-webkit-touch-callout:none]" : ""
+        }`}
+        onContextMenu={isTouch ? (e) => e.preventDefault() : undefined}
       >
         {tokens && tokens.length > 0 ? (
           tokens.map((t, i) => {
             const key = `${messageId}-${i}`;
-            const inRange =
-              rangeState !== null && i >= rangeState.start && i <= rangeState.end;
+            const selected =
+              tokenRange !== null && i >= tokenRange.start && i <= tokenRange.end;
             return (
               <span key={i}>
                 {spaceBetween(tokens![i - 1]?.surface, t.surface) ? " " : ""}
                 <span
-                  id={`tok-${messageId}-${i}`}
-                  className={inRange ? "rounded bg-indigo-ai/20" : ""}
-                  onTouchStart={isMobile ? () => startLongPress(i) : undefined}
-                  onTouchEnd={isMobile ? cancelLongPress : undefined}
-                  onTouchCancel={isMobile ? cancelLongPress : undefined}
-                  onClick={
-                    rangeState !== null && isMobile
-                      ? () => extendRange(i, tokens!)
-                      : undefined
-                  }
+                  data-token-index={i}
+                  className={`relative inline-block align-baseline rounded ${
+                    selected ? "bg-indigo-ai/20" : ""
+                  }`}
+                  onTouchStart={isTouch ? () => startLongPress(i) : undefined}
+                  onTouchMove={isTouch ? cancelLongPress : undefined}
+                  onTouchEnd={isTouch ? cancelLongPress : undefined}
+                  onTouchCancel={isTouch ? cancelLongPress : undefined}
                 >
                   <WordToken
                     token={t}
                     sourceMessageId={messageId}
                     savedWords={savedWords}
                     onSaved={handleSaved}
-                    isOpen={openToken === key && rangeState === null}
+                    isOpen={openToken === key && tokenRange === null}
                     onToggle={() => {
-                      if (rangeState === null)
-                        setOpenToken((cur) => (cur === key ? null : key));
+                      if (tokenRange !== null || suppressTokenClickRef.current) return;
+                      setOpenToken((cur) => (cur === key ? null : key));
                     }}
                     vocabLoaded={vocabLoaded}
                   />
@@ -229,14 +398,43 @@ export function RichKaiText({
         )}
       </div>
 
-      {/* Mobile range-mode hint banner */}
-      {rangeState !== null && (
-        <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-indigo-ai/30 bg-indigo-ai/5 px-3 py-1.5">
-          <span className="text-xs text-indigo-ai">
-            ✦ Tap another word to look up the selection
+      {isTouch && tokenRange && handlePositions && typeof document !== "undefined" &&
+        createPortal(
+          <div data-token-selection-ui>
+            <RangeHandle
+              edge="start"
+              position={handlePositions.start}
+              onStart={beginHandleDrag}
+              onMove={moveHandleDrag}
+              onEnd={endHandleDrag}
+            />
+            <RangeHandle
+              edge="end"
+              position={handlePositions.end}
+              onStart={beginHandleDrag}
+              onMove={moveHandleDrag}
+              onEnd={endHandleDrag}
+            />
+          </div>,
+          document.body
+        )}
+
+      {tokenRange && tokens && (
+        <div
+          data-token-selection-ui
+          className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-ai/30 bg-indigo-ai/5 px-3 py-2"
+        >
+          <span className="text-xs font-semibold text-indigo-ai">
+            Drag the arrows to select words
           </span>
           <button
-            onClick={clearRange}
+            onClick={lookUpTokenRange}
+            className="rounded-full bg-indigo-ai px-3 py-1 text-xs font-bold text-white"
+          >
+            Look up {rangeText(tokens, tokenRange)}
+          </button>
+          <button
+            onClick={clearTokenRange}
             className="ml-auto text-xs font-bold text-muted hover:text-foreground"
           >
             Cancel
@@ -261,17 +459,46 @@ export function RichKaiText({
         />
       )}
 
-      {/* Mobile: range tap popup */}
       {rangeLookup && (
         <SelectionLookupPopup
           text={rangeLookup.text}
           anchorRect={rangeLookup.rect}
           savedWords={savedWords}
           onSaved={handleSaved}
-          onClose={clearRange}
+          onClose={clearTokenRange}
         />
       )}
+
     </>
+  );
+}
+
+function RangeHandle({
+  edge,
+  position,
+  onStart,
+  onMove,
+  onEnd,
+}: {
+  edge: RangeEdge;
+  position: HandlePosition;
+  onStart: (edge: RangeEdge, e: React.PointerEvent<HTMLButtonElement>) => void;
+  onMove: (e: React.PointerEvent<HTMLButtonElement>) => void;
+  onEnd: (e: React.PointerEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`Drag ${edge} of selected words`}
+      className="fixed z-[10000] flex h-7 w-5 touch-none items-center justify-center rounded-full bg-indigo-ai text-xs font-black text-white shadow-lg"
+      style={{ left: position.left, top: position.top, transform: "translate(-50%, -50%)" }}
+      onPointerDown={(e) => onStart(edge, e)}
+      onPointerMove={onMove}
+      onPointerUp={onEnd}
+      onPointerCancel={onEnd}
+    >
+      {edge === "start" ? "‹" : "›"}
+    </button>
   );
 }
 

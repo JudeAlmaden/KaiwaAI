@@ -5,6 +5,7 @@ import type { KaiResponse } from "./types";
 import { normalizeCorrection } from "./types";
 import { getModel, getMaxOutputTokens, getAutoFallback, modelFallbackOrder } from "./model-config";
 import { keysForRequest, hasAnyKey } from "./api-keys";
+import { repairSplitTokenSurfaces } from "./token-repair";
 
 export type PromptContext = {
   level: string;
@@ -356,6 +357,8 @@ export function repairSplitTokens(parsed: KaiResponse): void {
       i++;
     }
   }
+
+  parsed.tokens = repairSplitTokenSurfaces(parsed.tokens);
 }
 
 /** Shared request loop: try each model, rotate keys on rate limit, parse the

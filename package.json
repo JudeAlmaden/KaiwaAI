@@ -1,6 +1,6 @@
 {
   "name": "kaiwaai",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "scripts": {
     "postinstall": "prisma generate --schema prisma/schema.prisma",
