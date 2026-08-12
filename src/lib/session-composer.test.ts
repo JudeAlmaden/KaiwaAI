@@ -20,7 +20,7 @@ describe("session-composer", () => {
     lastReviewedAt: overrides.lastReviewedAt ?? null,
   });
 
-  it("should compose session with 40% active and 60% maintenance", () => {
+  it("should compose session with 50% active and 50% maintenance", () => {
     const now = new Date();
     const past = new Date(now.getTime() - 1000 * 60 * 60 * 24); // 1 day ago
 
@@ -28,8 +28,8 @@ describe("session-composer", () => {
       // Active pool (new cards)
       createCard({ id: "new-1", repetitions: 0, easeFactor: 2.5, interval: 0, nextReview: now }),
       createCard({ id: "new-2", repetitions: 0, easeFactor: 2.5, interval: 0, nextReview: now }),
-      // Active pool (struggling cards)
-      createCard({ id: "struggle-1", repetitions: 2, easeFactor: 2.0, interval: 5, nextReview: past }),
+      // Active pool (struggling cards: easeFactor < 2.2 AND interval < 3)
+      createCard({ id: "struggle-1", repetitions: 2, easeFactor: 2.0, interval: 2, nextReview: past }),
       // Maintenance pool (due cards)
       createCard({ id: "due-1", repetitions: 5, easeFactor: 2.5, interval: 10, nextReview: past }),
       createCard({ id: "due-2", repetitions: 4, easeFactor: 2.6, interval: 15, nextReview: past }),
@@ -39,8 +39,8 @@ describe("session-composer", () => {
     const { session, activeCards, maintenanceCards } = composeSession(cards, 5);
 
     expect(session.length).toBe(5);
-    expect(activeCards.length).toBe(2); // 40% of 5 = 2
-    expect(maintenanceCards.length).toBe(3); // 60% of 5 = 3
+    expect(activeCards.length).toBe(3); // 50% of 5 = 3
+    expect(maintenanceCards.length).toBe(2); // 50% of 5 = 2
 
     // Active cards should be in the active pool
     expect(activeCards.every(c => 
@@ -156,10 +156,10 @@ describe("session-composer", () => {
     );
 
     const { activeCards: active10 } = composeSession(cards, 10);
-    expect(active10.length).toBe(4); // 40% of 10
+    expect(active10.length).toBe(5); // 50% of 10
 
     const { activeCards: active20 } = composeSession(cards, 20);
-    expect(active20.length).toBe(8); // 40% of 20
+    expect(active20.length).toBe(10); // 50% of 20
   });
 
   it("should exclude recently reviewed cards from maintenance pool", () => {
@@ -208,7 +208,7 @@ describe("session-composer", () => {
     // Use larger session size to get all 3 active cards
     const { activeCards } = composeSession(cards, 8);
 
-    // All three should be in active pool (40% of 8 = 3)
+    // All three should be in active pool (50% of 8 = 4)
     expect(activeCards.length).toBe(3);
     
     // New cards should be included (repetitions = 0)

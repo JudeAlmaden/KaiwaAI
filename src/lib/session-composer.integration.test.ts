@@ -63,8 +63,10 @@ describe("session-composer integration with app blocker", () => {
       const { session, activeCards, maintenanceCards } = composeSession(cards, 50);
 
       expect(session.length).toBe(50);
-      expect(activeCards.length).toBe(20); // 40% of 50 = 20
-      expect(maintenanceCards.length).toBe(30); // 60% of 50 = 30
+      // 50% target for active, but we only have 20 eligible new cards so we cap there
+      // and overflow uses maintenance fill to reach 50 total
+      expect(activeCards.length).toBe(20);
+      expect(maintenanceCards.length).toBe(25);
     });
 
     it("should handle empty card pool gracefully", () => {
@@ -127,10 +129,10 @@ describe("session-composer integration with app blocker", () => {
 
       const { session, activeCards } = composeSession(cards, 10);
 
-      // All new cards go to active pool (40% = 4 cards for session of 10)
-      // But since there are no maintenance cards, we get only active cards
+      // All new cards go to active pool (50% = 5 cards for session of 10)
+      // But since there are no maintenance cards, overflowActive fills the rest in session
       expect(session.length).toBeGreaterThan(0);
-      expect(activeCards.length).toBe(4); // 40% of 10
+      expect(activeCards.length).toBe(5); // 50% target of 10
       expect(activeCards.every(card => card.repetitions === 0)).toBe(true);
     });
 
@@ -227,9 +229,9 @@ describe("session-composer integration with app blocker", () => {
 
       const { session, activeCards } = composeSession(cards, 5);
 
-      // With only new cards, we get active pool only (40% = 2)
+      // With only new cards, we get 50% target in activeCards (3), overflowActive fills session
       expect(session.length).toBeGreaterThan(0);
-      expect(activeCards.length).toBe(2); // 40% of 5
+      expect(activeCards.length).toBe(3); // 50% target of 5
     });
   });
 
@@ -286,9 +288,9 @@ describe("session-composer integration with app blocker", () => {
 
       const { session, activeCards } = composeSession(cards, 5);
 
-      // All new cards, so only active pool
+      // All new cards, so activeCards hits the 50% target (3); overflow fills session
       expect(session.length).toBeGreaterThan(0);
-      expect(activeCards.length).toBe(2); // 40% of 5
+      expect(activeCards.length).toBe(3); // 50% target of 5
       // Practice mode doesn't affect card selection, only grading
     });
   });

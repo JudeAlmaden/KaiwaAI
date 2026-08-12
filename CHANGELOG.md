@@ -2,6 +2,24 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.6.2] - 2026-08-13
+
+### Changed
+
+- **Unified token tap-to-lookup + draggable range handles (`/chat`)** — All devices (desktop & mobile) now use the same interaction model: tap a word token to open the inline popup and enter range-selection mode with draggable start/end arrow handles. Removed the separate desktop-only drag-highlight popup. Range toolbar shows cached preview and a **Look up** action for multi-word phrases.
+- **Popup click-outside reliability** — Dismiss detection switched from `mousedown` to `pointerdown` with capture phase; added 400 ms grace period after open to prevent the opening tap from closing the popup; `anchorRef` clicks excluded from dismiss; range UI marked with `data-token-selection-ui` to avoid triggering close.
+- **Context-aware Gemini word lookups** — `lookupWord(query, context?)` accepts full message content; system prompt now includes the surrounding sentence for more accurate definitions and natural example sentences; `SelectionLookupPopup` receives `messageContent` from both token-range and selection paths.
+
+### Added
+
+- **Token selection display utilities** — `src/lib/token-selection.ts` gained `truncateText(text, maxLen)` for toolbar/popup headers, `extractJapaneseSelection(text)` for stripping English noise from lookups, and `selectionAnchorRect(range)` for anchoring popups to selection endpoints. Unit tests added in `token-selection.test.ts`.
+
+### Fixed
+
+- **SelectionLookupPopup loading state** — Replaced raw truncated text header with a compact "Looking up…" state during loading; furigana/word shown once lookup completes.
+- **Session composer recency handling** — Adjusted Maintenance Pool recency filter threshold and test assertions for consistent session composition behavior.
+- **Review route SRS submission** — `flashcards/review` and `kanji/review` API routes updated with correct response type handling.
+
 ## [1.6.1] - 2026-08-10
 
 ### Added

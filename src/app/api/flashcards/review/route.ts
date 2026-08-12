@@ -106,7 +106,7 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
-    // Compose session: 40% active (focused learning), 60% maintenance (retention)
+    // Compose session: 50% active (focused learning), 50% maintenance (retention)
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
     const { session } = composeSession(allCards, limit, ignoreDueDate);
     cards = session;

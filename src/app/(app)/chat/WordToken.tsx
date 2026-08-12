@@ -8,6 +8,7 @@ import { formLabel } from "@/lib/form-label";
 import Furigana from "../review/Furigana";
 import { lookupWord, type LookupResult } from "@/lib/gemini";
 import { hasAnyKey } from "@/lib/api-keys";
+import { truncateText } from "@/lib/token-selection";
 
 type SaveState = "idle" | "saving" | "saved" | "exists" | "merged";
 
@@ -99,27 +100,53 @@ function PopupPortal({
   pos,
   children,
   onClose,
+  selectionUi = false,
+  anchorRef,
 }: {
   pos: PopupPos;
   children: React.ReactNode;
   onClose: () => void;
+  selectionUi?: boolean;
+  /** Button/anchor that opened the popup — clicks on it must not close. */
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const openedAtRef = useRef(0);
 
   useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    const t = setTimeout(() => document.addEventListener("mousedown", handle), 0);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener("mousedown", handle);
-    };
+    onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    openedAtRef.current = performance.now();
+
+    function handle(e: Event) {
+      // Ignore the same tap/click gesture that opened the popup (80ms grace is plenty;
+      // we use capture phase so we fire before onClick handlers).
+      if (performance.now() - openedAtRef.current < 80) return;
+
+      const target = e.target as Node;
+      if (ref.current?.contains(target)) return;
+      if (anchorRef?.current?.contains(target)) return;
+      if ((target as HTMLElement).closest?.("[data-token-selection-ui]")) return;
+      onCloseRef.current();
+    }
+
+    const timer = setTimeout(() => {
+      document.addEventListener("pointerdown", handle, true);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("pointerdown", handle, true);
+    };
+  }, [anchorRef]);
 
   const el = (
     <div
       ref={ref}
+      data-token-selection-ui={selectionUi || undefined}
       style={{
         position: "fixed",
         top: pos.top,
@@ -191,7 +218,7 @@ function SubWordChip({
       </button>
 
       {open && pos && (
-        <PopupPortal pos={pos} onClose={() => setOpen(false)}>
+        <PopupPortal pos={pos} onClose={() => setOpen(false)} anchorRef={btnRef}>
           <div className="p-3">
             <div className="font-jp text-base font-bold">
               {token.surface !== token.reading ? (
@@ -529,6 +556,7 @@ export default function WordToken({
   onSaved,
   isOpen,
   onToggle,
+  onClose,
 }: {
   token: CachedToken;
   sourceMessageId?: string;
@@ -536,10 +564,12 @@ export default function WordToken({
   onSaved: (word: string) => void;
   isOpen: boolean;
   onToggle: () => void;
+  onClose?: () => void;
   vocabLoaded?: boolean;
 }) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<PopupPos | null>(null);
+  const closePopup = onClose ?? onToggle;
 
   // Recalculate position whenever the popup opens
   useEffect(() => {
@@ -586,25 +616,25 @@ export default function WordToken({
       </button>
 
       {isOpen && pos && (
-        <PopupPortal pos={pos} onClose={onToggle}>
+        <PopupPortal pos={pos} onClose={closePopup} selectionUi anchorRef={btnRef}>
           <div className="p-4">
             {/* Header */}
-            <div className="font-jp text-3xl font-bold text-foreground leading-tight">
+            <div className="font-jp text-3xl font-bold text-foreground leading-tight break-words min-w-0" title={token.surface !== token.reading ? token.surface : token.reading}>
               {token.surface !== token.reading ? (
-                <Furigana word={token.surface} reading={token.reading} className="text-3xl" size="normal" />
+                <Furigana word={truncateText(token.surface, 16)} reading={truncateText(token.reading, 24)} className="text-3xl" size="normal" />
               ) : (
-                token.reading
+                truncateText(token.reading, 16)
               )}
             </div>
             {token.surface !== token.dictForm && (
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-amber">
-                Using: {token.surface} → Base form: {token.dictForm}
+              <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-amber break-words">
+                Using: {truncateText(token.surface, 20)} → Base form: {truncateText(token.dictForm, 20)}
               </div>
             )}
-            <div className="text-xs text-muted mt-0.5">{token.romaji}</div>
-            <div className="mt-1.5 text-sm font-semibold text-indigo-ai">{token.meaning}</div>
-            <div className="mt-0.5 text-[10px] uppercase tracking-widest text-muted">
-              {token.pos}
+            <div className="text-xs text-muted mt-0.5 truncate" title={token.romaji}>{truncateText(token.romaji ?? "", 40)}</div>
+            <div className="mt-1.5 text-sm font-semibold text-indigo-ai break-words" title={token.meaning}>{truncateText(token.meaning, 120)}</div>
+            <div className="mt-0.5 text-[10px] uppercase tracking-widest text-muted truncate" title={token.pos}>
+              {truncateText(token.pos, 40)}
             </div>
 
             {/* ── PHRASE ────────────────────────────────────────────────── */}
@@ -695,6 +725,8 @@ export function SelectionLookupPopup({
   savedWords,
   onSaved,
   onClose,
+  messageContent,
+  singleWord = false,
 }: {
   /** The selected Japanese text to look up */
   text: string;
@@ -703,20 +735,27 @@ export function SelectionLookupPopup({
   savedWords: Set<string>;
   onSaved: (w: string) => void;
   onClose: () => void;
+  messageContent?: string;
+  /** True when the selection is a single token (we can trust the single-word dict match). */
+  singleWord?: boolean;
 }) {
   const [aiResult, setAiResult] = useState<LookupResult | null>(null);
   const [dictLookup, setDictLookup] = useState<WordLookupResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [errorKind, setErrorKind] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
   useEffect(() => {
     let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
     // Batch reset via microtask so we don't call setState synchronously in effect body
     Promise.resolve().then(() => {
       if (cancelled) return;
       setLoading(true);
       setFailed(false);
+      setErrorKind(null);
       setAiResult(null);
       setDictLookup(null);
     });
@@ -724,36 +763,70 @@ export function SelectionLookupPopup({
     async function fetchDefinition() {
       const cleanSearchText = text.trim();
 
-      // 1. Try DB lookup first for exact word / phrase matches
-      try {
-        const params = new URLSearchParams({
-          dictForm: cleanSearchText,
-          surface: cleanSearchText,
-        });
-        const res = await fetch(`/api/dictionary/lookup?${params}`);
-        if (res.ok) {
-          const data: WordLookupResult = await res.json();
-          if (!cancelled) {
-            const hasRealMeaning =
-              data.type === "word" ||
-              (data.type === "phrase" &&
-                data.phrase.meanings.length > 0 &&
-                data.phrase.meanings[0] !== "(no definition)");
-            if (hasRealMeaning) {
-              setDictLookup(data);
-              setLoading(false);
-              return;
+      // 1. Try DB lookup first — only if single-word selection.
+      //    For multi-word ranges skip exact surface word fallback because the surface
+      //    lookup can incorrectly match just the first word of a multi-word span.
+      if (singleWord) {
+        try {
+          const params = new URLSearchParams({
+            dictForm: cleanSearchText,
+            surface: cleanSearchText,
+          });
+          const res = await fetch(`/api/dictionary/lookup?${params}`);
+          if (res.ok) {
+            const data: WordLookupResult = await res.json();
+            if (!cancelled) {
+              const hasRealMeaning =
+                data.type === "word" ||
+                (data.type === "phrase" &&
+                  data.phrase.meanings.length > 0 &&
+                  data.phrase.meanings[0] !== "(no definition)");
+              if (hasRealMeaning) {
+                setDictLookup(data);
+                setLoading(false);
+                return;
+              }
             }
           }
+        } catch {
+          // Ignore DB lookup failure and proceed to AI lookup
         }
-      } catch {
-        // Ignore DB lookup failure and proceed to AI lookup
+      } else {
+          try {
+            const params = new URLSearchParams({
+              dictForm: cleanSearchText,
+              surface: cleanSearchText,
+            });
+            const res = await fetch(`/api/dictionary/lookup?${params}`);
+            if (res.ok) {
+              const data: WordLookupResult = await res.json();
+              if (!cancelled) {
+                // Only accept DB match if it's an exact phrase match on the full text.
+                const isExactPhrase =
+                  data.type === "phrase" &&
+                  data.phrase.text === cleanSearchText &&
+                  data.phrase.meanings.length > 0 &&
+                  data.phrase.meanings[0] !== "(no definition)";
+                if (isExactPhrase) {
+                  setDictLookup(data);
+                  setLoading(false);
+                  return;
+                }
+              }
+            }
+          } catch {
+            // fall through to AI
+          }
       }
 
       // 2. Call Gemini AI lookup for multi-word phrases, sentences, or unknown words
       if (hasAnyKey()) {
         try {
-          const res = await lookupWord(cleanSearchText);
+          const res = await lookupWord(
+            cleanSearchText,
+            messageContent,
+            singleWord ? "word" : "phrase",
+          );
           if (!cancelled) {
             setAiResult(res);
             setLoading(false);
@@ -761,6 +834,13 @@ export function SelectionLookupPopup({
           }
         } catch (e) {
           console.error("Selection AI lookup error:", e);
+          const msg = e instanceof Error ? e.message : "";
+          if (!cancelled) {
+            if (msg === "RATE_LIMIT") setErrorKind("RATE_LIMIT");
+            else if (msg === "BAD_API_KEY") setErrorKind("BAD_API_KEY");
+            else if (msg === "NO_API_KEY") setErrorKind("NO_API_KEY");
+            else setErrorKind("OTHER");
+          }
         }
       }
 
@@ -770,11 +850,14 @@ export function SelectionLookupPopup({
       }
     }
 
-    void fetchDefinition();
+    debounceTimer = setTimeout(() => {
+      void fetchDefinition();
+    }, 150);
     return () => {
       cancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, [text]);
+  }, [text, messageContent, singleWord]);
 
   const handleSaveAI = async () => {
     if (!aiResult) return;
@@ -806,13 +889,33 @@ export function SelectionLookupPopup({
     }
   };
 
+  const dictMeanings = dictLookup
+    ? dictLookup.type === "word"
+      ? dictLookup.word.meanings.join("; ")
+      : dictLookup.phrase.meanings.join("; ")
+    : "";
+  const dictReading = dictLookup
+    ? dictLookup.type === "word"
+      ? dictLookup.word.reading
+      : dictLookup.phrase.reading
+    : null;
+  const dictDictForm = dictLookup
+    ? dictLookup.type === "word"
+      ? dictLookup.word.dictionary
+      : dictLookup.phrase.text
+    : null;
+
   const syntheticToken: CachedToken = {
     surface: text,
-    reading: aiResult?.reading ?? text,
+    reading: dictReading ?? aiResult?.reading ?? text,
     romaji: aiResult?.romaji ?? text,
-    meaning: aiResult?.meaning ?? "",
-    pos: (aiResult?.pos as unknown as CachedToken["pos"]) ?? "phrase",
-    dictForm: aiResult?.word ?? text,
+    meaning: (dictMeanings || aiResult?.meaning) ?? "",
+    pos: (dictLookup?.type === "word"
+      ? (dictLookup.word.partOfSpeech as CachedToken["pos"])
+      : dictLookup?.type === "phrase"
+        ? (dictLookup.phrase.partOfSpeech as CachedToken["pos"])
+        : (aiResult?.pos as CachedToken["pos"])) ?? "phrase",
+    dictForm: dictDictForm ?? aiResult?.word ?? text,
     words: [],
   };
 
@@ -836,40 +939,68 @@ export function SelectionLookupPopup({
     : { bottom: (typeof window !== "undefined" ? window.innerHeight : 800) - anchorRect.top + GAP, left, maxHeight: Math.min(POPUP_MAX_H, spaceAbove) };
 
   return (
-    <PopupPortal pos={pos} onClose={onClose}>
+    <PopupPortal pos={pos} onClose={onClose} selectionUi>
       <div className="p-4">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-ai/70">
-            Selected Text
-          </div>
+        <div className="flex items-start justify-between gap-2">
+          {loading ? (
+            <div className="flex items-center gap-2 text-sm font-semibold text-indigo-ai">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-ai border-t-transparent" />
+              Looking up…
+            </div>
+          ) : (
+            <div className="font-jp text-2xl font-bold text-foreground leading-snug break-words min-w-0 flex-1" title={dictLookup?.type==="word" ? dictLookup.word.dictionary : dictLookup?.type==="phrase" ? dictLookup.phrase.text : (aiResult?.word || text)}>
+              {aiResult?.reading && (aiResult.word || text) !== aiResult.reading ? (
+                <Furigana
+                  word={truncateText(aiResult.word || text, 24)}
+                  reading={truncateText(aiResult.reading, 24)}
+                  className="text-2xl"
+                  size="normal"
+                />
+              ) : dictLookup?.type === "word" ? (
+                truncateText(dictLookup.word.dictionary, 24)
+              ) : dictLookup?.type === "phrase" ? (
+                truncateText(dictLookup.phrase.text, 24)
+              ) : (
+                truncateText(aiResult?.word || text, 32)
+              )}
+            </div>
+          )}
           <button
             onClick={onClose}
             className="shrink-0 rounded-full p-1 text-muted hover:bg-border/40 hover:text-foreground transition-colors"
+            aria-label="Close lookup"
           >
             ✕
           </button>
         </div>
 
-        {/* Selected Surface */}
-        <div className="font-jp text-xl font-bold text-foreground leading-snug break-words">
-          {aiResult?.reading && aiResult.reading !== text ? (
-            <Furigana word={text} reading={aiResult.reading} className="text-xl" size="normal" />
-          ) : (
-            text
-          )}
-        </div>
-
-        {loading && (
-          <div className="mt-3 flex items-center gap-2 text-xs font-bold text-indigo-ai animate-pulse">
-            <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-ai border-t-transparent" />
-            Generating definition with AI…
-          </div>
-        )}
-
         {failed && !loading && (
-          <div className="mt-3 rounded-xl border border-amber/30 bg-amber/5 p-2.5 text-xs text-amber">
-            Could not retrieve definition. Check your API key in Settings.
+          <div className="mt-3 rounded-xl p-2.5 text-xs">
+            {errorKind === "RATE_LIMIT" ? (
+              <div className="rounded-xl border border-amber/30 bg-amber/5 p-2.5 text-amber">
+                <span className="font-bold">Rate limit hit.</span> Google Gemini is
+                temporarily throttling requests. Wait a few seconds and tap
+                <span className="font-semibold"> Look up</span> again, or close and
+                reselect the text.
+              </div>
+            ) : errorKind === "BAD_API_KEY" ? (
+              <div className="rounded-xl border border-sakura/30 bg-sakura/5 p-2.5 text-sakura">
+                <span className="font-bold">Invalid API key.</span> Double-check your
+                Gemini key in <span className="font-semibold">Settings → API Keys</span>
+                and make sure it hasn&apos;t expired or been restricted.
+              </div>
+            ) : errorKind === "NO_API_KEY" ? (
+              <div className="rounded-xl border border-amber/30 bg-amber/5 p-2.5 text-amber">
+                <span className="font-bold">No API key set.</span> Add your Google
+                Gemini key in <span className="font-semibold">Settings → API Keys</span>
+                to enable AI-powered lookups for phrases and unknown words.
+              </div>
+            ) : (
+              <div className="rounded-xl border border-amber/30 bg-amber/5 p-2.5 text-amber">
+                Could not retrieve definition. Check your API key in Settings or
+                try again in a moment.
+              </div>
+            )}
           </div>
         )}
 
@@ -884,14 +1015,14 @@ export function SelectionLookupPopup({
         {!loading && aiResult && !dictLookup && (
           <div className="mt-3 space-y-2">
             {aiResult.romaji && (
-              <div className="text-xs text-muted italic">{aiResult.romaji}</div>
+              <div className="text-xs text-muted italic truncate" title={aiResult.romaji}>{truncateText(aiResult.romaji, 48)}</div>
             )}
-            <div className="text-sm font-bold text-indigo-ai leading-relaxed">
-              {aiResult.meaning}
+            <div className="text-sm font-bold text-indigo-ai leading-relaxed break-words" title={aiResult.meaning}>
+              {truncateText(aiResult.meaning, 240)}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded bg-indigo-ai/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-ai">
-                {aiResult.pos}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="rounded bg-indigo-ai/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-ai truncate max-w-[60%]" title={aiResult.pos}>
+                {truncateText(aiResult.pos, 24)}
               </span>
               <span className="rounded bg-sakura/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sakura">
                 AI Translate
@@ -900,9 +1031,13 @@ export function SelectionLookupPopup({
 
             {aiResult.example && (
               <div className="mt-2 rounded-xl bg-surface/50 p-2.5 text-xs border border-border/50">
-                <div className="font-jp font-semibold text-foreground">{aiResult.example}</div>
+                <div className="font-jp font-semibold text-foreground break-words" title={aiResult.example}>
+                  {truncateText(aiResult.example, 60)}
+                </div>
                 {aiResult.exampleEn && (
-                  <div className="text-muted text-[11px] mt-0.5">{aiResult.exampleEn}</div>
+                  <div className="text-muted text-[11px] mt-0.5 break-words" title={aiResult.exampleEn}>
+                    {truncateText(aiResult.exampleEn, 80)}
+                  </div>
                 )}
               </div>
             )}

@@ -65,7 +65,7 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
-    // Compose session: 40% active, 60% maintenance
+    // Compose session: 50% active, 50% maintenance
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
     const { session } = composeSession(allKanji, limit, ignoreDueDate);
     userKanji = session;

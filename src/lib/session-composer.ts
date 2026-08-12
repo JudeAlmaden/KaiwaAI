@@ -17,12 +17,12 @@ interface SessionComposition<T extends Card> {
 /**
  * Composes a review session from active (focused learning) and maintenance (retention) pools.
  * 
- * Active pool: 40% of session
+ * Active pool: 50% of session
  *   - Priority: All new cards (repetitions === 0) first
  *   - Then: Weak cards (easeFactor < 2.2 AND interval < 3)
  *   - Sorted deterministically: easeFactor → repetitions → createdAt (all asc)
  * 
- * Maintenance pool: 60% of session
+ * Maintenance pool: 50% of session
  *   - Criteria: nextReview <= now AND lastReviewedAt < now - 1 hour
  *   - Avoids recently seen cards to prevent immediate repetition
  *   - Sorted by nextReview asc, then shuffled for variety
@@ -45,9 +45,9 @@ export function composeSession<T extends Card>(
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-  // Calculate pool sizes (40% active, 60% maintenance)
-  const activeCount = Math.max(1, Math.round(sessionSize * 0.4));
-  const maintenanceCount = sessionSize - activeCount;
+  // Calculate pool sizes (50% active, 50% maintenance — target, not a hard cap)
+  const activeTarget = Math.max(1, Math.round(sessionSize * 0.5));
+  const maintenanceTarget = sessionSize - activeTarget;
 
   // Split cards into pools
   const activePool: T[] = [];
@@ -77,27 +77,61 @@ export function composeSession<T extends Card>(
     }
   }
 
-  // Active pool is already sorted by caller
-  // (easeFactor asc, repetitions asc, createdAt asc)
-  const selectedActive = activePool.slice(0, activeCount);
+  // Take up to each target from its pool (still honoring 50/50 split when pools are large)
+  const selectedActive = activePool.slice(0, activeTarget);
   const activeIds = new Set(selectedActive.map(c => c.id));
 
   // Maintenance pool: exclude active cards, then shuffle
   const eligibleMaintenance = maintenancePool.filter(c => !activeIds.has(c.id));
   shuffleArray(eligibleMaintenance);
-  const selectedMaintenance = eligibleMaintenance.slice(0, maintenanceCount);
+  const selectedMaintenance = eligibleMaintenance.slice(0, maintenanceTarget);
+
+  // Build pools of "overflow" cards beyond the 50/50 targets, still eligible for use
+  // to fill the session up to sessionSize (so the user doesn't get a truncated queue
+  // when sufficient cards exist but the 50/50 split isn't perfectly achievable).
+  const overflowActive = activePool
+    .slice(activeTarget)
+    .filter(c => !activeIds.has(c.id));
+  const overflowMaintenance = eligibleMaintenance.slice(maintenanceTarget);
 
   // Compose session: [A1, M1, A2, M2, M3, ...]
-  // Interleave active and maintenance for better spacing
+  // Interleave active and maintenance for better spacing.
+  // When the primary selections run out, draw from overflow pools (active first, then
+  // maintenance) until sessionSize is reached or no more cards are available.
   const session: T[] = [];
   let aIdx = 0, mIdx = 0;
+  let aOverIdx = 0, mOverIdx = 0;
 
   for (let i = 0; i < sessionSize; i++) {
-    // Pattern: A, M, A, M, M, M... (active cards come first when possible)
-    if (aIdx < selectedActive.length && (i % 2 === 0 || mIdx >= selectedMaintenance.length)) {
-      session.push(selectedActive[aIdx++]);
-    } else if (mIdx < selectedMaintenance.length) {
-      session.push(selectedMaintenance[mIdx++]);
+    const primaryA = aIdx < selectedActive.length;
+    const primaryM = mIdx < selectedMaintenance.length;
+    const overA = aOverIdx < overflowActive.length;
+    const overM = mOverIdx < overflowMaintenance.length;
+
+    if (!primaryA && !primaryM && !overA && !overM) break;
+
+    const wantActive = i % 2 === 0 || (!primaryM && !overM);
+
+    if (wantActive) {
+      if (primaryA) {
+        session.push(selectedActive[aIdx++]);
+      } else if (overA) {
+        session.push(overflowActive[aOverIdx++]);
+      } else if (primaryM) {
+        session.push(selectedMaintenance[mIdx++]);
+      } else if (overM) {
+        session.push(overflowMaintenance[mOverIdx++]);
+      }
+    } else {
+      if (primaryM) {
+        session.push(selectedMaintenance[mIdx++]);
+      } else if (overM) {
+        session.push(overflowMaintenance[mOverIdx++]);
+      } else if (primaryA) {
+        session.push(selectedActive[aIdx++]);
+      } else if (overA) {
+        session.push(overflowActive[aOverIdx++]);
+      }
     }
   }
 
