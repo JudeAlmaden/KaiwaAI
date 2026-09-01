@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pkgPath = resolve(ROOT, "package.json");
-const envPath = resolve(ROOT, ".env.local");
+const envPath = resolve(ROOT, ".env");
+const gradlePath = resolve(ROOT, "android/app/build.gradle");
 
 const KEY_LINE_PREFIX = "NEXT_PUBLIC_APP_VERSION=";
 
@@ -49,5 +50,40 @@ function rewriteEnv() {
   writeFileSync(envPath, out, "utf8");
 }
 
+function computeVersionCode(v) {
+  const parts = v.split(".").map((p) => parseInt(p, 10) || 0);
+  const major = parts[0] || 0;
+  const minor = parts[1] || 0;
+  const patch = parts[2] || 0;
+  return major * 10000 + minor * 100 + patch;
+}
+
+function rewriteAndroidGradle() {
+  if (!existsSync(gradlePath)) return;
+  const raw = readFileSync(gradlePath, "utf8");
+  const calculatedCode = computeVersionCode(version);
+
+  let updated = raw.replace(
+    /versionName\s+"[^"]*"/,
+    `versionName "${version}"`
+  );
+
+  const existingCodeMatch = raw.match(/versionCode\s+(\d+)/);
+  const currentCode = existingCodeMatch ? parseInt(existingCodeMatch[1], 10) : 1;
+  const nextCode = Math.max(currentCode, calculatedCode);
+
+  updated = updated.replace(
+    /versionCode\s+\d+/,
+    `versionCode ${nextCode}`
+  );
+
+  if (updated !== raw) {
+    writeFileSync(gradlePath, updated, "utf8");
+    console.log(`Updated android/app/build.gradle -> versionName: "${version}", versionCode: ${nextCode}`);
+  }
+}
+
 rewriteEnv();
+rewriteAndroidGradle();
 console.log(`Wrote NEXT_PUBLIC_APP_VERSION=${version} into ${envPath}`);
+

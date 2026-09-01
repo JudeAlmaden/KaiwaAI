@@ -6,7 +6,6 @@ import { Sidebar, BottomTabs, MobileTopBar } from "./AppNav";
 import OnboardingCheck from "@/components/OnboardingCheck";
 import OfflineBanner from "@/components/OfflineBanner";
 import AppUpdateBanner from "@/components/AppUpdateBanner";
-import AppUpdateModal from "@/components/AppUpdateModal";
 
 export default async function AppLayout({
   children,
@@ -32,7 +31,6 @@ export default async function AppLayout({
   return (
     <div className="flex h-dvh overflow-hidden">
       <OnboardingCheck />
-      <AppUpdateModal />
       <Sidebar email={user.email} streak={streak} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

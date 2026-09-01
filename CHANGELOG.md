@@ -2,6 +2,31 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.7.1] - 2026-09-01
+
+### Added
+- **Automated Android version sync** — `scripts/write-app-version-env.mjs` now synchronizes `versionName` and increments `versionCode` in `android/app/build.gradle` automatically on `predev`, `prebuild`, and `cap:sync`.
+- **Smart semantic version resolution** — In-app update checker fetches release lists and sorts by true semver, ensuring the highest released version is selected regardless of GitHub release publish dates.
+- **Settings Mobile & Releases view on PC** — Enabled the Mobile settings tab across web/desktop to view installed and latest release status and access direct APK downloads.
+
+### Changed
+- **Instant update checking** — Replaced the 6-hour cache in `useAppUpdates` with immediate automatic background revalidation on app load.
+- **GitHub Actions changelog extraction** — Replaced brittle `awk` parsing with a robust Node.js parser in `.github/workflows/ci.yml` so GitHub Releases automatically include full changelog notes.
+
+### Removed
+- **Intrusive update pop-up modal** — Removed `AppUpdateModal` to eliminate disruptive auto-popping update dialogs.
+- **Dashboard clutter** — Removed duplicate mobile download card from the Home dashboard (`HomeClient.tsx`), keeping the home screen focused on study activity.
+- **Manual recheck button** — Removed redundant manual recheck trigger in favor of seamless background checks.
+
+### Fixed
+- **Android APK version mismatch** — Fixed desynchronization where native Android builds reported stale `versionName`, causing the app to falsely report updates available.
+- **Empty GitHub release notes** — Fixed release creation workflow where bracketed version headings in `CHANGELOG.md` caused empty release descriptions.
+
+### Technical
+- Modified: `package.json`, `android/app/build.gradle`, `scripts/write-app-version-env.mjs`, `src/lib/app-updates.ts`, `src/hooks/useAppUpdates.ts`, `src/components/AppUpdateBanner.tsx`, `src/app/(app)/layout.tsx`, `src/app/(app)/home/HomeClient.tsx`, `src/app/(app)/settings/SettingsClient.tsx`, `.github/workflows/ci.yml`
+- Deleted: `src/components/AppUpdateModal.tsx`
+- Tests: 300 passing (41 test files) — lint/typecheck clean
+
 ## [1.7.0] - 2026-09-01
 
 ### Added

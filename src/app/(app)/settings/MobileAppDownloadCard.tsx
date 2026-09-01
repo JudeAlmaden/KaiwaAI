@@ -24,7 +24,7 @@ export default function MobileAppDownloadCard() {
             {downloaded ? (
               <DeviceMobileCamera size={28} weight="duotone" />
             ) : (
-                <GithubLogo size={28} weight="duotone" />
+              <GithubLogo size={28} weight="duotone" />
             )}
           </div>
           <div className="min-w-0 flex-1">

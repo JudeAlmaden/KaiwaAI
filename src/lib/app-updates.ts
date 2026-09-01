@@ -106,15 +106,8 @@ function findReleaseAssetApk(release: {
 }
 
 export async function fetchLatestRelease(signal?: AbortSignal): Promise<LatestRelease> {
-  const res = await fetch(GITHUB_LATEST_URL, {
-    signal,
-    headers: { Accept: "application/vnd.github+json" },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`GitHub releases API error: ${res.status} ${res.statusText}`);
-  }
-  const r = (await res.json()) as {
+  const listUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=10`;
+  let r: {
     tag_name: string;
     name?: string | null;
     body?: string | null;
@@ -124,6 +117,39 @@ export async function fetchLatestRelease(signal?: AbortSignal): Promise<LatestRe
     published_at?: string | null;
     assets?: Array<{ browser_download_url?: string; name?: string }>;
   };
+
+  try {
+    const listRes = await fetch(listUrl, {
+      signal,
+      headers: { Accept: "application/vnd.github+json" },
+      cache: "no-store",
+    });
+    if (listRes.ok) {
+      const releases = (await listRes.json()) as typeof r[];
+      if (Array.isArray(releases) && releases.length > 0) {
+        // Filter out drafts and sort by semantic version descending
+        const valid = releases.filter((rel) => !rel.draft);
+        valid.sort((a, b) => semverCompare(b.tag_name, a.tag_name));
+        if (valid.length > 0) {
+          r = valid[0];
+        }
+      }
+    }
+  } catch {
+    /* fallback to latest endpoint */
+  }
+
+  if (!r!) {
+    const res = await fetch(GITHUB_LATEST_URL, {
+      signal,
+      headers: { Accept: "application/vnd.github+json" },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`GitHub releases API error: ${res.status} ${res.statusText}`);
+    }
+    r = (await res.json()) as typeof r;
+  }
 
   const apkUrl = findReleaseAssetApk(r);
   const fallbackApkUrl = `${r.html_url}/download/${r.tag_name}/${APK_BASENAME}`;

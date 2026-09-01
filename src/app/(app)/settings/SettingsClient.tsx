@@ -8,7 +8,7 @@ import ProactiveChatCard from "./ProactiveChatCard";
 import UserSettingsTab from "./UserSettingsTab";
 import AppBlockerSettings from "./app-blocker/page";
 import LearningResetCard from "./LearningResetCard";
-
+import MobileAppDownloadCard from "./MobileAppDownloadCard";
 import { Capacitor } from "@capacitor/core";
 
 type Tab = "user" | "ai" | "learning" | "mobile";
@@ -32,7 +32,7 @@ export default function SettingsClient({ email }: { email: string }) {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex flex-1 items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 ${
+            className={`flex flex-1 items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               tab === t.id
                 ? "bg-indigo-ai text-white shadow-sm"
                 : "text-muted hover:bg-indigo-ai/5 hover:text-foreground"
@@ -67,6 +67,7 @@ export default function SettingsClient({ email }: { email: string }) {
       {/* Mobile Tab */}
       {tab === "mobile" && (
         <div className="flex flex-col gap-5">
+          <MobileAppDownloadCard />
           {(isAndroid || process.env.NEXT_PUBLIC_APP_BLOCKER_DEBUG === "true" || process.env.NODE_ENV === "development") && (
             <AppBlockerSettings />
           )}

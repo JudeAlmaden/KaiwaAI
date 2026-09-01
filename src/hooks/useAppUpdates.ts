@@ -10,11 +10,9 @@ import {
   type UpdateStatus,
 } from "@/lib/app-updates";
 
-const CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6h between automated checks
 const LAST_CHECK_KEY = "kaiwa:app-updates:last-check";
 const CACHED_LATEST_KEY = "kaiwa:app-updates:cached-latest";
 const DISMISSED_VERSION_KEY = "kaiwa:app-updates:dismissed-version";
-const MODAL_SEEN_FOR_VERSION_KEY = "kaiwa:app-updates:modal-seen-version";
 
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -37,9 +35,6 @@ function writeJSON(key: string, value: unknown): void {
 export interface UseAppUpdatesResult extends UpdateStatus {
   dismiss: () => void;
   refresh: () => Promise<void>;
-  modalOpen: boolean;
-  openModal: () => void;
-  closeModal: (opts?: { rememberAsSeen?: boolean }) => void;
 }
 
 export function useAppUpdates({
@@ -61,12 +56,7 @@ export function useAppUpdates({
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(() =>
     typeof window === "undefined" ? null : localStorage.getItem(DISMISSED_VERSION_KEY)
   );
-  const [modalSeenVersion, setModalSeenVersion] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : localStorage.getItem(MODAL_SEEN_FOR_VERSION_KEY)
-  );
-  const [modalOpen, setModalOpen] = useState<boolean>(false);
   const abortRef = useRef<AbortController | null>(null);
-  const autoOpenedThisVersionRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,27 +73,17 @@ export function useAppUpdates({
     };
   }, []);
 
-  const runCheck = async (opts: { force?: boolean } = {}): Promise<void> => {
-    if (installed.platform === "web") {
-      return; // Plain browser users don't need APK update checks; use GitHub UI
+  const runCheck = async (): Promise<void> => {
+    // Show cached result immediately if available to prevent UI delay
+    const cached = readJSON<LatestRelease | null>(CACHED_LATEST_KEY, null);
+    if (cached) {
+      setLatest(cached);
+      setStatus(
+        isUpdateAvailable(installed.version, cached.version) ? "update-available" : "up-to-date"
+      );
+    } else {
+      setStatus("loading");
     }
-
-    const now = Date.now();
-    const lastCheck = Number(localStorage.getItem(LAST_CHECK_KEY)) || 0;
-    const due = opts.force || force || now - lastCheck > CHECK_INTERVAL_MS;
-
-    if (!due) {
-      const cached = readJSON<LatestRelease | null>(CACHED_LATEST_KEY, null);
-      if (cached) {
-        setLatest(cached);
-        setStatus(
-          isUpdateAvailable(installed.version, cached.version) ? "update-available" : "up-to-date"
-        );
-      }
-      return;
-    }
-
-    setStatus("loading");
     setError(null);
 
     abortRef.current?.abort();
@@ -121,7 +101,8 @@ export function useAppUpdates({
       if (err instanceof Error && err.name === "AbortError") return;
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
-      setStatus("error");
+      // Only mark status as error if we don't already have cached release info
+      if (!cached) setStatus("error");
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
     }
@@ -148,38 +129,6 @@ export function useAppUpdates({
     setDismissedVersion(latest.version);
   };
 
-  const openModal = (): void => {
-    if (installed.platform === "web") return;
-    setModalOpen(true);
-  };
-
-  const closeModal = (opts: { rememberAsSeen?: boolean } = {}): void => {
-    setModalOpen(false);
-    if (opts.rememberAsSeen !== false && latest) {
-      localStorage.setItem(MODAL_SEEN_FOR_VERSION_KEY, latest.version);
-      setModalSeenVersion(latest.version);
-    }
-  };
-
-  // Auto-pop the modal exactly once per new update version per install.
-  // If the user already dismissed the banner for this version, skip auto-pop too.
-  useEffect(() => {
-    if (installed.platform === "web") return;
-    if (!latest) return;
-    if (status !== "update-available") return;
-    if (dismissedVersion === latest.version) return;
-    if (modalSeenVersion === latest.version) return;
-    if (autoOpenedThisVersionRef.current) return;
-    autoOpenedThisVersionRef.current = true;
-    const t = window.setTimeout(() => setModalOpen(true), 900);
-    return () => window.clearTimeout(t);
-  }, [installed.platform, latest, status, dismissedVersion, modalSeenVersion]);
-
-  // If version changes (new update arrives later), allow the new one to auto-pop again.
-  useEffect(() => {
-    autoOpenedThisVersionRef.current = false;
-  }, [latest?.version]);
-
   const returnStatus: UpdateStatus["status"] = (() => {
     if (latest && isUpdateAvailable(installed.version, latest.version)) {
       return dismissedVersion === latest.version ? "up-to-date" : "update-available";
@@ -193,9 +142,6 @@ export function useAppUpdates({
     latest,
     error,
     dismiss,
-    refresh: () => runCheck({ force: true }),
-    modalOpen,
-    openModal,
-    closeModal,
+    refresh: () => runCheck(),
   } satisfies UseAppUpdatesResult;
 }

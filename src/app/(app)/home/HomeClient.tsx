@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ChatCircleText, Cards, BookOpen, Lightbulb, Sparkle, ArrowRight, CheckCircle } from "@phosphor-icons/react";
 import Kai from "../../Kai";
 import Petals from "../../Petals";
-import MobileAppDownloadCard from "../settings/MobileAppDownloadCard";
 
 type Stats = {
   name: string | null;
@@ -220,9 +219,6 @@ export default function HomeClient() {
             </div>
           </div>
         </div>
-
-        {/* ── 5. MOBILE APP DOWNLOAD ── */}
-        <MobileAppDownloadCard />
 
       </div>
     </div>

@@ -1,6 +1,6 @@
 {
   "name": "kaiwaai",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "scripts": {
     "postinstall": "prisma generate --schema prisma/schema.prisma",
@@ -19,7 +19,7 @@
     "regenerate:words": "node scripts/regenerate-word-csvs.mjs",
     "restore:flashcards": "npx tsx scripts/restore-flashcards.ts",
     "migrate:phrases": "npx tsx scripts/migrate-to-phrases.ts",
-    "cap:sync": "npx cap sync",
+    "cap:sync": "node scripts/write-app-version-env.mjs && npx cap sync",
     "cap:android": "npx cap open android",
     "cap:run:android": "npx cap run android"
   },

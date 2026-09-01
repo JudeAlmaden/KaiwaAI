@@ -263,11 +263,26 @@ jobs:
         if: steps.version_check.outputs.skip != 'true'
         id: changelog
         run: |
-          VERSION="${{ steps.ver.outputs.version }}"
-          CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '$d' | tail -n +2)
-          echo "content<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          node -e '
+            const fs = require("fs");
+            const ver = process.argv[1];
+            const text = fs.readFileSync("CHANGELOG.md", "utf8");
+            const startHeader = "## [" + ver + "]";
+            const startIndex = text.indexOf(startHeader);
+            let result = "";
+            if (startIndex !== -1) {
+              const afterStart = text.slice(startIndex + startHeader.length);
+              const nextHeaderIndex = afterStart.search(/\n## \[/);
+              const section = nextHeaderIndex === -1 ? afterStart : afterStart.slice(0, nextHeaderIndex);
+              result = section.replace(/^[^\n]*\n+/, "").trim();
+            }
+            const output = [
+              "content<<EOF",
+              result || ("KaiwaAI release v" + ver),
+              "EOF"
+            ].join("\n");
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, output + "\n");
+          ' "${{ steps.ver.outputs.version }}"
 
       - name: Create GitHub Release with APK
         if: steps.version_check.outputs.skip != 'true'

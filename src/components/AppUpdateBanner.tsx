@@ -62,23 +62,17 @@ export default function AppUpdateBanner() {
 }
 
 export function AppUpdateIndicatorCompact() {
-  const { status, installed, latest, refresh, openModal } = useAppUpdates({
+  const { status, installed, latest } = useAppUpdates({
     autoCheck: true,
   });
 
-  if (installed.platform === "web") {
-    return (
-      <div className="flex items-center gap-2 text-xs text-muted">
-        <CheckCircle size={14} weight="fill" className="text-emerald-500" />
-        <span>Checking for updates is only available in the Android app.</span>
-      </div>
-    );
-  }
-
+  const isWeb = installed.platform === "web";
   const tag = latest?.tagName || "—";
-  const installedLabel = installed.build
-    ? `${installed.version} (b${installed.build})`
-    : installed.version;
+  const installedLabel = isWeb
+    ? `${installed.version} (Web)`
+    : installed.build
+      ? `${installed.version} (b${installed.build})`
+      : installed.version;
 
   return (
     <div className="space-y-2 text-xs">
@@ -90,27 +84,22 @@ export function AppUpdateIndicatorCompact() {
         <span>
           Latest:{" "}
           <strong className="font-semibold text-foreground">
-            {status === "loading" ? "Checking…" : tag}
+            {status === "loading" && !latest ? "Checking…" : tag}
           </strong>
         </span>
-        <span aria-hidden className="opacity-50">•</span>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-0.5 font-semibold text-muted/90 transition-all hover:border-indigo-ai/40 hover:text-foreground disabled:opacity-50"
-          disabled={status === "loading"}
-        >
-          <ArrowsDownUp size={12} weight="bold" />
-          Recheck
-        </button>
-        {status === "update-available" && (
-          <button
-            type="button"
-            onClick={() => openModal()}
-            className="inline-flex items-center gap-1 rounded-lg bg-indigo-ai/15 px-2 py-0.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 transition-all hover:bg-indigo-ai/25"
-          >
-            View update screen
-          </button>
+        {status === "update-available" && latest && (
+          <>
+            <span aria-hidden className="opacity-50">•</span>
+            <a
+              href={latest.apkUrl || latest.htmlUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg bg-indigo-ai/15 px-2 py-0.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 transition-all hover:bg-indigo-ai/25"
+            >
+              <DownloadSimple size={12} weight="bold" />
+              Download APK
+            </a>
+          </>
         )}
       </div>
       <div className="flex items-center gap-2">
