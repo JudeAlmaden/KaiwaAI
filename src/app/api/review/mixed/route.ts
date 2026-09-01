@@ -93,8 +93,11 @@ export async function GET(req: Request) {
     const vocabSession = composeSession(allVocab, Math.ceil(limit / 2), ignoreDueDate);
     const kanjiSession = composeSession(allKanji, Math.ceil(limit / 2), ignoreDueDate);
 
-    vocabCards = vocabSession.session;
-    userKanji = kanjiSession.session;
+    const vocabMaintenanceIds = new Set(vocabSession.maintenanceCards.map((c) => c.id));
+    const kanjiMaintenanceIds = new Set(kanjiSession.maintenanceCards.map((c) => c.id));
+
+    vocabCards = vocabSession.session.map((c) => ({ ...c, _isMaintenance: vocabMaintenanceIds.has(c.id) }));
+    userKanji = kanjiSession.session.map((c) => ({ ...c, _isMaintenance: kanjiMaintenanceIds.has(c.id) }));
   } else {
     // Legacy behavior for struggling/leeches/all modes
     const orderBy =
@@ -168,6 +171,7 @@ export async function GET(req: Request) {
       meaning,
       partOfSpeech,
       status: card.status,
+      _pool: (card as typeof card & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
     };
   });
 
@@ -181,6 +185,7 @@ export async function GET(req: Request) {
     readingsKun: JSON.parse(uk.kanji.readingsKun),
     mnemonic: uk.mnemonic,
     status: uk.status,
+    _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
   }));
 
   // Combine and shuffle

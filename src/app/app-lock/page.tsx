@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { AppBlocker } from '@/plugins/app-blocker';
-import type { BlockerStudyMode, BlockerNoDueAction, AppBlockerConfig } from '@/plugins/app-blocker/definitions';
+import type { BlockerStudyMode, AppBlockerConfig } from '@/plugins/app-blocker/definitions';
 import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
+import { FALLBACK_OFFLINE_CARDS } from '@/lib/fallback-cards';
 import Kai from '@/app/Kai';
 import ReviewCard, { Card } from '@/app/(app)/review/ReviewCard';
 import OfflineBanner from '@/components/OfflineBanner';
@@ -47,9 +48,19 @@ export default function StandaloneAppLockPage() {
       await grantUnlock().catch(() => {});
     }
 
-    if (pkg && !isWeb) {
+    let targetPkg = pkg;
+    if (!isWeb) {
+      try {
+        const config = await AppBlocker.getAppBlockerConfig().catch(() => null);
+        if (config?.lastBlockedPackage) {
+          targetPkg = config.lastBlockedPackage;
+        }
+      } catch {}
+    }
+
+    if (targetPkg && !isWeb) {
       setTimeout(() => {
-        AppBlocker.launchApp({ packageName: pkg }).catch(() => {});
+        AppBlocker.launchApp({ packageName: targetPkg! }).catch(() => {});
       }, 300);
     }
 
@@ -149,7 +160,6 @@ export default function StandaloneAppLockPage() {
         const urlReviewType = params.get('reviewType') as AppBlockerConfig['reviewType'] | null;
         const urlStudyMode = params.get('studyMode') as BlockerStudyMode | null;
         const urlPractice = params.get('practice');
-        const urlNoDue = params.get('noDueAction') as BlockerNoDueAction | null;
         const urlDirection = params.get('direction') as Direction | null;
 
         let savedConfig: AppBlockerConfig | null = null;
@@ -163,8 +173,6 @@ export default function StandaloneAppLockPage() {
         const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'all';
         const practiceEnabled: boolean =
           urlPractice !== null ? urlPractice === '1' || urlPractice === 'true' : (savedConfig?.practice ?? false);
-        const noDueActionResolved: BlockerNoDueAction =
-          urlNoDue ?? savedConfig?.noDueAction ?? 'autoOpen';
         const direction: Direction = urlDirection ?? (savedConfig?.direction as Direction | undefined | null) ?? 'jp-to-en';
         const urlEarlyStrategy = params.get('earlyReviewStrategy') as 'practice' | 'proportional' | null;
         const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? 'practice';
@@ -188,7 +196,7 @@ export default function StandaloneAppLockPage() {
         let pulledCards = await fetchCards(reviewType, studyMode);
         if (cancelled) return;
 
-        // Offline: network error — let them pass
+        // Offline or unvalidated network error — auto-unlock and pass through immediately
         if ('offline' in pulledCards && pulledCards.offline) {
           if (!cancelled) {
             setInitResult({ kind: 'auto-unlocked' });
@@ -198,34 +206,19 @@ export default function StandaloneAppLockPage() {
           return;
         }
 
-        // If no cards returned, honor noDueAction — but on web always try 'all' first
+        // If no cards returned (logged out / 0 cards in DB)
         if ((pulledCards as Card[]).length === 0) {
-          if (!isWeb && noDueActionResolved === 'autoOpen') {
-            setInitResult({ kind: 'auto-unlocked' });
-            setLoading(false);
+          if (!isWeb) {
+            // Auto-unlock immediately on native if user is logged out or has no cards
+            if (!cancelled) {
+              setInitResult({ kind: 'auto-unlocked' });
+              setLoading(false);
+            }
             finishUnlock(pkg);
             return;
           }
-          // On web, or when noDueAction=studyAny: retry with all cards
-          const fallbackResult = await fetchCards(reviewType, 'all');
-          if (cancelled) return;
-
-          if ('offline' in fallbackResult && fallbackResult.offline) {
-            // Offline on retry — let them pass
-            setInitResult({ kind: 'auto-unlocked' });
-            setLoading(false);
-            finishUnlock(pkg);
-            return;
-          }
-
-          const fallbackCards = fallbackResult as Card[];
-          if (!cancelled && fallbackCards.length === 0) {
-            // Nothing at all — nothing to review
-            setInitResult({ kind: 'session' });
-            setLoading(false);
-            return;
-          }
-          pulledCards = fallbackCards;
+          // On web/preview: use offline fallback cards
+          pulledCards = FALLBACK_OFFLINE_CARDS;
         }
 
         setCards(
@@ -352,6 +345,13 @@ export default function StandaloneAppLockPage() {
         <p className="text-sm text-muted max-w-xs leading-relaxed mb-6">
           Add vocabulary or kanji cards to use Focus Guard.
         </p>
+        <button
+          type="button"
+          onClick={() => finishUnlock(blockedPackage)}
+          className="w-full max-w-xs h-12 rounded-2xl bg-indigo-ai text-white font-bold text-sm shadow-sm hover:brightness-105 transition active:translate-y-[2px] flex items-center justify-center gap-2"
+        >
+          🚀 Launch App &amp; Unlock
+        </button>
       </div>
     );
   }

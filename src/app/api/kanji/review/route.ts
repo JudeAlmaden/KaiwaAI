@@ -67,8 +67,9 @@ export async function GET(req: Request) {
 
     // Compose session: 50% active, 50% maintenance
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
-    const { session } = composeSession(allKanji, limit, ignoreDueDate);
-    userKanji = session;
+    const { session, maintenanceCards } = composeSession(allKanji, limit, ignoreDueDate);
+    const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
+    userKanji = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
   } else {
     // Legacy behavior for struggling/leeches/all modes
     const orderBy =
@@ -98,6 +99,7 @@ export async function GET(req: Request) {
     radicals: JSON.parse(uk.kanji.radicals),
     mnemonic: uk.mnemonic, // User's custom mnemonic
     status: uk.status,
+    _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
   }));
 
   return NextResponse.json({ cards });

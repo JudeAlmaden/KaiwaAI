@@ -2,6 +2,28 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.7.0] - 2026-09-01
+
+### Added
+- **Maintenance pool furigana suppression** — Vocabulary and phrase cards from the maintenance pool (retention phase) now hide furigana ruby annotations on the front face, requiring active memory recall while keeping full furigana on the answer reveal.
+- **Offline & unvalidated connection bypass** — App Blocker checks verified internet connectivity (`NET_CAPABILITY_VALIDATED`) across Wi-Fi, Mobile Data, and Ethernet, skipping app blocking when offline or connected to networks without internet access.
+- **Emergency app unlock escape** — Added a direct "🚀 Launch App & Unlock" action on empty / offline review screens to prevent lock loops when logged out or when no cards are due.
+- **Shared fallback flashcards** — Created `src/lib/fallback-cards.ts` providing baseline offline vocabulary cards.
+
+### Changed
+- **Session composer review API routes** — `/api/flashcards/review`, `/api/kanji/review`, and `/api/review/mixed` now tag each returned card with `_pool: "active" | "maintenance"` metadata.
+- **App Blocker cold-start launch** — Staggered navigation retries and full query parameter matching ensure opening a blocked app from a closed state navigates directly into `/app-lock`.
+
+### Fixed
+- **App switcher stale package bug** — Switching between blocked apps (e.g. Facebook to YouTube) now dynamically re-navigates and persists `last_blocked_package`, launching the latest app upon session completion.
+- **Launcher drop on cold start** — Removed destructive task clear flags in `AppMonitorService` to prevent returning to the Android home screen instead of the review session.
+
+### Technical
+- Modified: `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/app-lock/page.tsx`, `android/app/src/main/java/com/kaiwaai/app/NetworkUtils.kt`, `android/app/src/main/java/com/kaiwaai/app/AppMonitorService.kt`, `android/app/src/main/java/com/kaiwaai/app/MainActivity.kt`, `android/app/src/main/java/com/kaiwaai/app/AppBlockerPlugin.kt`, `src/plugins/app-blocker/definitions.ts`
+- New: `src/lib/fallback-cards.ts`, `.agents/DESIGN.md`, `.agents/APP_BLOCKER.md`, `.agents/MOBILE_SETUP.md`, `.agents/LIVE_UPDATES_GUIDE.md`, `.agents/flashcard-session-composer/`
+- Deleted: `.kiro/`, `documentation/`
+- Tests: 300 passing (41 test files) — lint clean
+
 ## [1.6.2] - 2026-08-13
 
 ### Changed

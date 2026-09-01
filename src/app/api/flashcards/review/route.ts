@@ -108,8 +108,9 @@ export async function GET(req: Request) {
 
     // Compose session: 50% active (focused learning), 50% maintenance (retention)
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
-    const { session } = composeSession(allCards, limit, ignoreDueDate);
-    cards = session;
+    const { session, maintenanceCards } = composeSession(allCards, limit, ignoreDueDate);
+    const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
+    cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
   } else {
     // Legacy behavior for struggling/leeches/all modes
     const orderBy =
@@ -186,6 +187,7 @@ export async function GET(req: Request) {
       nextReview: card.nextReview,
       lastReviewedAt: card.lastReviewedAt,
       createdAt: card.createdAt,
+      _pool: (card as typeof card & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
     };
   });
 

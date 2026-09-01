@@ -203,6 +203,14 @@ class AppMonitorService : Service() {
                 lastInterceptTime = currentTime
 
                 val isConnected = NetworkUtils.isNetworkAvailable(this)
+                if (!isConnected) {
+                    Log.d(TAG, "🌐 No verified internet connection available (Wi-Fi or Mobile Data without active internet). Skipping app block for $lastAppPackage.")
+                    return
+                }
+
+                // Persist the freshest blocked package
+                prefs.edit().putString("last_blocked_package", lastAppPackage).apply()
+
                 val targetCount = prefs.getInt("flashcard_requirement", 10)
                 val reviewType = prefs.getString("review_type", "vocabulary") ?: "vocabulary"
                 val direction = prefs.getString("direction", "jp-to-en") ?: "jp-to-en"
@@ -213,15 +221,12 @@ class AppMonitorService : Service() {
 
                 Log.i(TAG, "🚨 BLOCKING DETECTED: $lastAppPackage | Online: $isConnected | Requirement: $targetCount cards ($reviewType/$direction/$studyMode) practice=$practiceMode noDue=$noDueAction")
 
-                // 1. KICK THE BLOCKED APP OUT TO HOME SCREEN IMMEDIATELY
-                //    Do this on main thread with FLAG_ACTIVITY_CLEAR_TASK so ActivityManager actually
-                //    finishes the blocked task before we bring KaiwaAI forward.
+                // 1. Kick the blocked app to background
                 handler.post {
                     try {
                         val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                             addCategory(Intent.CATEGORY_HOME)
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
                                     Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
                         }
                         startActivity(homeIntent)

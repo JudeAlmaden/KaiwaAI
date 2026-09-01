@@ -21,6 +21,7 @@ export interface AppBlockerConfig {
   practice: boolean; // If true, don't update SRS / learning status
   noDueAction: BlockerNoDueAction;
   earlyReviewStrategy?: BlockerEarlyReviewStrategy;
+  lastBlockedPackage?: string;
 }
 
 export interface AppBlockerPlugin {

@@ -32,6 +32,7 @@ export type Card = {
   radicals?: string[];
   mnemonic?: string;
   status?: "new" | "learning" | "known";
+  _pool?: "active" | "maintenance";
 };
 
 export const GRADES = [
@@ -116,7 +117,7 @@ export default function ReviewCard({
                 <>
                   <SpeakerButton text={card.word || ""} />
                   <span className="font-bold font-jp text-5xl">
-                    {card.word && card.reading ? (
+                    {card.word && card.reading && card._pool !== "maintenance" ? (
                       <Furigana word={card.word} reading={card.reading} className="text-5xl" />
                     ) : (
                       card.word

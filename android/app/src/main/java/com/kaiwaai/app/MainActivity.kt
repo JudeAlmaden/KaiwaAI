@@ -49,13 +49,18 @@ class MainActivity : BridgeActivity() {
             return
         }
 
-        bridge.webView?.post {
-            val escapedRoute = route.replace("'", "\\'")
-            val escapedPathname = pathname.replace("'", "\\'")
-            bridge.webView?.evaluateJavascript(
-                "if (window.location.pathname !== '$escapedPathname') { window.location.href = '$escapedRoute'; }",
-                null
-            )
+        val prefs = getSharedPreferences("AppBlocker", MODE_PRIVATE)
+        prefs.edit().putString("pending_route", route).apply()
+
+        val escapedRoute = route.replace("'", "\\'")
+        val navigateJs = "(function() { var cur = window.location.pathname + window.location.search; if (cur !== '$escapedRoute') { window.location.href = '$escapedRoute'; } })()"
+
+        // Post immediate and staggered retries to ensure WebView handles navigation even if still loading on cold start
+        val attempts = listOf(0L, 350L, 900L, 1600L)
+        attempts.forEach { delay ->
+            bridge.webView?.postDelayed({
+                bridge.webView?.evaluateJavascript(navigateJs, null)
+            }, delay)
         }
     }
 

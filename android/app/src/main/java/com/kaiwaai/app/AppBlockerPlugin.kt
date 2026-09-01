@@ -148,6 +148,7 @@ class AppBlockerPlugin : Plugin() {
             put("practice", prefs.getBoolean("practice_mode", false))
             put("noDueAction", prefs.getString("no_due_action", "autoOpen") ?: "autoOpen")
             put("earlyReviewStrategy", prefs.getString("early_review_strategy", "practice") ?: "practice")
+            put("lastBlockedPackage", prefs.getString("last_blocked_package", null))
             put("hasUsageStatsPermission", hasUsageStats)
             put("hasOverlayPermission", hasOverlay)
             put("monitoringActive", serviceRunning)
