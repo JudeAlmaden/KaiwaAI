@@ -2,6 +2,34 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [1.8.0] - 2026-09-19
+
+### Added
+- **Focus Guard: Session Re-Queue ("Again") logic** — Pressing "Again" now re-inserts the card 2 positions ahead in the same session instead of counting it as completed. Cards failed during a session cycle back after 2 other cards, enabling true within-session drilling without prematurely unlocking the blocked app.
+- **Focus Guard: Session Composer** — New `session-composer.ts` utility splits the card pool into an active-learning pool (new/weak cards) and a maintenance-retention pool, interleaved as `[A1, M1, A2, M2, ...]` for optimal spacing.
+- **Focus Guard: Deck Balance setting** — New "Learning vs Retention" control in Edit Rules modal with presets: 50/50 Balanced, 70/30 New Focus, 100% Learning. Configures the `learningRatio` sent to the session composer.
+- **Focus Guard: Furigana Mode (3-way)** — Expanded from a binary toggle to three modes: Always (always show ruby), Mastered Off (hide on known/mastered cards, show on learning), Never (clean kanji, maximum challenge). Stored as `furiganaMode` in `AppBlockerConfig`.
+- **Focus Guard Furigana toggle** — Added an option in Focus Guard Interception Rules settings to enable or disable furigana reading annotations on flashcards during app interception.
+- **Distraction-free kanji recall** — When Furigana is disabled, flashcards display clean kanji characters on the front face without reading ruby annotations, preventing reading spoilers during active recall.
+- **Configurable Furigana persistence** — Added `showFurigana` property to `AppBlockerConfig` in TypeScript and Android SharedPreferences (`show_furigana`), maintaining settings across reboots and app launches.
+- **Debug preview parameter support** — DebugFab's "Open App Lock Page →" now propagates `showFurigana` to the `/app-lock` preview route.
+
+### Changed
+- **ReviewCard furigana rendering** — `ReviewCard` now accepts `showFurigana?: boolean` (default: `true`), conditionally omitting ruby annotations when disabled.
+- **Interception Rules modal layout** — Redesigned into 3 clean groups (Goal, Cards, Options) using inline table rows and segmented pill toggles, reducing modal vertical height by ~40% for optimal mobile ergonomics without cluttered nested cards.
+
+### Fixed
+- Focus Guard "Again" button was incorrectly marking cards as completed instead of re-queueing them within the same session.
+- Missing `furiganaMode` and `learningRatio` React state declarations in the App Blocker settings page caused silent runtime errors.
+- Unescaped `"` quotes in `FocusGuardStatusCard` tooltip text (ESLint react/no-unescaped-entities).
+
+### Technical
+- Modified: `src/app/app-lock/page.tsx`, `src/app/(app)/settings/app-blocker/page.tsx`, `src/app/(app)/settings/app-blocker/FocusGuardStatusCard.tsx`, `src/app/(app)/settings/app-blocker/RulesConfigCard.tsx`, `src/app/api/flashcards/review/route.ts`, `src/plugins/app-blocker/definitions.ts`, `src/plugins/app-blocker/web.ts`, `android/app/build.gradle`, `android/app/src/main/java/com/kaiwaai/app/AppBlockerPlugin.kt`, `android/app/src/main/java/com/kaiwaai/app/AppMonitorService.kt`, `.agents/APP_BLOCKER.md`
+- New: `src/lib/session-composer.ts`
+- Tests: 300 passing (41 test files) — lint/typecheck clean
+
+
+
 ## [1.7.1] - 2026-09-01
 
 ### Added

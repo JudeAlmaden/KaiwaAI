@@ -217,9 +217,13 @@ class AppMonitorService : Service() {
                 val studyMode = prefs.getString("study_mode", "due") ?: "due"
                 val practiceMode = prefs.getBoolean("practice_mode", false)
                 val noDueAction = prefs.getString("no_due_action", "autoOpen") ?: "autoOpen"
+                val showFurigana = prefs.getBoolean("show_furigana", true)
+                val furiganaMode = prefs.getString("furigana_mode", "always") ?: "always"
+                val learningRatio = prefs.getFloat("learning_ratio", 0.5f)
                 val practiceQp = if (practiceMode) "1" else "0"
+                val showFuriganaQp = if (showFurigana) "1" else "0"
 
-                Log.i(TAG, "🚨 BLOCKING DETECTED: $lastAppPackage | Online: $isConnected | Requirement: $targetCount cards ($reviewType/$direction/$studyMode) practice=$practiceMode noDue=$noDueAction")
+                Log.i(TAG, "🚨 BLOCKING DETECTED: $lastAppPackage | Online: $isConnected | Requirement: $targetCount cards ($reviewType/$direction/$studyMode) practice=$practiceMode noDue=$noDueAction showFurigana=$showFurigana furiganaMode=$furiganaMode learningRatio=$learningRatio")
 
                 // 1. Kick the blocked app to background
                 handler.post {
@@ -274,6 +278,9 @@ class AppMonitorService : Service() {
                     append("&studyMode=$studyMode")
                     append("&practice=$practiceQp")
                     append("&noDueAction=$noDueAction")
+                    append("&showFurigana=$showFuriganaQp")
+                    append("&furiganaMode=$furiganaMode")
+                    append("&learningRatio=$learningRatio")
                 }
 
                 val mainIntent = Intent(this, MainActivity::class.java).apply {
@@ -455,6 +462,11 @@ class AppMonitorService : Service() {
 
                 val launchRunnable = Runnable {
                     removeOverlayWindow()
+                    val prefs = getSharedPreferences("AppBlocker", MODE_PRIVATE)
+                    val showFurigana = prefs.getBoolean("show_furigana", true)
+                    val furiganaMode = prefs.getString("furigana_mode", "always") ?: "always"
+                    val learningRatio = prefs.getFloat("learning_ratio", 0.5f)
+                    val showFuriganaQp = if (showFurigana) "1" else "0"
                     val route = buildString {
                         append("/app-lock?autostart=true&mode=app-blocker")
                         append("&count=$targetCount")
@@ -464,6 +476,9 @@ class AppMonitorService : Service() {
                         append("&studyMode=$studyMode")
                         append("&practice=$practiceQp")
                         append("&noDueAction=$noDueAction")
+                        append("&showFurigana=$showFuriganaQp")
+                        append("&furiganaMode=$furiganaMode")
+                        append("&learningRatio=$learningRatio")
                     }
                     val direct = Intent(this@AppMonitorService, MainActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or

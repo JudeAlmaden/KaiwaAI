@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Kai from '@/app/Kai';
-import { ShieldWarning, Sliders, X, Minus, Plus, Question, ArrowsClockwise, CheckCircle, XCircle } from '@phosphor-icons/react';
-import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
+import { ShieldWarning, Sliders, X, Minus, Plus, ArrowsClockwise, CheckCircle, XCircle } from '@phosphor-icons/react';
+import type { BlockerStudyMode, BlockerNoDueAction, BlockerFuriganaMode } from '@/plugins/app-blocker/definitions';
 
 interface FocusGuardStatusCardProps {
   isMonitoring: boolean;
@@ -15,6 +15,9 @@ interface FocusGuardStatusCardProps {
   direction?: string;
   studyMode?: BlockerStudyMode;
   practice?: boolean;
+  showFurigana?: boolean;
+  furiganaMode?: BlockerFuriganaMode;
+  learningRatio?: number;
   noDueAction?: BlockerNoDueAction;
   earlyReviewStrategy?: 'practice' | 'proportional';
   hasPermissions: boolean;
@@ -32,6 +35,9 @@ interface FocusGuardStatusCardProps {
     direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
     studyMode?: BlockerStudyMode;
     practice?: boolean;
+    showFurigana?: boolean;
+    furiganaMode?: BlockerFuriganaMode;
+    learningRatio?: number;
     noDueAction?: BlockerNoDueAction;
     earlyReviewStrategy?: 'practice' | 'proportional';
   }) => void;
@@ -55,8 +61,9 @@ export default function FocusGuardStatusCard({
   direction = 'mixed',
   studyMode = 'all',
   practice = false,
+  furiganaMode = 'always',
+  learningRatio = 0.5,
   noDueAction = 'autoOpen',
-  earlyReviewStrategy = 'practice',
   hasPermissions,
   usageStatsGranted,
   overlayGranted,
@@ -222,24 +229,24 @@ export default function FocusGuardStatusCard({
       {/* Rules Options Modal */}
       {showModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
           onClick={() => setShowModal(false)}
         >
           <div
-            className="relative w-full max-w-md rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-2xl space-y-5"
+            className="relative w-full max-w-md max-h-[88vh] flex flex-col rounded-3xl border-2 border-border bg-card shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="p-4 sm:p-5 pb-3 flex items-center justify-between border-b border-border bg-card/60 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold shrink-0">
-                  <Sliders size={20} />
+                <div className="w-9 h-9 rounded-2xl bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold shrink-0">
+                  <Sliders size={18} />
                 </div>
                 <div>
-                  <h3 className="font-display text-base font-bold text-foreground">
+                  <h3 className="font-display text-sm sm:text-base font-bold text-foreground">
                     Interception Rules
                   </h3>
-                  <p className="text-xs text-muted">Customize review goal &amp; grace period</p>
+                  <p className="text-[11px] text-muted">Customize review goal &amp; session behavior</p>
                 </div>
               </div>
 
@@ -251,193 +258,226 @@ export default function FocusGuardStatusCard({
               </button>
             </div>
 
-            {/* Flashcard Goal Stepper */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                Required Flashcards
-              </span>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleCountChange(Math.max(1, flashcardCount - 1))}
-                    disabled={flashcardCount <= 1}
-                    className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40"
-                  >
-                    <Minus size={14} />
-                  </button>
-                  <span className="w-8 text-center font-display font-extrabold text-foreground text-sm">
-                    {flashcardCount}
-                  </span>
-                  <button
-                    onClick={() => handleCountChange(Math.min(100, flashcardCount + 1))}
-                    disabled={flashcardCount >= 100}
-                    className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
+            {/* Scrollable Content */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
 
-                <div className="flex items-center gap-1">
-                  {[5, 10, 15, 20].map((preset) => (
+              {/* ── SECTION 1: Goal ─────────────────────────────── */}
+              <div className="space-y-3">
+                {/* Cards goal stepper + presets */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     <button
-                      key={preset}
-                      onClick={() => handleCountChange(preset)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
-                        flashcardCount === preset
-                          ? 'bg-indigo-ai text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
+                      onClick={() => handleCountChange(Math.max(1, flashcardCount - 1))}
+                      disabled={flashcardCount <= 1}
+                      className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40"
                     >
-                      {preset}
+                      <Minus size={13} />
                     </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Probability & Re-lock Grace */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Probability
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {[25, 50, 75, 100].map((pct) => (
+                    <div className="text-center w-10">
+                      <span className="font-display font-extrabold text-foreground text-xl leading-none">{flashcardCount}</span>
+                      <p className="text-[9px] text-muted font-medium mt-0.5">cards</p>
+                    </div>
                     <button
-                      key={pct}
-                      onClick={() => onUpdateAppBlockerConfig?.({ blockChance: pct })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold text-center transition ${
-                        blockChance === pct
-                          ? 'bg-amber-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
+                      onClick={() => handleCountChange(Math.min(100, flashcardCount + 1))}
+                      disabled={flashcardCount >= 100}
+                      className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40"
                     >
-                      {pct}%
+                      <Plus size={13} />
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Unlock Grace
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {[5, 15, 30, 60].map((mins) => (
-                    <button
-                      key={mins}
-                      onClick={() => onUpdateAppBlockerConfig?.({ unlockDurationMinutes: mins })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold text-center transition ${
-                        unlockDurationMinutes === mins
-                          ? 'bg-emerald-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {mins}m
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Study Mode */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                Study Mode (Which cards?)
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {STUDY_MODES.map((m) => (
-                  <button
-                    key={m.id}
-                    title={m.hint}
-                    onClick={() => onUpdateAppBlockerConfig?.({ studyMode: m.id })}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition ${
-                      studyMode === m.id
-                        ? 'bg-indigo-ai text-white'
-                        : 'border border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-muted leading-snug">
-                {STUDY_MODES.find(m => m.id === studyMode)?.hint}
-              </p>
-            </div>
-
-            {/* Session Type + Direction + Practice */}
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Card Type
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
-                  {(['mixed', 'vocabulary', 'kanji'] as const).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => onUpdateAppBlockerConfig?.({ reviewType: type })}
-                      className={`px-3 py-1 rounded-xl capitalize transition ${
-                        reviewType === type
-                          ? 'bg-indigo-ai text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Direction
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(['jp-to-en', 'en-to-jp', 'mixed'] as const).map((dir) => (
-                    <button
-                      key={dir}
-                      onClick={() => onUpdateAppBlockerConfig?.({ direction: dir })}
-                      className={`px-2.5 py-1 rounded-xl transition text-[11px] font-bold ${
-                        direction === dir
-                          ? 'bg-indigo-ai text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {dir === 'jp-to-en'
-                        ? 'JP → EN'
-                        : dir === 'en-to-jp'
-                        ? 'EN → JP'
-                        : 'Mixed Dir'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Practice Mode + Early Review Strategy */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
+                  </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                      Practice Mode
-                    </span>
-                    <div className="group relative cursor-pointer text-muted hover:text-foreground">
-                      <Question size={12} weight="bold" />
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
-                        Disables database/SRS updates for ALL reviews in the session, even if cards are due.
-                      </div>
+                    {[5, 10, 15, 20].map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => handleCountChange(preset)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                          flashcardCount === preset
+                            ? 'bg-indigo-ai text-white'
+                            : 'border border-border bg-background text-muted hover:text-foreground'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Block chance + Unlock grace — compact 2-col */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-2 border-t border-border/50">
+                  {/* Block chance */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-semibold text-muted">Block chance</span>
+                    <div className="flex gap-1">
+                      {[25, 50, 75, 100].map((pct) => (
+                        <button
+                          key={pct}
+                          onClick={() => onUpdateAppBlockerConfig?.({ blockChance: pct })}
+                          className={`flex-1 py-1 rounded-lg text-[10px] font-bold text-center transition ${
+                            blockChance === pct
+                              ? 'bg-amber-500 text-white'
+                              : 'border border-border bg-background text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {pct === 100 ? '100' : `${pct}%`}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  <button
-                    onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border-2 text-xs font-bold transition ${
-                      practice
-                        ? 'border-violet-400 bg-violet-500/10 text-violet-600'
-                        : 'border-border bg-card text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span>{practice ? 'Active' : 'Disabled'}</span>
-                    <span
+
+                  {/* Unlock grace */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-semibold text-muted">Unlock grace</span>
+                    <div className="flex gap-1">
+                      {[5, 15, 30, 60].map((mins) => (
+                        <button
+                          key={mins}
+                          onClick={() => onUpdateAppBlockerConfig?.({ unlockDurationMinutes: mins })}
+                          className={`flex-1 py-1 rounded-lg text-[10px] font-bold text-center transition ${
+                            unlockDurationMinutes === mins
+                              ? 'bg-emerald-500 text-white'
+                              : 'border border-border bg-background text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {mins}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── SECTION 2: Cards ────────────────────────────── */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Cards</span>
+                <div className="rounded-2xl border border-border overflow-hidden divide-y divide-border/60">
+
+                  {/* Type */}
+                  <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+                    <span className="text-xs font-semibold text-foreground shrink-0">Type</span>
+                    <div className="flex gap-1">
+                      {(['mixed', 'vocabulary', 'kanji'] as const).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => onUpdateAppBlockerConfig?.({ reviewType: type })}
+                          className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition ${
+                            reviewType === type
+                              ? 'bg-indigo-ai text-white'
+                              : 'text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {type === 'vocabulary' ? 'Vocab' : type.charAt(0).toUpperCase() + type.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Direction */}
+                  <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+                    <span className="text-xs font-semibold text-foreground shrink-0">Direction</span>
+                    <div className="flex gap-1">
+                      {(['jp-to-en', 'en-to-jp', 'mixed'] as const).map((dir) => (
+                        <button
+                          key={dir}
+                          onClick={() => onUpdateAppBlockerConfig?.({ direction: dir })}
+                          className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition ${
+                            direction === dir
+                              ? 'bg-indigo-ai text-white'
+                              : 'text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {dir === 'jp-to-en' ? 'JP→EN' : dir === 'en-to-jp' ? 'EN→JP' : 'Mix'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Pool (study mode) */}
+                  <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+                    <span className="text-xs font-semibold text-foreground shrink-0">Pool</span>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      {STUDY_MODES.map((m) => (
+                        <button
+                          key={m.id}
+                          title={m.hint}
+                          onClick={() => onUpdateAppBlockerConfig?.({ studyMode: m.id })}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
+                            studyMode === m.id
+                              ? 'bg-indigo-ai text-white'
+                              : 'text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Focus (learning ratio) */}
+                  <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+                    <span className="text-xs font-semibold text-foreground shrink-0">Focus</span>
+                    <div className="flex gap-1">
+                      {[
+                        { ratio: 0.5, label: '50/50' },
+                        { ratio: 0.7, label: '70/30' },
+                        { ratio: 1.0, label: 'All New' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.ratio}
+                          type="button"
+                          onClick={() => onUpdateAppBlockerConfig?.({ learningRatio: opt.ratio })}
+                          className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition ${
+                            Math.abs((learningRatio ?? 0.5) - opt.ratio) < 0.05
+                              ? 'bg-indigo-ai text-white'
+                              : 'text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── SECTION 3: Options ──────────────────────────── */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Options</span>
+                <div className="rounded-2xl border border-border overflow-hidden divide-y divide-border/60">
+
+                  {/* Furigana */}
+                  <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+                    <span className="text-xs font-semibold text-foreground shrink-0">Furigana</span>
+                    <div className="flex gap-1">
+                      {[
+                        { id: 'always' as const, label: 'Always' },
+                        { id: 'learning_only' as const, label: 'Smart' },
+                        { id: 'never' as const, label: 'Off' },
+                      ].map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => onUpdateAppBlockerConfig?.({
+                            furiganaMode: mode.id,
+                            showFurigana: mode.id !== 'never',
+                          })}
+                          className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition ${
+                            furiganaMode === mode.id
+                              ? 'bg-indigo-ai text-white'
+                              : 'text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Practice mode */}
+                  <div className="flex items-center justify-between px-3 py-2.5 gap-2 bg-card">
+                    <span className="text-xs font-semibold text-foreground">Practice mode</span>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
                       className={`w-9 h-5 rounded-full relative transition shrink-0 ${
                         practice ? 'bg-violet-500' : 'bg-muted/40'
                       }`}
@@ -447,97 +487,51 @@ export default function FocusGuardStatusCard({
                           practice ? 'left-4' : 'left-0.5'
                         }`}
                       />
-                    </span>
-                  </button>
-                </div>
-
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                    If Nothing Due
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'autoOpen' })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
-                        noDueAction === 'autoOpen'
-                          ? 'bg-emerald-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      Auto-Open
-                    </button>
-                    <button
-                      onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'studyAny' })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
-                        noDueAction === 'studyAny'
-                          ? 'bg-sky-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      Use Any
                     </button>
                   </div>
-                </div>
-              </div>
 
-              {/* Early Review Strategy Section */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                    Early Review Strategy
-                  </span>
-                  <div className="group relative cursor-pointer text-muted hover:text-foreground">
-                    <Question size={12} weight="bold" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
-                      How SRS behaves when reviewing cards before they are due (e.g. via &apos;Study Any&apos;).
+                  {/* No cards due */}
+                  <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+                    <span className="text-xs font-semibold text-foreground shrink-0">No cards due</span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'autoOpen' })}
+                        className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition ${
+                          noDueAction === 'autoOpen'
+                            ? 'bg-emerald-500 text-white'
+                            : 'text-muted hover:text-foreground'
+                        }`}
+                      >
+                        Skip
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'studyAny' })}
+                        className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition ${
+                          noDueAction === 'studyAny'
+                            ? 'bg-sky-500 text-white'
+                            : 'text-muted hover:text-foreground'
+                        }`}
+                      >
+                        Study any
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'practice' })}
-                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
-                      earlyReviewStrategy === 'practice'
-                        ? 'bg-indigo-ai text-white border-indigo-ai'
-                        : 'border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Skip SRS (Practice)
-                  </button>
-                  <button
-                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'proportional' })}
-                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
-                      earlyReviewStrategy === 'proportional'
-                        ? 'bg-indigo-ai text-white border-indigo-ai'
-                        : 'border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Proportional (Scale)
-                  </button>
-                </div>
-                <p className="text-[10px] text-muted leading-snug">
-                  {earlyReviewStrategy === 'practice'
-                    ? '🔒 Early reviews act as practice and do not alter existing intervals/SRS schedules.'
-                    : '📈 Intervals are adjusted proportionally based on how early you reviewed the card.'}
-                </p>
               </div>
-
-              {(practice || noDueAction === 'studyAny') && (
-                <p className="text-[10px] text-muted leading-snug rounded-xl bg-muted/10 p-2">
-                  {practice && '🧪 Practice mode: unlock answers still count, but SRS/status in DB is not updated.'}
-                  {practice && noDueAction === 'studyAny' && <><br /></>}
-                  {noDueAction === 'studyAny' && '📚 If no cards are due (per Study Mode), fall back to pulling from "All" cards so the lock is always usable.'}
-                </p>
-              )}
             </div>
 
-            {/* Done Action */}
-            <button
-              onClick={() => setShowModal(false)}
-              className="w-full py-2.5 bg-indigo-ai border-b-4 border-indigo-deep hover:brightness-105 active:translate-y-[2px] text-white font-bold text-xs rounded-2xl shadow-xs transition"
-            >
-              Save Rules
-            </button>
+
+            {/* Sticky Action Footer */}
+            <div className="p-3 sm:p-4 border-t border-border bg-card/90 backdrop-blur-sm shrink-0">
+              <button
+                onClick={() => setShowModal(false)}
+                className="w-full py-2.5 bg-indigo-ai border-b-4 border-indigo-deep hover:brightness-105 active:translate-y-[2px] text-white font-bold text-xs rounded-2xl shadow-xs transition"
+              >
+                Save Rules
+              </button>
+            </div>
           </div>
         </div>
       )}

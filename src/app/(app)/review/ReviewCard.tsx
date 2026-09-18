@@ -52,6 +52,7 @@ export interface ReviewCardProps {
   generatingMnemonic?: boolean;
   onToggleHint?: () => void;
   onGenerateMnemonic?: (isRegenerate: boolean) => void;
+  showFurigana?: boolean;
 }
 
 function SpeakerButton({ text, title }: { text: string; title?: string }) {
@@ -97,6 +98,7 @@ export default function ReviewCard({
   generatingMnemonic = false,
   onToggleHint,
   onGenerateMnemonic,
+  showFurigana = true,
 }: ReviewCardProps) {
   const cardType = card.type || reviewType;
   const isVocab = cardType === "vocabulary";
@@ -117,7 +119,7 @@ export default function ReviewCard({
                 <>
                   <SpeakerButton text={card.word || ""} />
                   <span className="font-bold font-jp text-5xl">
-                    {card.word && card.reading && card._pool !== "maintenance" ? (
+                    {card.word && card.reading && card._pool !== "maintenance" && showFurigana ? (
                       <Furigana word={card.word} reading={card.reading} className="text-5xl" />
                     ) : (
                       card.word
@@ -344,7 +346,7 @@ export default function ReviewCard({
                   // then hiragana reading, NO romaji, then English meaning, POS, conjugation
                   <div className="flex flex-col items-center w-full text-center gap-1.5">
                     <span className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
-                      {card.word && card.reading ? (
+                      {card.word && card.reading && showFurigana ? (
                         <Furigana word={card.word} reading={card.reading} className="text-4xl" size="normal" />
                       ) : (
                         card.word
@@ -378,7 +380,7 @@ export default function ReviewCard({
                   // Task 2: Vocab EN→JP back = JP word w/ furigana + speaker + conjugation
                   <div className="flex flex-col items-center w-full text-center gap-1.5">
                     <span className="font-jp text-4xl font-bold text-indigo-ai leading-tight">
-                      {card.word && card.reading ? (
+                      {card.word && card.reading && showFurigana ? (
                         <Furigana word={card.word} reading={card.reading} className="text-4xl" size="normal" />
                       ) : (
                         card.word

@@ -59,8 +59,8 @@ export default function ReviewClient() {
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
 
-  // App Blocker Completion Tracking
-  const completedCount = tally.good + tally.again;
+  // App Blocker Completion Tracking (only successful cards count towards unlock)
+  const completedCount = tally.good;
   useAppBlockerCompletion(completedCount, setup.limit);
 
   const [isMonitoring, setIsMonitoring] = useState(false);

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { AppBlocker } from '@/plugins/app-blocker';
-import type { BlockerStudyMode, AppBlockerConfig } from '@/plugins/app-blocker/definitions';
+import type { BlockerStudyMode, AppBlockerConfig, BlockerFuriganaMode } from '@/plugins/app-blocker/definitions';
 import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
 import { FALLBACK_OFFLINE_CARDS } from '@/lib/fallback-cards';
 import Kai from '@/app/Kai';
@@ -33,7 +33,7 @@ export default function StandaloneAppLockPage() {
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [practice, setPractice] = useState(false);
   const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>('practice');
-
+  const [furiganaMode, setFuriganaMode] = useState<BlockerFuriganaMode>('always');
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
 
@@ -108,13 +108,14 @@ export default function StandaloneAppLockPage() {
   const fetchCards = useCallback(async (
     reviewType: 'vocabulary' | 'kanji' | 'mixed',
     studyMode: BlockerStudyMode,
+    learningRatio: number = 0.5,
   ): Promise<Card[] | { offline: true }> => {
     const endpoint = reviewType === 'mixed'
       ? '/api/review/mixed'
       : `/api/${reviewType === 'kanji' ? 'kanji' : 'flashcards'}/review`;
 
     try {
-      const res = await fetch(`${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=50`);
+      const res = await fetch(`${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=50&learningRatio=${learningRatio}`);
       if (res.ok) {
         const data = await res.json();
         return data.cards ?? [];
@@ -148,13 +149,6 @@ export default function StandaloneAppLockPage() {
         }
 
         if (pkg) setBlockedPackage(pkg);
-        if (countParam) {
-          setRequiredCount(parseInt(countParam, 10) || 10);
-        } else {
-          AppBlocker.getFlashcardRequirement()
-            .then((res) => { if (res?.count) setRequiredCount(res.count); })
-            .catch(() => {});
-        }
 
         // Pull full config (URL params take precedence, then saved native prefs)
         const urlReviewType = params.get('reviewType') as AppBlockerConfig['reviewType'] | null;
@@ -169,6 +163,9 @@ export default function StandaloneAppLockPage() {
           savedConfig = null;
         }
 
+        const targetCount = countParam ? parseInt(countParam, 10) || 10 : (savedConfig?.count ?? 10);
+        setRequiredCount(targetCount);
+
         const reviewType: AppBlockerConfig['reviewType'] = urlReviewType ?? savedConfig?.reviewType ?? 'vocabulary';
         const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'all';
         const practiceEnabled: boolean =
@@ -177,8 +174,24 @@ export default function StandaloneAppLockPage() {
         const urlEarlyStrategy = params.get('earlyReviewStrategy') as 'practice' | 'proportional' | null;
         const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? 'practice';
 
+        const urlFuriganaMode = params.get('furiganaMode') as BlockerFuriganaMode | null;
+        const urlShowFurigana = params.get('showFurigana');
+        const resolvedFuriganaMode: BlockerFuriganaMode =
+          urlFuriganaMode ??
+          savedConfig?.furiganaMode ??
+          (urlShowFurigana !== null
+            ? (urlShowFurigana === '1' || urlShowFurigana === 'true' ? 'always' : 'never')
+            : (savedConfig?.showFurigana === false ? 'never' : 'always'));
+
+        const urlLearningRatio = params.get('learningRatio');
+        const resolvedLearningRatio: number =
+          urlLearningRatio !== null && !isNaN(parseFloat(urlLearningRatio))
+            ? parseFloat(urlLearningRatio)
+            : (savedConfig?.learningRatio ?? 0.5);
+
         setPractice(practiceEnabled);
         setEarlyReviewStrategy(earlyStrategy);
+        setFuriganaMode(resolvedFuriganaMode);
 
         // On web, skip native unlock check — always start a fresh session
         if (!isWeb) {
@@ -193,7 +206,7 @@ export default function StandaloneAppLockPage() {
           }
         }
 
-        let pulledCards = await fetchCards(reviewType, studyMode);
+        const pulledCards = await fetchCards(reviewType, studyMode, resolvedLearningRatio);
         if (cancelled) return;
 
         // Offline or unvalidated network error — auto-unlock and pass through immediately
@@ -207,7 +220,8 @@ export default function StandaloneAppLockPage() {
         }
 
         // If no cards returned (logged out / 0 cards in DB)
-        if ((pulledCards as Card[]).length === 0) {
+        let availableCards = pulledCards as Card[];
+        if (availableCards.length === 0) {
           if (!isWeb) {
             // Auto-unlock immediately on native if user is logged out or has no cards
             if (!cancelled) {
@@ -218,11 +232,17 @@ export default function StandaloneAppLockPage() {
             return;
           }
           // On web/preview: use offline fallback cards
-          pulledCards = FALLBACK_OFFLINE_CARDS;
+          availableCards = FALLBACK_OFFLINE_CARDS;
         }
 
+        const effectiveRequirement = Math.min(targetCount, availableCards.length);
+        setRequiredCount(effectiveRequirement);
+
+        // Slice down to exact requirement count for the session deck
+        const slicedCards = availableCards.slice(0, effectiveRequirement);
+
         setCards(
-          (pulledCards as Card[]).map((c) => ({
+          slicedCards.map((c) => ({
             ...c,
             _dir:
               direction === 'jp-to-en'
@@ -274,28 +294,42 @@ export default function StandaloneAppLockPage() {
       }
 
       if (isFirstAttempt) {
-        setGradedIds(prev => { const next = new Set(prev); next.add(card.id); return next; });
+        setGradedIds((prev) => {
+          const next = new Set(prev);
+          next.add(card.id);
+          return next;
+        });
       }
 
       setFlipped(false);
       setCardEpoch((e) => e + 1);
 
       if (grade > 0) {
+        // PASSED: increment completedCount and remove from session deck
         const newCompleted = completedCount + 1;
         setCompletedCount(newCompleted);
 
-        if (newCompleted >= requiredCount) {
+        const nextCards = [...cards];
+        nextCards.splice(currentIndex, 1);
+
+        if (newCompleted >= requiredCount || nextCards.length === 0) {
           finishUnlock(blockedPackage);
         } else {
-          setCurrentIndex((prev) => (prev + 1) % cards.length);
+          setCards(nextCards);
+          setCurrentIndex((prev) => (nextCards.length > 0 ? prev % nextCards.length : 0));
         }
       } else {
-        setCards(prev => {
-          const next = [...prev];
-          const [failed] = next.splice(currentIndex, 1);
-          next.push(failed);
-          return next;
-        });
+        // FAILED ("Again"):
+        // Do NOT increment completedCount!
+        // Re-insert the card 2 positions ahead so it returns later in the same session.
+        const nextCards = [...cards];
+        const [failedCard] = nextCards.splice(currentIndex, 1);
+        const insertOffset = 2; // will show 2 other cards first if available
+        const targetIndex = Math.min(currentIndex + insertOffset, nextCards.length);
+        nextCards.splice(targetIndex, 0, failedCard);
+
+        setCards(nextCards);
+        setCurrentIndex((prev) => (nextCards.length > 0 ? prev % nextCards.length : 0));
       }
     },
     [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, earlyReviewStrategy, finishUnlock]
@@ -401,15 +435,19 @@ export default function StandaloneAppLockPage() {
 
       <div className="flex items-center justify-center gap-2 pt-3">
         {cards.slice(0, 5).map((c, idx) => {
-          const isCurrent = idx === currentIndex % 5;
+          const isCurrent = idx === currentIndex;
+          const isRetrying = gradedIds.has(c.id);
           return (
             <div
-              key={c.id || idx}
+              key={`${c.id}-${idx}`}
               className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
                 isCurrent
                   ? 'bg-indigo-ai ring-4 ring-indigo-ai/20 scale-125'
+                  : isRetrying
+                  ? 'bg-sakura ring-2 ring-sakura/30'
                   : 'bg-border border border-muted/20'
               }`}
+              title={isCurrent ? 'Current card' : isRetrying ? 'Needs review' : 'Upcoming'}
             />
           );
         })}
@@ -421,6 +459,13 @@ export default function StandaloneAppLockPage() {
           card={currentCard}
           reviewType={currentCard.type || "vocabulary"}
           flipped={flipped}
+          showFurigana={
+            furiganaMode === 'always'
+              ? true
+              : furiganaMode === 'never'
+              ? false
+              : currentCard.status !== 'known'
+          }
           onFlip={() => setFlipped(!flipped)}
           onGrade={(g) => handleGrade(g)}
           showHint={showHint}

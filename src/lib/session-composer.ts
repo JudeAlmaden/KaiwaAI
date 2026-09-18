@@ -40,14 +40,16 @@ interface SessionComposition<T extends Card> {
 export function composeSession<T extends Card>(
   allCards: T[],
   sessionSize: number = 5,
-  ignoreDueDate: boolean = false
+  ignoreDueDate: boolean = false,
+  learningRatio: number = 0.5
 ): SessionComposition<T> {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-  // Calculate pool sizes (50% active, 50% maintenance — target, not a hard cap)
-  const activeTarget = Math.max(1, Math.round(sessionSize * 0.5));
-  const maintenanceTarget = sessionSize - activeTarget;
+  const ratio = Math.max(0.1, Math.min(1.0, typeof learningRatio === "number" && !isNaN(learningRatio) ? learningRatio : 0.5));
+  // Calculate pool sizes based on learningRatio (target, not a hard cap)
+  const activeTarget = Math.max(1, Math.round(sessionSize * ratio));
+  const maintenanceTarget = Math.max(0, sessionSize - activeTarget);
 
   // Split cards into pools
   const activePool: T[] = [];

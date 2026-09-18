@@ -109,6 +109,7 @@ To preview the Focus Guard App Lock UI on PC during development:
 │  │  - blocked_apps: Set<String> │                 │
 │  │  - flashcard_requirement: Int│                 │
 │  │  - flashcards_completed: Bool│                 │
+│  │  - show_furigana: Bool       │                 │
 │  └──────────────────────────────┘                 │
 └─────────────────────────────────────────────────────┘
 ```
@@ -253,8 +254,31 @@ await AppBlocker.markFlashcardsCompleted();
 
 // Get configuration
 const config = await AppBlocker.getAppBlockerConfig();
-console.log(config.blockedApps); // ['com.youtube', ...]
+console.log(config);
+
+// Update configuration
+await AppBlocker.setAppBlockerConfig({
+  count: 10,
+  showFurigana: true, // Enable/disable furigana reading annotations on flashcards
+  studyMode: 'all',
+  direction: 'jp-to-en',
+});
 ```
+
+### Configuration Options (`AppBlockerConfig`)
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `count` | `number` | `10` | Number of flashcards required to unlock |
+| `blockChance` | `number` | `100` | Interception probability percentage (25%, 50%, 75%, 100%) |
+| `unlockDurationMinutes` | `number` | `15` | Re-lock grace period in minutes (5m, 15m, 30m, 60m) |
+| `reviewType` | `'vocabulary' \| 'kanji' \| 'mixed'` | `'vocabulary'` | Type of flashcards to review |
+| `direction` | `'jp-to-en' \| 'en-to-jp' \| 'mixed'` | `'jp-to-en'` | Flashcard prompt and answer direction |
+| `studyMode` | `BlockerStudyMode` | `'all'` | Card selection pool (`due`, `all`, `recent`, `struggling`, `leeches`) |
+| `practice` | `boolean` | `false` | Practice mode (does not alter SRS/database review history) |
+| `showFurigana` | `boolean` | `true` | Show reading annotations above kanji on flashcards |
+| `noDueAction` | `'autoOpen' \| 'studyAny'` | `'autoOpen'` | Action when no cards match study mode |
+| `earlyReviewStrategy` | `'practice' \| 'proportional'` | `'practice'` | SRS scheduling behavior for early reviews |
 
 ---
 

@@ -26,6 +26,8 @@ export async function GET(req: Request) {
   const pos = sp.get("pos");
   const jlpt = sp.get("jlpt");
   const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
+  const rawRatio = sp.get("learningRatio");
+  const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
 
   // Build base where clause
   const where: Prisma.UserFlashcardWhereInput = { userId: user.id };
@@ -106,9 +108,9 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
-    // Compose session: 50% active (focused learning), 50% maintenance (retention)
+    // Compose session: active (focused learning) vs maintenance (retention) based on learningRatio
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
-    const { session, maintenanceCards } = composeSession(allCards, limit, ignoreDueDate);
+    const { session, maintenanceCards } = composeSession(allCards, limit, ignoreDueDate, learningRatio);
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
   } else {

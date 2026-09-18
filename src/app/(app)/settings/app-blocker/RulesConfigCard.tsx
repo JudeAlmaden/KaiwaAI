@@ -12,6 +12,7 @@ interface RulesConfigCardProps {
   direction?: string;
   studyMode?: BlockerStudyMode;
   practice?: boolean;
+  showFurigana?: boolean;
   noDueAction?: BlockerNoDueAction;
   earlyReviewStrategy?: 'practice' | 'proportional';
   onUpdateFlashcardCount: (count: number) => void;
@@ -23,6 +24,7 @@ interface RulesConfigCardProps {
     direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
     studyMode?: BlockerStudyMode;
     practice?: boolean;
+    showFurigana?: boolean;
     noDueAction?: BlockerNoDueAction;
     earlyReviewStrategy?: 'practice' | 'proportional';
   }) => void;
@@ -44,6 +46,7 @@ export default function RulesConfigCard({
   direction = 'mixed',
   studyMode = 'all',
   practice = false,
+  showFurigana = true,
   noDueAction = 'autoOpen',
   earlyReviewStrategy = 'practice',
   onUpdateFlashcardCount,
@@ -282,7 +285,7 @@ export default function RulesConfigCard({
                 </div>
               </div>
 
-              {/* Practice + No Due Action */}
+              {/* Practice Mode & Furigana Display */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1">
@@ -297,6 +300,7 @@ export default function RulesConfigCard({
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
                     className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border-2 text-xs font-bold transition ${
                       practice
@@ -320,31 +324,70 @@ export default function RulesConfigCard({
                 </div>
 
                 <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                    If Nothing Due
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'autoOpen' })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
-                        noDueAction === 'autoOpen'
-                          ? 'bg-emerald-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      Auto-Open
-                    </button>
-                    <button
-                      onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'studyAny' })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
-                        noDueAction === 'studyAny'
-                          ? 'bg-sky-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      Use Any
-                    </button>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                      Furigana
+                    </span>
+                    <div className="group relative cursor-pointer text-muted hover:text-foreground">
+                      <Question size={12} weight="bold" />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
+                        Display reading annotations above kanji characters on flashcards.
+                      </div>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateAppBlockerConfig?.({ showFurigana: !showFurigana })}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border-2 text-xs font-bold transition ${
+                      showFurigana
+                        ? 'border-indigo-400 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                        : 'border-border bg-card text-muted hover:text-foreground'
+                    }`}
+                  >
+                    <span>{showFurigana ? 'Enabled' : 'Disabled'}</span>
+                    <span
+                      className={`w-9 h-5 rounded-full relative transition shrink-0 ${
+                        showFurigana ? 'bg-indigo-ai' : 'bg-muted/40'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                          showFurigana ? 'left-4' : 'left-0.5'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* If Nothing Due */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                  If Nothing Due
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'autoOpen' })}
+                    className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
+                      noDueAction === 'autoOpen'
+                        ? 'bg-emerald-500 text-white'
+                        : 'border border-border bg-background text-muted hover:text-foreground'
+                    }`}
+                  >
+                    Auto-Open
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'studyAny' })}
+                    className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
+                      noDueAction === 'studyAny'
+                        ? 'bg-sky-500 text-white'
+                        : 'border border-border bg-background text-muted hover:text-foreground'
+                    }`}
+                  >
+                    Use Any
+                  </button>
                 </div>
               </div>
 

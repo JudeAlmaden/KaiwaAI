@@ -12,6 +12,9 @@ export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
     practice: false,
     noDueAction: 'autoOpen',
     earlyReviewStrategy: 'practice',
+    showFurigana: true,
+    furiganaMode: 'always',
+    learningRatio: 0.5,
   };
 
   async startMonitoring(): Promise<void> {
