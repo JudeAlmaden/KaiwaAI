@@ -8,6 +8,8 @@ export type KanjiData = {
   character: string;
   meanings: string[];
   radicals: string[];
+  heisigKeyword?: string | null;
+  heisigNumber?: number | null;
 };
 
 /**
@@ -20,20 +22,21 @@ export async function generateKanjiMnemonicClient(
 ): Promise<string> {
   if (!hasAnyKey()) throw new Error("NO_API_KEY");
   
-  const prompt = `Create a Heisig-style mnemonic for the kanji "${kanji.character}" (keyword: ${kanji.meanings[0]}).
+  const primaryKeyword = kanji.heisigKeyword || kanji.meanings[0] || "Meaning";
+  const prompt = `Create a Heisig RTK (Remembering the Kanji) mnemonic story for the kanji "${kanji.character}" (keyword: ${primaryKeyword}${kanji.heisigNumber ? `, Frame #${kanji.heisigNumber}` : ""}).
 
-${kanji.radicals.length > 0 ? `Components: ${kanji.radicals.join(", ")}` : ""}
+${kanji.radicals.length > 0 ? `Primitives/Components: ${kanji.radicals.join(", ")}` : ""}
 
 Format your response EXACTLY like this:
 
-**Components:** [Describe what each component looks like or represents]
-**Story:** [2-3 sentence vivid story combining the components to create the keyword]
+**Components:** [Describe each primitive/radical component vividly]
+**Story:** [2-3 sentence memorable, imaginative story combining the components to lock the keyword into memory]
 
 Example format:
 **Components:** 禾 (grain/plant) + ム (katakana mu, looks like a fence)
 **Story:** A stalk of grain is hidden behind a fence-like shape. You're protecting your grain privately. This represents Private.
 
-Keep it SHORT, VISUAL, and make the connection to "${kanji.meanings[0]}" obvious.`;
+Keep it SHORT, VISUAL, and make the connection to "${primaryKeyword}" obvious.`;
 
   const keys = keysForRequest();
   const models = getAutoFallback() ? modelFallbackOrder() : [getModel()];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DailyQuestCard,
   GauntletCard,
@@ -15,6 +15,9 @@ import {
   Minus,
   Plus,
   ArrowRight,
+  FolderOpen,
+  Books,
+  ClockCountdown,
 } from "@phosphor-icons/react";
 import Link from "next/link";
 import { buildCustomSessionStartParams, type CustomSessionFormValues } from "./customSession";
@@ -27,6 +30,8 @@ export type QuestStartParams = {
   direction?: "jp-to-en" | "en-to-jp" | "mixed";
   customCardIds?: string[];
   activeLimit?: number;
+  groupId?: string;
+  groupName?: string;
 };
 
 export type AppBlockerConfig = {
@@ -60,6 +65,7 @@ export default function QuestGallery({
 }: QuestGalleryProps) {
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showAppBlockerModal, setShowAppBlockerModal] = useState(false);
+  const [showKanjiSourceModal, setShowKanjiSourceModal] = useState(false);
   const [customDraft, setCustomDraft] = useState<CustomSessionFormValues>({
     reviewType: "mixed",
     studyMode: "all",
@@ -68,6 +74,28 @@ export default function QuestGallery({
     isContinuous: false,
     activeLimit: 5,
   });
+
+  // Folders for kanji source picker
+  type Folder = { id: string; name: string; total: number };
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [foldersLoaded, setFoldersLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!showKanjiSourceModal || foldersLoaded) return;
+    fetch("/api/kanji/groups")
+      .then((r) => r.json())
+      .then((d) => {
+        setFolders(
+          (d.groups || []).map((g: { id: string; name: string; entries: unknown[] }) => ({
+            id: g.id,
+            name: g.name,
+            total: g.entries?.length ?? 0,
+          }))
+        );
+        setFoldersLoaded(true);
+      })
+      .catch(() => {});
+  }, [showKanjiSourceModal, foldersLoaded]);
 
   const handleStartCustomSession = () => {
     onStartQuest(buildCustomSessionStartParams(customDraft));
@@ -126,15 +154,7 @@ export default function QuestGallery({
 
         <div className="col-span-1">
           <KanjiQuestCard
-            onStart={() =>
-              onStartQuest({
-                studyMode: "all",
-                limit: 10,
-                isContinuous: false,
-                reviewType: "kanji",
-                activeLimit: 5,
-              })
-            }
+            onStart={() => setShowKanjiSourceModal(true)}
           />
         </div>
 
@@ -189,6 +209,114 @@ export default function QuestGallery({
           </>
         )}
       </div>
+
+      {/* Kanji Source Picker Modal */}
+      {showKanjiSourceModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowKanjiSourceModal(false)}
+        >
+          <div
+            className="relative w-full max-w-md rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-base font-bold text-foreground flex items-center gap-2">
+                  <span className="text-lg font-jp">漢</span> Kanji Quest
+                </h2>
+                <p className="text-xs text-muted">Choose which kanji to study</p>
+              </div>
+              <button
+                onClick={() => setShowKanjiSourceModal(false)}
+                className="w-8 h-8 rounded-xl bg-muted/15 text-muted hover:text-foreground flex items-center justify-center text-xs font-bold transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Source options */}
+            <div className="space-y-2">
+              {/* All lesson folders */}
+              <button
+                onClick={() => {
+                  onStartQuest({ studyMode: "all", reviewType: "kanji", groupId: "all", groupName: "All Lesson Folders", limit: 50, activeLimit: 5 });
+                  setShowKanjiSourceModal(false);
+                }}
+                className="w-full flex items-center gap-3 rounded-2xl border-2 border-amber/30 bg-amber/5 px-4 py-3.5 text-left transition hover:border-amber/50 hover:bg-amber/10"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber/15 text-amber">
+                  <Books size={18} weight="bold" />
+                </span>
+                <div>
+                  <p className="text-sm font-extrabold text-foreground">All My Lessons</p>
+                  <p className="text-[11px] text-muted">
+                    {folders.length > 0 ? `${folders.length} folder${folders.length !== 1 ? "s" : ""} · ${folders.reduce((a, f) => a + f.total, 0)} kanji` : "Study all kanji across every folder"}
+                  </p>
+                </div>
+                <ArrowRight size={14} className="ml-auto text-amber shrink-0" />
+              </button>
+
+              {/* Specific folder */}
+              {folders.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted px-1">Pick a folder</p>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5">
+                    {folders.map((folder) => (
+                      <button
+                        key={folder.id}
+                        onClick={() => {
+                          onStartQuest({ studyMode: "all", reviewType: "kanji", groupId: folder.id, groupName: folder.name, limit: 50, activeLimit: 5 });
+                          setShowKanjiSourceModal(false);
+                        }}
+                        className="w-full flex items-center justify-between rounded-xl border-2 border-border bg-card px-3 py-2.5 text-left text-xs font-bold transition hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
+                      >
+                        <span className="flex items-center gap-2">
+                          <FolderOpen size={14} className="text-indigo-ai shrink-0" />
+                          <span className="truncate">{folder.name}</span>
+                        </span>
+                        <span className="text-[10px] font-semibold text-muted shrink-0 ml-2">{folder.total} kanji</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SRS Due */}
+              <button
+                onClick={() => {
+                  onStartQuest({ studyMode: "due", reviewType: "kanji", limit: 50, activeLimit: 5 });
+                  setShowKanjiSourceModal(false);
+                }}
+                className="w-full flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-3.5 text-left transition hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-ai/10 text-indigo-ai">
+                  <ClockCountdown size={18} weight="bold" />
+                </span>
+                <div>
+                  <p className="text-sm font-extrabold text-foreground">SRS Review (Due)</p>
+                  <p className="text-[11px] text-muted">Cards the spaced-repetition system has scheduled for today</p>
+                </div>
+                <ArrowRight size={14} className="ml-auto text-muted shrink-0" />
+              </button>
+
+              {folders.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-border bg-bg/50 p-4 text-center space-y-2">
+                  <p className="text-xs text-muted">No lesson folders yet.</p>
+                  <Link
+                    href="/study?tab=kanji"
+                    onClick={() => setShowKanjiSourceModal(false)}
+                    className="text-xs font-bold text-indigo-ai underline underline-offset-2 hover:opacity-80"
+                  >
+                    Create your first lesson folder →
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom Session Modal */}
       {showCustomModal && (

@@ -44,6 +44,7 @@ model User {
   memories       Memory[]
   kanjiMnemonics KanjiMnemonic[]
   userKanji      UserKanji[]
+  kanjiGroups    KanjiGroup[]
 
   // ── Social: friends, chats, personas ──
   personas               Persona[]
@@ -223,6 +224,9 @@ model UserKanji {
   // User's custom mnemonic for remembering this kanji
   mnemonic String?
 
+  // User-specific keyword / custom meaning (e.g. Heisig keyword "sun")
+  customMeaning String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -244,16 +248,56 @@ model Kanji {
   readingsKun String // JSON array: ["か.つ", "まさ.る"]
   radicals    String // JSON array: ["Moon", "Gladiator", "Power"]
   wkLevel     Int? // WaniKani level (1-60)
+  // ── Heisig RTK (Remembering the Kanji) ──
+  heisigNumber  Int?    // RTK frame number (1–2042)
+  heisigLesson  Int?    // RTK lesson/chapter grouping (1–56)
+  heisigKeyword String? // RTK primary keyword, e.g. "one"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  mnemonics KanjiMnemonic[]
-  userKanji UserKanji[]
+  mnemonics        KanjiMnemonic[]
+  userKanji        UserKanji[]
+  kanjiGroupEntries KanjiGroupEntry[]
 
   @@index([jlptLevel])
   @@index([grade])
   @@index([frequency])
   @@index([character])
+  @@index([heisigNumber])
+  @@index([heisigLesson])
+}
+
+// User-defined kanji folder / lesson grouping (e.g. "Lesson 1", "Lesson 2")
+model KanjiGroup {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String   // "Lesson 1", "Lesson 2", "My Custom Set"
+  description  String?
+  order        Int      @default(0) // Folder display/sorting order
+  kind         String   @default("custom") // "heisig_lesson" | "custom"
+  lessonNumber Int?     // For heisig_lesson kind — mirrors Kanji.heisigLesson
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  entries KanjiGroupEntry[]
+
+  @@index([userId])
+  @@index([userId, kind])
+}
+
+// Junction: which kanji belong to which group, with ordering
+model KanjiGroupEntry {
+  id      String     @id @default(cuid())
+  groupId String
+  group   KanjiGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  kanjiId String
+  kanji   Kanji      @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
+  order   Int        @default(0) // Display/study order within the group
+
+  @@unique([groupId, kanjiId])
+  @@index([groupId])
+  @@index([kanjiId])
 }
 
 // User-specific AI-generated mnemonics for kanji

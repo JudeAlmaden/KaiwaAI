@@ -65,7 +65,7 @@ export default function ChatHub() {
         setPersonas(list);
         writeCache(cacheKeys.personas, list);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const loadPending = useCallback(() => {
@@ -158,11 +158,10 @@ export default function ChatHub() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`relative rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
-                  tab === t.id
+                className={`relative rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${tab === t.id
                     ? "bg-indigo-ai text-white shadow-sm"
                     : "text-muted hover:bg-indigo-ai/10"
-                }`}
+                  }`}
               >
                 {t.label}
                 {t.id === "friends" && pending > 0 && (
@@ -231,9 +230,9 @@ export default function ChatHub() {
               )}
 
               {filteredConvos?.map((c) => (
-                <ConversationRow 
-                  key={c.id} 
-                  convo={c} 
+                <ConversationRow
+                  key={c.id}
+                  convo={c}
                   onHide={(id) => {
                     // Optimistically remove from list
                     setConvos((convos) => convos?.filter((conv) => conv.id !== id) ?? null);
@@ -328,7 +327,7 @@ function ConversationRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  
+
   const personaMember = convo.members.find((m) => m.kind === "persona");
   const isAi = convo.kind === "persona";
   const isGroup = convo.kind === "group";
@@ -372,8 +371,8 @@ function ConversationRow({
   const time = relativeTime(convo.lastAt);
 
   return (
-    <Link 
-      href={`/chat/c/${convo.id}`} 
+    <Link
+      href={`/chat/c/${convo.id}`}
       className="group relative flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-3.5 py-3 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md"
     >
       <div className="relative">
@@ -384,7 +383,7 @@ function ConversationRow({
           </span>
         )}
       </div>
-      
+
       <span className="relative min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className={`truncate ${unread ? "font-extrabold" : "font-bold"}`}>
@@ -397,9 +396,8 @@ function ConversationRow({
           )}
           {time && (
             <span
-              className={`ml-auto shrink-0 text-[11px] font-semibold ${
-                unread ? "text-indigo-ai" : "text-muted/70"
-              }`}
+              className={`ml-auto shrink-0 text-[11px] font-semibold ${unread ? "text-indigo-ai" : "text-muted/70"
+                }`}
             >
               {time}
             </span>
@@ -407,13 +405,12 @@ function ConversationRow({
         </span>
         <span className="mt-0.5 flex items-center gap-2">
           <span
-            className={`min-w-0 flex-1 truncate text-xs ${
-              !convo.lastMessage
+            className={`min-w-0 flex-1 truncate text-xs ${!convo.lastMessage
                 ? "italic text-muted/60"
                 : unread
                   ? "font-bold text-foreground"
                   : "text-muted"
-            }`}
+              }`}
           >
             {preview}
           </span>

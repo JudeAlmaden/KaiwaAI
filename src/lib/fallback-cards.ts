@@ -17,3 +17,16 @@ export const FALLBACK_OFFLINE_CARDS: Card[] = [
   { id: "off-14", type: "vocabulary", status: "learning", word: "犬", reading: "いぬ", romaji: "inu", meaning: "Dog" },
   { id: "off-15", type: "vocabulary", status: "learning", word: "大きい", reading: "おおきい", romaji: "ookii", meaning: "Big / Large" },
 ];
+
+export const FALLBACK_OFFLINE_KANJI_CARDS: Card[] = [
+  { id: "off-k1", type: "kanji", status: "learning", character: "一", meanings: ["One"], readingsOn: ["イチ", "イツ"], readingsKun: ["ひと-", "ひとつ"], radicals: ["一"], heisigNumber: 1, heisigLesson: 1, heisigKeyword: "one" },
+  { id: "off-k2", type: "kanji", status: "learning", character: "二", meanings: ["Two"], readingsOn: ["ニ"], readingsKun: ["ふた", "ふたつ"], radicals: ["二"], heisigNumber: 2, heisigLesson: 1, heisigKeyword: "two" },
+  { id: "off-k3", type: "kanji", status: "learning", character: "三", meanings: ["Three"], readingsOn: ["サン"], readingsKun: ["み", "みつ"], radicals: ["一"], heisigNumber: 3, heisigLesson: 1, heisigKeyword: "three" },
+  { id: "off-k4", type: "kanji", status: "learning", character: "四", meanings: ["Four"], readingsOn: ["シ"], readingsKun: ["よ", "よつ"], radicals: ["囗"], heisigNumber: 4, heisigLesson: 1, heisigKeyword: "four" },
+  { id: "off-k5", type: "kanji", status: "learning", character: "五", meanings: ["Five"], readingsOn: ["ゴ"], readingsKun: ["いつ", "いつつ"], radicals: ["二"], heisigNumber: 5, heisigLesson: 1, heisigKeyword: "five" },
+  { id: "off-k6", type: "kanji", status: "learning", character: "日", meanings: ["Sun", "Day"], readingsOn: ["ニチ", "ジツ"], readingsKun: ["ひ", "-び", "-か"], radicals: ["日"], heisigNumber: 12, heisigLesson: 1, heisigKeyword: "day" },
+  { id: "off-k7", type: "kanji", status: "learning", character: "月", meanings: ["Moon", "Month"], readingsOn: ["ゲツ", "ガツ"], readingsKun: ["つき"], radicals: ["月"], heisigNumber: 13, heisigLesson: 1, heisigKeyword: "month" },
+  { id: "off-k8", type: "kanji", status: "learning", character: "田", meanings: ["Rice Field"], readingsOn: ["デン"], readingsKun: ["た"], radicals: ["田"], heisigNumber: 14, heisigLesson: 1, heisigKeyword: "rice field" },
+  { id: "off-k9", type: "kanji", status: "learning", character: "目", meanings: ["Eye"], readingsOn: ["モク", "ボク"], readingsKun: ["め"], radicals: ["目"], heisigNumber: 15, heisigLesson: 1, heisigKeyword: "eye" },
+  { id: "off-k10", type: "kanji", status: "learning", character: "口", meanings: ["Mouth"], readingsOn: ["コウ", "ク"], readingsKun: ["くち"], radicals: ["口"], heisigNumber: 11, heisigLesson: 1, heisigKeyword: "mouth" },
+];

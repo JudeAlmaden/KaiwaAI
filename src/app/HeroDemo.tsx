@@ -42,7 +42,7 @@ export default function HeroDemo() {
       setTimeout(() => {
         const tok =
           demoConversation[demoHighlight.messageIndex].tokens[
-            demoHighlight.tokenIndex
+          demoHighlight.tokenIndex
           ];
         if (tok.word) {
           setSaved({
@@ -158,11 +158,10 @@ function WordToken({
     <span className="relative inline-block">
       <button
         onClick={() => onToggle(tokenKey)}
-        className={`rounded-md decoration-2 underline-offset-4 transition-colors ${
-          open
+        className={`rounded-md decoration-2 underline-offset-4 transition-colors ${open
             ? "bg-indigo-ai/15 text-indigo-ai"
             : "underline decoration-indigo-ai/30 hover:bg-indigo-ai/10"
-        }`}
+          }`}
       >
         {tok.t}
       </button>

@@ -45,6 +45,7 @@ export default function LookupToken({
       const target = e.target as Node;
       if (popupRef.current?.contains(target)) return;
       if (btnRef.current?.contains(target)) return;
+      if ((target as HTMLElement).closest?.("[data-token-selection-ui], [data-kanji-modal]")) return;
       onToggleRef.current();
     }
 

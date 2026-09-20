@@ -2,6 +2,64 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.0.0] - 2026-09-20
+
+### Added
+- **Kanji Folder & Lesson Architecture** — User-generated lesson folders (`KanjiGroup`) to organize kanji study (e.g., "Lesson 1", "Lesson 2: Strokes") with folder-level completion metrics and ordering (`KanjiGroupEntry`).
+- **User-Specific Heisig Keywords & Meanings** — Added `customMeaning` to `UserKanji` so personal Heisig RTK keywords and translations are 100% private to each user without modifying the shared dictionary.
+- **Folder Explorer UI (`KanjiClient.tsx`)** — Full folder-based navigation: browse lesson binders, enter folders with breadcrumb navigation, order kanji, and drill down into custom collections or "All My Kanji".
+- **RTK Add & Bulk Paste Importer (`AddKanjiModal.tsx`)** — Single entry and bulk copy/paste modal supporting tab, comma, or pipe-separated imports from RTK PDFs or notes with live parsing preview and folder assignment.
+- **Remembering the Kanji (RTK) Detail Card** — Inline editing of RTK Frame #, Lesson #, and Keyword on `KanjiDetailClient.tsx`.
+- **Custom Story & Mnemonic Editor** — View, copy/paste, and edit personal mnemonic stories directly from the kanji detail page (`PATCH /api/kanji/[character]`).
+- **Lesson Study Mode (`ReviewClient.tsx` & `/api/kanji/review`)** — Direct folder/lesson drilling via `heisigLesson` and `groupId` query parameters, displaying personal mnemonics on card flip.
+- **Inline Kanji Mnemonic Studio (`KanjiBreakdown.tsx`)** — Direct 1-click AI mnemonic story generation (`generateKanjiMnemonicClient`) and interactive rich note editing inside the breakdown modal without opening secondary modals.
+- **Inline Folder Selection & Creation** — Real-time lesson folder assignment, quick custom folder creation, and folder relocation directly within `KanjiBreakdown.tsx`.
+- **Auto-Provisioning Heisig Lesson Folders (`/api/kanji/[character]/learn`)** — Automatically provisions `Lesson {X}` (`kind: "heisig_lesson"`) folders when adding a kanji with a `heisigLesson` if it does not yet exist for the user.
+- **In-App Navigation Shell Modernization (`AppNav.tsx`)** — Live AI companion status indicator with pulsing dot, primary talk CTA, spaced repetition due counter badge, and mobile floating island dock.
+- **Home Dashboard Bento Layout Overhaul (`HomeClient.tsx`)** — Bento grid dashboard with time-of-day greeting, companion status, count-up review sprint card, roleplay quest spotlight, and kotowaza proverb spotlight.
+- **Feature Highlights Ticker** — Added `LandingStatsTicker.tsx` with continuous smooth horizontal ticker showcasing core app highlights and pausing on hover.
+- **Rich Multi-Column Footer** — Added `LandingFooter.tsx` with brand mission, Japanese ethos quote, live operational BYOK badge, structured product and platform navigation links, and legal/privacy shortcuts.
+- **Interactive Live Scenario Maker** — Overhauled `LandingQuestRPG.tsx` with authentic roleplay themes (`food`, `travel`, `directions`, `shopping`, `emergency`, `surprise`), custom prompt idea generator, objectives list, and instant preview matching the in-app `/chat` `QuestLauncher`.
+- **Expanded Again-Lock Unit Test Suite** — Added unit tests (`src/lib/app-blocker-again-lock.test.ts`) verifying Good/Easy disable enforcement across session re-queues.
+
+### Changed
+- **Sidebar User Card Redesign (`AppNav.tsx`)** — Consolidated the bottom user card into a single compact row: gradient avatar, username + email sub-label, inline streak badge, and icon-only logout button (`LogoutButton` `"icon"` variant).
+- **Kanji Breakdown Modal Architecture** — Replaced the modal-on-modal anti-pattern (`AddKanjiModal` over `KanjiBreakdown`) with focused inline study and note-taking controls.
+- **Dictionary vs. Personal Study Separation** — Cleanly delineated global dictionary meanings (JMDict) from personalized user keywords, RTK frame/lesson data, and custom mnemonic stories in `KanjiBreakdown.tsx`.
+- **Mnemonic Schema Synchronization** — Synchronized `UserKanji.mnemonic` and `KanjiMnemonic` across `/api/kanji/[character]/mnemonic/save` and `/api/kanji/[character]/learn`.
+- **Kanji Study Navigation** — Transformed the kanji hub from an automatic list into an intentional folder explorer where users manage and study their own curated lesson sets.
+- **Landing Page Hero Section** — Integrated `LandingKanjiOrbit` as an ambient rotating halo behind `HeroDemo` instead of vertical stacking, ensuring the hero fits standard desktop and laptop viewports without overflow.
+- **Interactive Canvas Quest View** — Updated `CanvasQuestsView` in `LandingInteractiveCanvas.tsx` to match the authentic in-app quest card layout.
+- **Privacy & BYOK Messaging** — Replaced legacy subscription paywall references across `page.tsx` with clean, direct Google Gemini API BYOK copy.
+- **Home Client State Initialization** — Replaced synchronous `setState` calls in `HomeClient.tsx`'s `useEffect` with lazy `useState` initializers, eliminating cascading re-renders.
+
+### Removed
+- **Sidebar Status Blip** — Removed the "Kai is online · talks N5" status text under the logo in the desktop sidebar.
+- **Nested AddKanjiModal in Chat** — Removed `AddKanjiModal` invocation and overlay from `KanjiBreakdown.tsx`.
+- **Automatic Kanji Ingestion** — Removed `autoAddKanjiFromWord` calls in flashcard creation; adding vocabulary words in chat or flashcards no longer secretly pollutes the kanji review queue.
+- **JLPT N1–N5 Filters** — Completely removed legacy JLPT level filter chips from the kanji study interface in favor of user-generated lesson folders.
+
+### Fixed
+- **Study Tab Sidebar Navigation (`StudyClient.tsx`)** — Added `useEffect` watching `searchParams` so vocab/kanji tabs reactively switch when sidebar nav links soft-navigate between `/study?tab=vocab` and `/study?tab=kanji`.
+- **KanjiBreakdown React Compiler Lint** — Replaced manual `useCallback` memoization with plain functions and resolved folder-picker effect warnings for clean ESLint `--max-warnings 0` compliance.
+- **Mnemonic Save Test Coverage** — Added `userKanji` Prisma mocks to `/api/kanji/[character]/mnemonic/save` route tests.
+- **WordToken Outside-Click Event Interception** — Fixed critical event capturing bug where clicking buttons inside `KanjiBreakdown` caused `WordToken`'s `document.pointerdown` capture listener to detect an outside click and immediately close, unmounting `KanjiBreakdown` before button actions could fire.
+- **Kanji Group Upsert Validation** — Resolved Prisma Client 500 error in `/api/kanji/[character]/learn` caused by empty `update: {}` in `kanjiGroupEntry.upsert` by properly passing `update: { order: nextOrder }`.
+- **Kanji Group Assignment Propagation** — Fixed `initialGroupId` mapping bug where group context was lost due to missing group typings on `KanjiDetail`.
+- **Sidenav Route Highlighting** — Fixed active tab highlighting in `AppNav.tsx` for `/study?tab=kanji` and `/study?tab=vocab`, and disambiguated `/settings` from `/settings/app-blocker`.
+- **`/api/kanji/review` RTK Fields & Deduplication** — Ensured GET response includes `heisigNumber`, `heisigLesson`, `heisigKeyword`, and deduplicated `customMeaning`.
+- **Kanji Quest Empty Deck Fallback** — Added `FALLBACK_OFFLINE_KANJI_CARDS` so empty kanji decks do not incorrectly pull vocabulary words.
+- **Review Client Completion Tracking** — Fixed `tally.good` and unlock threshold math when passing a card previously marked "Again".
+- **Stray Typography Glyphs** — Removed stray cross symbol rendered near the hero headline on the landing page.
+- **Unused Imports & ESLint Warnings** — Cleaned up unused React hooks from `LandingStatsTicker.tsx` and resolved effect setState warnings in `HomeClient.tsx`.
+- **Pitch Accent Text Drift** — Removed obsolete references to pitch accent from `LandingHowItWorks.tsx` and `LandingInteractiveCanvas.tsx`.
+- **Missing Prisma client schema definitions** during Next.js hot reloads by introducing client version cache busting (`PRISMA_SCHEMA_VERSION = 3`).
+
+### Technical
+- Modified: `package.json`, `prisma/schema.prisma`, `src/lib/prisma.ts`, `src/app/page.tsx`, `src/app/LandingQuestRPG.tsx`, `src/app/LandingInteractiveCanvas.tsx`, `src/app/LandingHowItWorks.tsx`, `src/app/LandingStatsTicker.tsx`, `src/app/(app)/AppNav.tsx`, `src/app/(app)/home/HomeClient.tsx`, `src/app/(app)/kanji/KanjiClient.tsx`, `src/app/(app)/kanji/[character]/KanjiDetailClient.tsx`, `src/app/(app)/kanji/AddKanjiModal.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/chat/WordToken.tsx`, `src/app/(app)/chat/LookupToken.tsx`, `src/app/(app)/chat/Avatar.tsx`, `src/app/(app)/chat/ChatHub.tsx`, `src/app/(app)/study/StudyClient.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/LogoutButton.tsx`, `src/app/HeroDemo.tsx`, `src/app/globals.css`, `src/app/api/kanji/review/route.ts`, `src/app/api/kanji/[character]/route.ts`, `src/app/api/kanji/[character]/learn/route.ts`, `src/app/api/kanji/[character]/mnemonic/save/route.ts`, `src/app/api/kanji/[character]/mnemonic/save/route.test.ts`, `src/app/api/review/mixed/route.ts`
+- New: `src/app/LandingKanjiOrbit.tsx`, `src/app/LandingStatsTicker.tsx`, `src/app/LandingFooter.tsx`, `src/app/(app)/kanji/AddKanjiModal.tsx`, `src/lib/fallback-cards.ts`, `public/assets/svg/image.png`
+- Tests: 321 passing (43 test files) — lint/typecheck clean
+
 ## [1.8.0] - 2026-09-19
 
 ### Added

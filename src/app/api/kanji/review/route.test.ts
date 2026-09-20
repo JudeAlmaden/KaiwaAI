@@ -183,18 +183,67 @@ describe("Kanji Review API - GET", () => {
     );
   });
 
-  it("should cap limit at 200", async () => {
+  it("should return empty cards when user has 0 kanji in their study list", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
 
-    const req = new Request("http://localhost/api/kanji/review?limit=999");
-    await GET(req);
+    const req = new Request("http://localhost/api/kanji/review?studyMode=all&limit=10");
+    const response = await GET(req);
+    const data = await response.json();
 
-    expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        take: 200,
-      })
-    );
+    expect(response.status).toBe(200);
+    expect(data.cards).toEqual([]);
+  });
+
+  it("should include customMeaning and Heisig RTK fields in returned review cards", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([
+      {
+        id: "uk-rtk",
+        userId: "user-123",
+        kanjiId: "k-rtk",
+        customMeaning: "sun",
+        status: "learning",
+        easeFactor: 2.5,
+        interval: 1,
+        repetitions: 1,
+        timesReviewed: 1,
+        nextReview: new Date(),
+        lastReviewedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        mnemonic: "Picture the sun",
+        kanji: {
+          id: "k-rtk",
+          character: "日",
+          meanings: '["day","daytime"]',
+          readingsOn: '["ニチ","ジツ"]',
+          readingsKun: '["ひ","-び"]',
+          radicals: '["日"]',
+          heisigNumber: 12,
+          heisigLesson: 1,
+          heisigKeyword: "day",
+        },
+      } as never,
+    ]);
+
+    const req = new Request("http://localhost/api/kanji/review?studyMode=all&limit=10");
+    const response = await GET(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.cards).toHaveLength(1);
+    expect(data.cards[0]).toMatchObject({
+      type: "kanji",
+      character: "日",
+      // customMeaning ("sun") is prepended, dictionary meanings follow (deduped)
+      meanings: ["sun", "day", "daytime"],
+      customMeaning: "sun",
+      heisigNumber: 12,
+      heisigLesson: 1,
+      heisigKeyword: "day",
+      mnemonic: "Picture the sun",
+    });
   });
 });
 

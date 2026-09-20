@@ -6,7 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { AppBlocker } from '@/plugins/app-blocker';
 import type { BlockerStudyMode, AppBlockerConfig, BlockerFuriganaMode } from '@/plugins/app-blocker/definitions';
 import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
-import { FALLBACK_OFFLINE_CARDS } from '@/lib/fallback-cards';
+import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from '@/lib/fallback-cards';
 import Kai from '@/app/Kai';
 import ReviewCard, { Card } from '@/app/(app)/review/ReviewCard';
 import OfflineBanner from '@/components/OfflineBanner';
@@ -31,6 +31,7 @@ export default function StandaloneAppLockPage() {
   const [loading, setLoading] = useState(true);
   const [initResult, setInitResult] = useState<InitResult | null>(null);
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
+  const [failedCardIds, setFailedCardIds] = useState<Set<string>>(new Set());
   const [practice, setPractice] = useState(false);
   const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>('practice');
   const [furiganaMode, setFuriganaMode] = useState<BlockerFuriganaMode>('always');
@@ -232,7 +233,7 @@ export default function StandaloneAppLockPage() {
             return;
           }
           // On web/preview: use offline fallback cards
-          availableCards = FALLBACK_OFFLINE_CARDS;
+          availableCards = reviewType === 'kanji' ? FALLBACK_OFFLINE_KANJI_CARDS : FALLBACK_OFFLINE_CARDS;
         }
 
         const effectiveRequirement = Math.min(targetCount, availableCards.length);
@@ -321,6 +322,8 @@ export default function StandaloneAppLockPage() {
       } else {
         // FAILED ("Again"):
         // Do NOT increment completedCount!
+        // Track as failed card so Good & Easy are disabled when it returns
+        setFailedCardIds((prev) => new Set(prev).add(card.id));
         // Re-insert the card 2 positions ahead so it returns later in the same session.
         const nextCards = [...cards];
         const [failedCard] = nextCards.splice(currentIndex, 1);
@@ -335,6 +338,10 @@ export default function StandaloneAppLockPage() {
     [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, earlyReviewStrategy, finishUnlock]
   );
 
+  const currentCard = cards[currentIndex];
+  const isCardFailed = currentCard ? failedCardIds.has(currentCard.id) : false;
+  const progressPct = Math.min(100, Math.round((completedCount / requiredCount) * 100));
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -345,18 +352,15 @@ export default function StandaloneAppLockPage() {
       } else if (e.key === '2') {
         handleGrade(1);
       } else if (e.key === '3') {
-        handleGrade(2);
+        if (!isCardFailed) handleGrade(2);
       } else if (e.key === '4') {
-        handleGrade(3);
+        if (!isCardFailed) handleGrade(3);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleGrade]);
-
-  const currentCard = cards[currentIndex];
-  const progressPct = Math.min(100, Math.round((completedCount / requiredCount) * 100));
+  }, [handleGrade, isCardFailed]);
 
   if (loading || initResult?.kind === 'redirect-home' || initResult?.kind === 'auto-unlocked') {
     return (
@@ -459,6 +463,7 @@ export default function StandaloneAppLockPage() {
           card={currentCard}
           reviewType={currentCard.type || "vocabulary"}
           flipped={flipped}
+          disabledGrades={isCardFailed ? [2, 3] : undefined}
           showFurigana={
             furiganaMode === 'always'
               ? true

@@ -33,14 +33,25 @@ export async function POST(
   }
 
   try {
-    // Save or update mnemonic
+    // Save or update mnemonic in KanjiMnemonic
     await prisma.kanjiMnemonic.upsert({
       where: { userId_kanjiId: { userId: user.id, kanjiId: kanji.id } },
       update: { mnemonic: body.mnemonic },
       create: { userId: user.id, kanjiId: kanji.id, mnemonic: body.mnemonic },
     });
 
-    return NextResponse.json({ success: true });
+    // Also sync to UserKanji if exists
+    const existingUK = await prisma.userKanji.findUnique({
+      where: { userId_kanjiId: { userId: user.id, kanjiId: kanji.id } },
+    });
+    if (existingUK) {
+      await prisma.userKanji.update({
+        where: { id: existingUK.id },
+        data: { mnemonic: body.mnemonic },
+      });
+    }
+
+    return NextResponse.json({ success: true, mnemonic: body.mnemonic });
   } catch (error) {
     console.error("Error saving mnemonic:", error);
     return NextResponse.json(

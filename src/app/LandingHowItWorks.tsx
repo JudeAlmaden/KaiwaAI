@@ -18,7 +18,7 @@ const STEPS = [
     title: "Tap & Collect",
     subtitle: "Instant lookups & Furigana",
     description:
-      "Tap any unfamiliar word to reveal instant definitions, Furigana annotations, and pitch accent. One tap saves it directly to your review deck.",
+      "Tap any unfamiliar word to reveal instant definitions, Furigana annotations, and JLPT levels. One tap saves it directly to your review deck.",
     icon: Cards,
     accent: "border-sky/30 text-sky bg-sky/10",
   },

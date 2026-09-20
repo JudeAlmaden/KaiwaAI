@@ -176,17 +176,52 @@ export async function GET(req: Request) {
   });
 
   // Transform kanji cards
-  const kanjiTransformed = userKanji.map((uk) => ({
-    id: uk.id,
-    type: "kanji" as const,
-    character: uk.kanji.character,
-    meanings: JSON.parse(uk.kanji.meanings),
-    readingsOn: JSON.parse(uk.kanji.readingsOn),
-    readingsKun: JSON.parse(uk.kanji.readingsKun),
-    mnemonic: uk.mnemonic,
-    status: uk.status,
-    _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
-  }));
+  const kanjiTransformed = userKanji.map((uk) => {
+    let meanings: string[] = [];
+    try {
+      meanings = uk.customMeaning ? [uk.customMeaning] : (uk.kanji.meanings ? JSON.parse(uk.kanji.meanings) : []);
+    } catch {
+      meanings = [];
+    }
+
+    let readingsOn: string[] = [];
+    try {
+      readingsOn = uk.kanji.readingsOn ? JSON.parse(uk.kanji.readingsOn) : [];
+    } catch {
+      readingsOn = [];
+    }
+
+    let readingsKun: string[] = [];
+    try {
+      readingsKun = uk.kanji.readingsKun ? JSON.parse(uk.kanji.readingsKun) : [];
+    } catch {
+      readingsKun = [];
+    }
+
+    let radicals: string[] = [];
+    try {
+      radicals = uk.kanji.radicals ? JSON.parse(uk.kanji.radicals) : [];
+    } catch {
+      radicals = [];
+    }
+
+    return {
+      id: uk.id,
+      type: "kanji" as const,
+      character: uk.kanji.character,
+      meanings,
+      readingsOn,
+      readingsKun,
+      radicals,
+      heisigNumber: uk.kanji.heisigNumber,
+      heisigKeyword: uk.kanji.heisigKeyword,
+      heisigLesson: uk.kanji.heisigLesson,
+      customMeaning: uk.customMeaning,
+      mnemonic: uk.mnemonic,
+      status: uk.status,
+      _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
+    };
+  });
 
   // Combine and shuffle
   const allCards = [...vocabTransformed, ...kanjiTransformed];

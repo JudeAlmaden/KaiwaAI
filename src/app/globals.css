@@ -2,20 +2,27 @@
 
 :root {
   /* KaiwaAI — friendly companion palette */
-  --background: #fff9f5; /* warm cream */
-  --foreground: #3a3247; /* soft dark plum, never harsh black */
+  --background: #fff9f5;
+  /* warm cream */
+  --foreground: #3a3247;
+  /* soft dark plum, never harsh black */
   --muted: #8b8499;
 
   /* Kai's signature: a friendly violet */
   --indigo: #7c5cff;
   --indigo-soft: #9b82ff;
-  --indigo-deep: #5b3fd6; /* used as the 3D button "lip" */
+  --indigo-deep: #5b3fd6;
+  /* used as the 3D button "lip" */
 
   /* Playful supporting colors */
-  --sakura: #ff6b9d; /* pink */
-  --mint: #2ec4a6; /* success / correct */
-  --amber: #ffb23e; /* streaks / xp */
-  --sky: #46b3ff; /* info */
+  --sakura: #ff6b9d;
+  /* pink */
+  --mint: #2ec4a6;
+  /* success / correct */
+  --amber: #ffb23e;
+  /* streaks / xp */
+  --sky: #46b3ff;
+  /* info */
 
   /* Surfaces */
   --card: #ffffff;
@@ -47,16 +54,12 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   background-image:
-    radial-gradient(
-      ellipse 70% 50% at 12% -5%,
+    radial-gradient(ellipse 70% 50% at 12% -5%,
       rgba(124, 92, 255, 0.1),
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse 60% 50% at 100% 0%,
+      transparent 60%),
+    radial-gradient(ellipse 60% 50% at 100% 0%,
       rgba(255, 107, 157, 0.08),
-      transparent 55%
-    );
+      transparent 55%);
   background-attachment: fixed;
   background-repeat: no-repeat;
 }
@@ -75,10 +78,12 @@ body {
     filter 0.15s ease,
     box-shadow 0.15s ease;
 }
+
 .btn-pop:active {
   transform: translateY(2px);
   border-bottom-width: 2px;
 }
+
 .btn-pop:hover {
   filter: brightness(1.04);
 }
@@ -89,6 +94,7 @@ body {
     opacity: 0;
     transform: translateY(14px) rotate(8deg) scale(0.9);
   }
+
   100% {
     opacity: 1;
     transform: translateY(0) rotate(3deg) scale(1);
@@ -101,14 +107,17 @@ body {
     transform: translateY(-10vh) translateX(0) rotate(0deg);
     opacity: 0;
   }
+
   10% {
     opacity: 0.7;
   }
+
   100% {
     transform: translateY(110vh) translateX(40px) rotate(360deg);
     opacity: 0;
   }
 }
+
 .petal {
   position: fixed;
   top: 0;
@@ -135,19 +144,18 @@ body {
     /* margin line */
     linear-gradient(to right, transparent 38px, rgba(255, 107, 157, 0.35) 38px, rgba(255, 107, 157, 0.35) 40px, transparent 40px),
     /* ruled lines */
-    repeating-linear-gradient(
-      to bottom,
+    repeating-linear-gradient(to bottom,
       transparent 0,
       transparent 31px,
       rgba(124, 92, 255, 0.14) 31px,
-      rgba(124, 92, 255, 0.14) 32px
-    );
+      rgba(124, 92, 255, 0.14) 32px);
 }
 
 /* Premium 3D Card Flip */
 .card-perspective {
   perspective: 1200px;
 }
+
 .card-inner {
   position: relative;
   width: 100%;
@@ -156,9 +164,11 @@ body {
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
 }
+
 .card-inner.is-flipped {
   transform: rotateY(180deg);
 }
+
 .card-front,
 .card-back {
   position: absolute;
@@ -173,6 +183,7 @@ body {
   background-color: var(--card);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
+
 .card-front {
   transform: rotateY(0deg) translateZ(1px);
   display: flex;
@@ -181,10 +192,12 @@ body {
   justify-content: center;
   padding: 1.5rem;
 }
+
 .card-back {
   transform: rotateY(180deg) translateZ(1px);
   overflow: hidden;
 }
+
 .card-back-scroll {
   display: flex;
   height: 100%;
@@ -196,15 +209,85 @@ body {
   padding: 1.5rem;
 }
 
-/* Hide scrollbar utilities */
-.scrollbar-none,
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+/* ── Landing-specific: float-up entrance for sections ────────────────── */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.scrollbar-none::-webkit-scrollbar,
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+
+.fade-up {
+  animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Progress bar shimmer sweep ─────────────────────────────────────── */
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(200%);
+  }
+}
+
+/* ── Card hover lift ──────────────────────────────────────────────────── */
+.card-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(124, 92, 255, 0.12);
 }
 
 
+/* ── Landing-specific: float-up entrance for sections ────────────────── */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Subtle shimmer on the hero heading accent ───────────────────────── */
+@keyframes hueShift {
+
+  0%,
+  100% {
+    filter: hue-rotate(0deg);
+  }
+
+  50% {
+    filter: hue-rotate(15deg);
+  }
+}
+
+.hue-shift {
+  animation: hueShift 4s ease-in-out infinite;
+}
+
+/* ── Card hover lift ──────────────────────────────────────────────────── */
+.card-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(124, 92, 255, 0.12);
+}

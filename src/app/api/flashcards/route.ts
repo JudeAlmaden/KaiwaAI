@@ -242,12 +242,6 @@ export async function POST(req: Request) {
           },
         });
       }
-      try {
-        const { autoAddKanjiFromWord } = await import("@/lib/auto-add-kanji");
-        await autoAddKanjiFromWord(user.id, wordForBatch.dictionary);
-      } catch (error) {
-        console.error("Failed to auto-add kanji:", error);
-      }
     }
 
     const result = await prisma.userFlashcard.createMany({
@@ -360,13 +354,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid word" }, { status: 400 });
   }
 
-  // Load the full word record (with forms) once so we can decide whether to
-  // auto-insert conjugations for verbs/adjectives and avoid re-fetching below.
-  const wordRecord = await prisma.word.findUnique({
-    where: { id: wordId },
-    include: { forms: true },
-  });
-
   // Check if already exists (the single card the caller asked for)
   const existing = wordFormId
     ? await prisma.userFlashcard.findUnique({
@@ -404,16 +391,6 @@ export async function POST(req: Request) {
   }
 
   const addedConjugations = 0;
-
-  // Auto-add kanji from this word to the user's review queue
-  if (wordRecord) {
-    try {
-      const { autoAddKanjiFromWord } = await import("@/lib/auto-add-kanji");
-      await autoAddKanjiFromWord(user.id, wordRecord.dictionary);
-    } catch (error) {
-      console.error("Failed to auto-add kanji:", error);
-    }
-  }
 
   return NextResponse.json({
     card,

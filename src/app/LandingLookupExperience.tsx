@@ -38,7 +38,7 @@ export default function LandingLookupExperience() {
             transition={{ duration: 0.4, delay: 0.2 }}
             className="mt-3 text-base text-muted"
           >
-            Tap any token or drag-select any phrase in a message. KaiwaAI extracts instant JMDict & Gemini definitions, pitch accent charts, and character breakdowns right in place.
+            Tap any token or drag-select any phrase in a message. KaiwaAI extracts instant JMDict definitions, Furigana readings, Romaji, part-of-speech, and character-by-character Kanji breakdowns — right in place.
           </motion.p>
         </div>
 
@@ -75,7 +75,7 @@ export default function LandingLookupExperience() {
 
           {/* Floating Augmented AR Badges around the Sentence */}
           <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Badge 1: Pitch Accent & Audio */}
+            {/* Badge 1: Readings & POS */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -85,13 +85,13 @@ export default function LandingLookupExperience() {
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-sky uppercase tracking-wider">
-                  Pitch Accent
+                  Readings &amp; Romaji
                 </span>
                 <SpeakerHigh size={18} weight="fill" className="text-sky" />
               </div>
-              <p className="mt-2 font-display text-base font-extrabold">Pitch Pattern [3][0]</p>
+              <p className="mt-2 font-jp text-base font-extrabold">えいがかん</p>
               <p className="text-xs text-muted mt-1">
-                Flat / Heiban pattern · standard Tokyo dialect audio available.
+                Romaji: <span className="font-semibold text-foreground">eigakan</span> · Noun (名詞)
               </p>
             </motion.div>
 

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Brain, PushPin, ForkKnife, Airplane } from "@phosphor-icons/react";
+import Kai from "./Kai";
 
 export default function LandingMemoryStory() {
   return (
@@ -35,7 +36,8 @@ export default function LandingMemoryStory() {
             transition={{ duration: 0.4, delay: 0.2 }}
             className="mt-4 text-base text-muted leading-relaxed"
           >
-            Mention your trip to Kyoto next autumn, your goal to pass JLPT N3, or your favorite ramen shop. Kai quietly logs these details in her **Persona Profile Drawer** and brings them back up in future conversations when you least expect it.
+            Mention your trip to Kyoto next autumn, your goal to pass JLPT N3, or your favourite ramen shop. Kai quietly logs these details in her{" "}
+            <strong className="text-foreground">Persona Profile Drawer</strong> and brings them back up in future conversations when you least expect it.
           </motion.p>
 
           {/* Sample Chat Message from Kai */}
@@ -47,12 +49,10 @@ export default function LandingMemoryStory() {
             className="mt-8 rounded-3xl border-2 border-indigo-ai/30 bg-card p-6 shadow-xl relative"
           >
             <div className="flex items-center gap-3 border-b border-border pb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-ai text-white font-extrabold">
-                Kai
-              </div>
+              <Kai size={40} />
               <div>
                 <p className="font-display text-sm font-extrabold">Kai</p>
-                <p className="text-[11px] text-muted font-jp">Kaiwa Companion</p>
+                <p className="text-[11px] text-muted font-jp">KaiwaAI Companion</p>
               </div>
             </div>
 

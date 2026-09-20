@@ -8,7 +8,7 @@ import { clearAllChatCache } from "@/lib/chat-cache";
 export default function LogoutButton({
   variant = "text",
 }: {
-  variant?: "text" | "button";
+  variant?: "text" | "button" | "icon";
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -20,6 +20,20 @@ export default function LogoutButton({
     clearAllChatCache();
     router.push("/login");
     router.refresh();
+  }
+
+  if (variant === "icon") {
+    return (
+      <button
+        onClick={handleLogout}
+        disabled={loading}
+        aria-label="Log out"
+        title="Log out"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted/50 transition-all hover:bg-sakura/10 hover:text-sakura disabled:opacity-40"
+      >
+        <SignOut size={16} weight="bold" aria-hidden />
+      </button>
+    );
   }
 
   if (variant === "button") {

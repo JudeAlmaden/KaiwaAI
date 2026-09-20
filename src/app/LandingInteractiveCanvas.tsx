@@ -164,7 +164,7 @@ export default function LandingInteractiveCanvas() {
               <span className="h-3 w-3 shrink-0 rounded-full bg-amber-500/80" />
               <span className="h-3 w-3 shrink-0 rounded-full bg-emerald-500/80" />
               <span className="ml-1 truncate font-display text-xs font-extrabold text-muted">
-                KaiwaAI Studio
+                KaiwaAI Companion Preview
               </span>
             </div>
             <span className="shrink-0 rounded-full bg-indigo-ai/10 px-2.5 py-1 font-mono text-[10px] font-bold text-indigo-ai">
@@ -292,7 +292,7 @@ function CanvasLookupView() {
             <h4 className="mt-1 font-jp text-xl sm:text-2xl font-extrabold">
               映画館 <span className="text-xs text-indigo-ai font-normal">えいがかん</span>
             </h4>
-            <p className="text-[11px] text-muted">eigakan · Pitch: [3][0]</p>
+            <p className="text-[11px] text-muted">eigakan · Noun</p>
           </div>
           <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai">
             <SpeakerHigh size={16} weight="fill" />
@@ -316,35 +316,53 @@ function CanvasLookupView() {
 
 function CanvasQuestsView() {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between border-b border-border pb-3 gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber/15 text-amber font-bold text-base">
-            ☕
+    <div className="space-y-3.5">
+      {/* Header matching QuestLauncher card */}
+      <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-ai/10 text-2xl">
+            🍜
           </div>
           <div className="min-w-0">
-            <h4 className="font-display text-xs sm:text-sm font-extrabold truncate">Coffee Shop Quest</h4>
-            <p className="text-[11px] text-muted font-jp truncate">喫茶店で注文する</p>
+            <h4 className="font-display text-sm font-extrabold truncate">Ordering Ramen at a Local Shop</h4>
+            <p className="text-[11px] text-indigo-ai/80 font-jp font-bold truncate">ラーメン屋で注文する</p>
           </div>
         </div>
-        <span className="shrink-0 rounded-full bg-amber/20 px-2.5 py-0.5 text-[10px] font-bold text-amber uppercase">
-          Quest Active
+        <span className="shrink-0 rounded-full bg-indigo-ai/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-ai">
+          JLPT N5
         </span>
       </div>
 
-      <div className="space-y-2 text-xs">
-        <div className="flex items-center gap-2.5 rounded-xl bg-mint/10 p-2.5 sm:p-3 text-mint font-bold border border-mint/20">
-          <Check size={16} weight="bold" className="shrink-0" />
-          <span className="truncate">Order an iced matcha latte in Japanese</span>
+      <p className="text-xs text-muted leading-relaxed">
+        You sit at a small ramen counter in Shibuya. The chef looks up and shouts 「いらっしゃい！何にする？」
+      </p>
+
+      <div className="space-y-1.5 pt-1 text-xs">
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-border/60 text-[9px] font-bold text-muted">
+            1
+          </span>
+          <span className="text-muted leading-snug">Greet the shop owner in Japanese</span>
         </div>
-        <div className="flex items-center gap-2.5 rounded-xl bg-amber/10 p-2.5 sm:p-3 text-amber font-bold border border-amber/20">
-          <span className="h-2 w-2 rounded-full bg-amber animate-ping shrink-0" />
-          <span className="truncate">Ask for oat milk substitution</span>
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-border/60 text-[9px] font-bold text-muted">
+            2
+          </span>
+          <span className="text-muted leading-snug">Order tonkotsu ramen with extra chashu</span>
         </div>
-        <div className="flex items-center gap-2.5 rounded-xl bg-bg/50 p-2.5 sm:p-3 text-muted border border-border">
-          <span className="h-2 w-2 rounded-full bg-border shrink-0" />
-          <span className="truncate">Pay with Suica IC card</span>
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-border/60 text-[9px] font-bold text-muted">
+            3
+          </span>
+          <span className="text-muted leading-snug">Ask where the water is</span>
         </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t border-border">
+        <span className="text-[11px] font-bold text-muted">🔄 Regenerate</span>
+        <span className="rounded-full bg-indigo-ai px-3.5 py-1 text-[10px] font-bold text-white shadow-sm">
+          Start Quest →
+        </span>
       </div>
     </div>
   );

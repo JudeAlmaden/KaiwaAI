@@ -45,7 +45,7 @@ const FEATURES: FeatureItem[] = [
     title: "Tap-to-Lookup & AI Breakdown",
     subtitle: "Instant Furigana, Romaji & POS",
     description:
-      "Tap any token or drag-select full sentences to reveal definitions, Furigana annotations, pitch accent, Romaji, and character-by-character Kanji breakdowns without breaking flow.",
+      "Tap any unfamiliar token or drag-select full sentences to reveal JMDict definitions, Furigana annotations, Romaji, part-of-speech tags, and character-by-character Kanji breakdowns without breaking your flow.",
     badge: "JMDict + Gemini AI",
     gradient: "from-sky-500/10 via-blue-500/5 to-transparent",
     borderColor: "hover:border-sky/40 border-border",

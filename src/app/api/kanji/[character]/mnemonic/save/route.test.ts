@@ -7,6 +7,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     kanji: { findUnique: vi.fn() },
     kanjiMnemonic: { upsert: vi.fn() },
+    userKanji: { findUnique: vi.fn(), update: vi.fn() },
   },
 }));
 
@@ -98,6 +99,7 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     it("should save new mnemonic successfully", async () => {
       vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
       vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji as never);
+      vi.mocked(prisma.userKanji.findUnique).mockResolvedValue(null);
       vi.mocked(prisma.kanjiMnemonic.upsert).mockResolvedValue({
         id: "mnemonic1",
         userId: mockUser.id,
@@ -131,6 +133,7 @@ describe("/api/kanji/[character]/mnemonic/save", () => {
     it("should update existing mnemonic", async () => {
       vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
       vi.mocked(prisma.kanji.findUnique).mockResolvedValue(mockKanji as never);
+      vi.mocked(prisma.userKanji.findUnique).mockResolvedValue(null);
       vi.mocked(prisma.kanjiMnemonic.upsert).mockResolvedValue({
         id: "mnemonic1",
         userId: mockUser.id,

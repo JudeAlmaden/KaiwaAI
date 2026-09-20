@@ -129,7 +129,7 @@ function PopupPortal({
       const target = e.target as Node;
       if (ref.current?.contains(target)) return;
       if (anchorRef?.current?.contains(target)) return;
-      if ((target as HTMLElement).closest?.("[data-token-selection-ui]")) return;
+      if ((target as HTMLElement).closest?.("[data-token-selection-ui], [data-kanji-modal]")) return;
       onCloseRef.current();
     }
 

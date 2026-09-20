@@ -11,7 +11,7 @@ import { useAppBlockerCompletion } from "@/hooks/useAppBlockerCompletion";
 import OfflineBanner from "@/components/OfflineBanner";
 import { AppBlocker } from "@/plugins/app-blocker";
 import ReviewCard, { Card } from "./ReviewCard";
-import { FALLBACK_OFFLINE_CARDS } from "@/lib/fallback-cards";
+import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from "@/lib/fallback-cards";
 
 type StudyMode = 
   | "due"           // Cards with nextReview in the past
@@ -34,10 +34,13 @@ type Setup = {
   isContinuous: boolean;
   activeLimit: number | "all";
   customCardIds?: string[];
+  heisigLesson?: number;
+  groupId?: string;
+  groupName?: string;
 };
 
 export default function ReviewClient() {
-  const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
+  const [phase, setPhase] = useState<"setup" | "session" | "done" | "empty">("setup");
   const [setup, setSetup] = useState<Setup>({ 
     reviewType: "vocabulary",
     studyMode: "due", 
@@ -52,6 +55,8 @@ export default function ReviewClient() {
   const [activePool, setActivePool] = useState<Card[]>([]);
   const [incomingQueue, setIncomingQueue] = useState<Card[]>([]);
   const [postedCardIds, setPostedCardIds] = useState<Set<string>>(new Set());
+  const [failedCardIds, setFailedCardIds] = useState<Set<string>>(new Set());
+  const [passedCardIds, setPassedCardIds] = useState<Set<string>>(new Set());
   const [total, setTotal] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [cardEpoch, setCardEpoch] = useState(0);
@@ -60,7 +65,7 @@ export default function ReviewClient() {
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
 
   // App Blocker Completion Tracking (only successful cards count towards unlock)
-  const completedCount = tally.good;
+  const completedCount = passedCardIds.size;
   useAppBlockerCompletion(completedCount, setup.limit);
 
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -106,18 +111,40 @@ export default function ReviewClient() {
   };
 
 
-  // Auto-start review session directly if already configured or triggered by App Blocker
+  // Auto-start review session directly if already configured, triggered by App Blocker, or from Kanji Lesson study
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const isAutostart = params.get("autostart") === "true" || params.get("mode") === "app-blocker";
       const isConfigured = localStorage.getItem("kaiwa_review_setup_configured") === "true";
       const countParam = params.get("count");
-      
+      const typeParam = params.get("type");
+      const heisigLessonParam = params.get("heisigLesson");
+      const groupIdParam = params.get("groupId");
+      const groupNameParam = params.get("groupName");
+
+      // Direct Lesson or Group Kanji Study
+      if (typeParam === "kanji" || heisigLessonParam || groupIdParam) {
+        const customSetup: Partial<Setup> = {
+          reviewType: "kanji",
+          studyMode: "all",
+          heisigLesson: heisigLessonParam ? parseInt(heisigLessonParam) : undefined,
+          groupId: groupIdParam || undefined,
+          groupName: groupNameParam || undefined,
+          limit: countParam ? parseInt(countParam) : 50,
+        };
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSetup((prev) => ({ ...prev, ...customSetup }));
+        // Auto-start if coming with autostart=true or direct lesson link
+        if (isAutostart || heisigLessonParam || groupIdParam) {
+          start(customSetup);
+        }
+        return;
+      }
+
       if ((isAutostart || isConfigured) && phase === "setup") {
         if (countParam) {
           const reqCount = parseInt(countParam) || 10;
-          // eslint-disable-next-line react-hooks/set-state-in-effect
           setSetup(prev => ({ ...prev, limit: reqCount }));
           start({ studyMode: "all", limit: reqCount });
         } else {
@@ -229,6 +256,8 @@ export default function ReviewClient() {
     });
     if (setup.studyMode === "new") params.set("status", "new");
     if (setup.practice) params.set("practice", "true");
+    if (setup.heisigLesson) params.set("heisigLesson", String(setup.heisigLesson));
+    if (setup.groupId) params.set("groupId", setup.groupId);
     
     try {
       const res = await fetch(`${endpoint}?${params}`);
@@ -267,21 +296,34 @@ export default function ReviewClient() {
     });
     if (s.studyMode === "new") params.set("status", "new");
     if (s.practice) params.set("practice", "true");
+    if (s.heisigLesson) params.set("heisigLesson", String(s.heisigLesson));
+    if (s.groupId) params.set("groupId", s.groupId);
     
     let cards: Card[] = [];
+    let isNetworkError = false;
     try {
       const res = await fetch(`${endpoint}?${params}`);
       if (res.ok) {
         const d = await res.json();
         cards = d.cards ?? [];
+      } else {
+        isNetworkError = true;
       }
     } catch {
+      isNetworkError = true;
       cards = [];
     }
 
-    // Fallback to offline cards if network request returned no cards or failed
+    // Fallback to offline cards ONLY if network error occurred and user is offline
+    if (isNetworkError && typeof navigator !== "undefined" && !navigator.onLine) {
+      const fallbackSource = s.reviewType === "kanji" ? FALLBACK_OFFLINE_KANJI_CARDS : FALLBACK_OFFLINE_CARDS;
+      cards = fallbackSource.slice(0, Math.min(s.limit, fallbackSource.length));
+    }
+
+    // If deck is legitimately empty, show clear empty state instead of fake cards or blank screen
     if (cards.length === 0) {
-      cards = FALLBACK_OFFLINE_CARDS.slice(0, Math.min(s.limit, FALLBACK_OFFLINE_CARDS.length));
+      setPhase("empty");
+      return;
     }
     
     // Shuffle for mixed direction
@@ -296,6 +338,8 @@ export default function ReviewClient() {
     setActivePool(initialActive);
     setIncomingQueue(initialIncoming);
     setPostedCardIds(new Set());
+    setFailedCardIds(new Set());
+    setPassedCardIds(new Set());
     setTotal(shuffled.length);
     setTally({ again: 0, good: 0 });
     setFlipped(false);
@@ -325,16 +369,28 @@ export default function ReviewClient() {
         }).catch(() => {});
       }
 
+      if (g === 0) {
+        // Track card as failed in this session so Good & Easy become disabled
+        setFailedCardIds((prev) => new Set(prev).add(card.id));
+      }
+
       if (isFirstAttempt) {
-        setTally((t) => ({
-          again: t.again + (g === 0 ? 1 : 0),
-          good: t.good + (g > 0 ? 1 : 0),
-        }));
+        if (g === 0) {
+          setTally((t) => ({ ...t, again: t.again + 1 }));
+        }
         setPostedCardIds((prev) => {
           const next = new Set(prev);
           next.add(card.id);
           return next;
         });
+      }
+
+      if (g > 0) {
+        const isFirstSuccess = !passedCardIds.has(card.id);
+        if (isFirstSuccess) {
+          setPassedCardIds((prev) => new Set(prev).add(card.id));
+          setTally((t) => ({ ...t, good: t.good + 1 }));
+        }
       }
 
       const nextActive = [...activePool];
@@ -389,8 +445,11 @@ export default function ReviewClient() {
       setCardEpoch((e) => e + 1);
       setShowHint(false); // Reset hint when moving to next card
     },
-    [activePool, incomingQueue, postedCardIds, setup, fetchMoreCards]
+    [activePool, incomingQueue, postedCardIds, passedCardIds, setup, fetchMoreCards]
   );
+
+  const currentCard = activePool[0];
+  const isCardFailed = currentCard ? failedCardIds.has(currentCard.id) : false;
 
   // keyboard shortcuts during a session
   useEffect(() => {
@@ -400,12 +459,16 @@ export default function ReviewClient() {
         e.preventDefault();
         setFlipped((f) => !f);
       } else if (flipped && ["1", "2", "3", "4"].includes(e.key)) {
-        grade(Number(e.key) - 1);
+        const selectedGrade = Number(e.key) - 1;
+        if (isCardFailed && (selectedGrade === 2 || selectedGrade === 3)) {
+          return;
+        }
+        grade(selectedGrade);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, flipped, grade]);
+  }, [phase, flipped, grade, isCardFailed]);
 
   // ── SETUP ──────────────────────────────────────────────────────────────
   if (phase === "setup") {
@@ -436,6 +499,83 @@ export default function ReviewClient() {
           onToggleMonitoring={handleToggleMonitoring}
           onUpdateAppBlockerConfig={handleUpdateAppBlockerConfig}
         />
+      </div>
+    );
+  }
+
+  // ── EMPTY ───────────────────────────────────────────────────────────────
+  if (phase === "empty") {
+    const isKanji = setup.reviewType === "kanji";
+    const isVocab = setup.reviewType === "vocabulary";
+
+    return (
+      <div className="flex flex-1 flex-col relative overflow-hidden">
+        <PageHeader 
+          title="Review" 
+          jp="復習" 
+          subtitle={isKanji ? "No kanji in study list" : "No cards due for review"} 
+        />
+        
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center z-10 max-w-md mx-auto">
+          {isKanji ? (
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-amber/15 border-2 border-amber/30 text-4xl font-bold font-jp text-amber shadow-lg shadow-amber/10 mb-5 animate-pulse">
+              漢
+            </div>
+          ) : (
+            <Kai size={80} className="mb-4" />
+          )}
+
+          <h2 className="font-display text-2xl font-extrabold text-foreground">
+            {isKanji
+              ? "No Kanji to Study Yet"
+              : isVocab && setup.studyMode === "due"
+              ? "All Caught Up! 🎉"
+              : "No Flashcards Found"}
+          </h2>
+
+          <p className="mt-3 text-sm text-muted leading-relaxed">
+            {isKanji
+              ? "You haven't added any kanji to your study list yet. Create a lesson folder, import from your Heisig RTK notes, or browse your folders to start studying!"
+              : isVocab && setup.studyMode === "due"
+              ? "You have reviewed all vocabulary flashcards currently due. Great work! You can study ahead with all cards or chat with Kai to learn new words."
+              : "No flashcards match this review criteria. Chat with Kai or save new vocabulary to build your review deck."}
+          </p>
+
+          <div className="mt-8 flex flex-col gap-3 w-full">
+            {isKanji ? (
+              <Link
+                href="/kanji"
+                className="w-full inline-flex h-12 items-center justify-center rounded-2xl bg-amber-500 border-b-4 border-amber-600 px-6 text-sm font-bold text-white shadow-sm hover:brightness-105 transition active:translate-y-[2px]"
+              >
+                ⛩️ Open Kanji Lessons
+              </Link>
+            ) : (
+              <>
+                {setup.studyMode === "due" && (
+                  <button
+                    onClick={() => start({ ...setup, studyMode: "all" })}
+                    className="w-full inline-flex h-12 items-center justify-center rounded-2xl bg-indigo-ai border-b-4 border-indigo-deep px-6 text-sm font-bold text-white shadow-sm hover:brightness-105 transition active:translate-y-[2px]"
+                  >
+                    📖 Study Ahead (All Cards)
+                  </button>
+                )}
+                <Link
+                  href="/chat"
+                  className="w-full inline-flex h-12 items-center justify-center rounded-2xl border-2 border-border bg-card/60 backdrop-blur-sm px-6 text-sm font-bold text-foreground transition hover:border-indigo-ai hover:text-indigo-ai"
+                >
+                  💬 Chat with Kai
+                </Link>
+              </>
+            )}
+
+            <button
+              onClick={() => setPhase("setup")}
+              className="w-full inline-flex h-12 items-center justify-center rounded-2xl border border-border bg-card/40 px-6 text-sm font-bold text-muted transition hover:text-foreground"
+            >
+              ← Back to Quest Gallery
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -645,6 +785,7 @@ export default function ReviewClient() {
           card={card}
           reviewType={setup.reviewType}
           flipped={flipped}
+          disabledGrades={isCardFailed ? [2, 3] : undefined}
           onFlip={() => setFlipped((f) => !f)}
           onGrade={(g) => grade(g)}
           showHint={showHint}

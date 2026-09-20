@@ -30,6 +30,10 @@ export type Card = {
   readingsOn?: string[];
   readingsKun?: string[];
   radicals?: string[];
+  heisigNumber?: number | null;
+  heisigKeyword?: string | null;
+  heisigLesson?: number | null;
+  customMeaning?: string | null;
   mnemonic?: string;
   status?: "new" | "learning" | "known";
   _pool?: "active" | "maintenance";
@@ -53,6 +57,7 @@ export interface ReviewCardProps {
   onToggleHint?: () => void;
   onGenerateMnemonic?: (isRegenerate: boolean) => void;
   showFurigana?: boolean;
+  disabledGrades?: number[];
 }
 
 function SpeakerButton({ text, title }: { text: string; title?: string }) {
@@ -99,6 +104,7 @@ export default function ReviewCard({
   onToggleHint,
   onGenerateMnemonic,
   showFurigana = true,
+  disabledGrades = [],
 }: ReviewCardProps) {
   const cardType = card.type || reviewType;
   const isVocab = cardType === "vocabulary";
@@ -153,7 +159,7 @@ export default function ReviewCard({
                   <SpeakerButton text={card.character || ""} title="Hear kanji readings" />
                 ) : null}
                 <span className={`font-bold ${isJpToEn ? "font-jp text-5xl" : "text-3xl"}`}>
-                  {isJpToEn ? card.character : card.meanings?.[0]}
+                  {isJpToEn ? card.character : (card.customMeaning || card.meanings?.[0])}
                 </span>
                 {!isJpToEn && card.radicals && card.radicals.length > 0 && (
                   <div className="mt-4 w-full" onClick={(e) => e.stopPropagation()}>
@@ -418,8 +424,27 @@ export default function ReviewCard({
                       </p>
                     )}
                     <p className="mt-2.5 text-xl font-bold text-foreground">
-                      {card.meanings?.join(", ")}
+                      {card.customMeaning || card.meanings?.join(", ")}
                     </p>
+                    {(card.heisigNumber || card.heisigLesson || card.customMeaning) && (
+                      <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1">
+                        {card.heisigNumber && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber/15 text-amber border border-amber/30">
+                            Frame #{card.heisigNumber}
+                          </span>
+                        )}
+                        {card.heisigLesson && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-ai/15 text-indigo-ai border border-indigo-ai/30">
+                            Lesson {card.heisigLesson}
+                          </span>
+                        )}
+                        {card.customMeaning && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-mint/15 text-mint border border-mint/30">
+                            RTK: {card.customMeaning}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted font-display">
                       Kanji
                     </p>
@@ -494,21 +519,38 @@ export default function ReviewCard({
 
       {/* Task 4: Grade buttons only when FLIPPED; hide again on flip-back */}
       {flipped ? (
-        <div className="grid w-full max-w-md grid-cols-4 gap-2.5">
-          {GRADES.map((g) => {
-            const Icon = g.icon;
-            return (
-              <button
-                key={g.grade}
-                type="button"
-                onClick={() => onGrade(g.grade)}
-                className={`flex flex-col items-center justify-center rounded-2xl py-3 text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:brightness-105 active:translate-y-[2px] ${g.color}`}
-              >
-                <Icon size={18} className="mb-0.5" />
-                <span>{g.label}</span>
-              </button>
-            );
-          })}
+        <div className="flex flex-col items-center w-full max-w-md gap-2">
+          <div className="grid w-full grid-cols-4 gap-2.5">
+            {GRADES.map((g) => {
+              const Icon = g.icon;
+              const isDisabled = disabledGrades?.includes(g.grade);
+              return (
+                <button
+                  key={g.grade}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => {
+                    if (!isDisabled) onGrade(g.grade);
+                  }}
+                  className={`flex flex-col items-center justify-center rounded-2xl py-3 text-sm font-bold shadow-sm transition-all ${
+                    isDisabled
+                      ? "opacity-30 grayscale cursor-not-allowed pointer-events-none border-2 border-border bg-card/40 text-muted"
+                      : `hover:-translate-y-0.5 hover:brightness-105 active:translate-y-[2px] ${g.color}`
+                  }`}
+                  title={isDisabled ? "Disabled because card was marked 'Again' in this session" : undefined}
+                >
+                  <Icon size={18} className="mb-0.5" />
+                  <span>{g.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {disabledGrades && disabledGrades.includes(2) && disabledGrades.includes(3) && (
+            <p className="text-[11px] font-semibold text-sakura flex items-center gap-1 animate-pulse">
+              <span>⚠️</span>
+              <span>Good &amp; Easy disabled — card was marked &apos;Again&apos;</span>
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-sm font-medium text-muted">

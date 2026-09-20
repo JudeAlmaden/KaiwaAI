@@ -21,6 +21,15 @@ export default function StudyClient() {
     return "vocab";
   });
 
+  // React to URL changes (e.g. sidebar nav links doing a soft-navigate)
+  useEffect(() => {
+    const urlTab = searchParams.get("tab");
+    if (urlTab === "kanji" || urlTab === "vocab") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveTab(urlTab);
+    }
+  }, [searchParams]);
+
   // After mount, reconcile with localStorage if no URL param present
   useEffect(() => {
     const urlTab = searchParams.get("tab");
