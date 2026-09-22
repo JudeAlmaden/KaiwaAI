@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { lookupWord, type LookupResult } from "@/lib/gemini";
 import { type PartOfSpeech } from "@/lib/types";
+import { cacheGet, cacheSet, dictLookupCacheKey } from "@/lib/lookup-cache";
 
 type SaveState = "idle" | "saving" | "saved" | "exists";
 
@@ -66,7 +67,15 @@ export default function LookupToken({
     setFailed(false);
     setErrorKind(null);
     try {
-      setResult(await lookupWord(surface));
+      const cacheKey = dictLookupCacheKey(surface);
+      const cached = cacheGet<LookupResult>(cacheKey);
+      if (cached) {
+        setResult(cached);
+        return;
+      }
+      const lookedUp = await lookupWord(surface);
+      cacheSet(cacheKey, lookedUp);
+      setResult(lookedUp);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       if (msg === "RATE_LIMIT") setErrorKind("RATE_LIMIT");

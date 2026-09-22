@@ -9,6 +9,7 @@ import Furigana from "../review/Furigana";
 import { lookupWord, type LookupResult } from "@/lib/gemini";
 import { hasAnyKey } from "@/lib/api-keys";
 import { truncateText } from "@/lib/token-selection";
+import { cacheGet, cacheSet, dictLookupCacheKey } from "@/lib/lookup-cache";
 
 type SaveState = "idle" | "saving" | "saved" | "exists" | "merged";
 
@@ -306,6 +307,12 @@ function WordTokenBody({
 
   useEffect(() => {
     if (lookupResult || loading || lookupFailed) return;
+    const cacheKey = dictLookupCacheKey(token.dictForm, token.surface);
+    const cached = cacheGet<WordLookupResult>(cacheKey);
+    if (cached) {
+      setLookupResult(cached);
+      return;
+    }
     setTimeout(() => setLoading(true), 0);
     const params = new URLSearchParams({
       dictForm: token.dictForm,
@@ -321,6 +328,7 @@ function WordTokenBody({
         return r.json();
       })
       .then((d: WordLookupResult) => {
+        cacheSet(cacheKey, d);
         setLookupResult(d);
         setLookupFailed(false);
       })

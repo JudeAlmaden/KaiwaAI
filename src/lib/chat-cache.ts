@@ -9,6 +9,7 @@ export const cacheKeys = {
   personas: "kaiwa_personas_cache",
   conv: (id: string) => `kaiwa_conv_${id}`,
   seen: "kaiwa_conv_seen", // map of conversationId -> ISO last-seen timestamp
+  memSuggestions: (id: string) => `kaiwa_mem_sugg_${id}`,
 } as const;
 
 function safe(fn: () => void) {
@@ -77,7 +78,8 @@ export function clearAllChatCache() {
         k === cacheKeys.convos ||
         k === cacheKeys.personas ||
         k === cacheKeys.seen ||
-        k.startsWith("kaiwa_conv_")
+        k.startsWith("kaiwa_conv_") ||
+        k.startsWith("kaiwa_mem_sugg_")
       ) {
         localStorage.removeItem(k);
       }

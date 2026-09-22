@@ -18,11 +18,18 @@ type QuestContext = {
   reinforce: string[];
 };
 
+const PRIMARY_THEME_IDS: QuestTheme[] = ["food", "travel", "surprise"];
+
 export default function QuestLauncher({
   onStartQuest,
+  existingGroupId,
+  defaultExpanded = false,
 }: {
   /** Called with the groupId of the conversation to navigate to */
   onStartQuest: (groupId: string) => void;
+  /** When set, attach the quest to this chat instead of creating a new one. */
+  existingGroupId?: string;
+  defaultExpanded?: boolean;
 }) {
   const [selectedTheme, setSelectedTheme] = useState<QuestTheme>("surprise");
   const [customInput, setCustomInput] = useState("");
@@ -30,6 +37,8 @@ export default function QuestLauncher({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [showMoreThemes, setShowMoreThemes] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   const generate = useCallback(
     async (theme: QuestTheme, forceRefresh = false, customPrompt?: string) => {
@@ -40,6 +49,7 @@ export default function QuestLauncher({
       setGenerating(true);
       setError(null);
       setQuest(null);
+      setExpanded(true);
 
       try {
         // 1. Fetch user context from server
@@ -89,27 +99,26 @@ export default function QuestLauncher({
     if (!quest || starting) return;
     setStarting(true);
     try {
-      // Find or create the Kai conversation
-      const personasRes = await fetch("/api/personas");
-      const { personas } = await personasRes.json();
-      const kai = (personas as { id: string; name: string; builtin: boolean }[]).find(
-        (p) => p.builtin && p.name.toLowerCase() === "kai"
-      );
-      if (!kai) throw new Error("Kai persona not found");
+      let groupId = existingGroupId;
+      if (!groupId) {
+        const personasRes = await fetch("/api/personas");
+        const { personas } = await personasRes.json();
+        const kai = (
+          personas as { id: string; name: string; builtin: boolean }[]
+        ).find((p) => p.builtin && p.name.toLowerCase() === "kai");
+        if (!kai) throw new Error("Kai persona not found");
 
-      // Create / reuse conversation
-      const convRes = await fetch("/api/groups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personaId: kai.id }),
-      });
-      const convData = await convRes.json();
-      const groupId: string = convData.group?.id ?? convData.id;
+        const convRes = await fetch("/api/groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ personaId: kai.id }),
+        });
+        const convData = await convRes.json();
+        groupId = convData.group?.id ?? convData.id;
+      }
       if (!groupId) throw new Error("Could not create conversation");
 
-      // Store quest state for this conversation
       saveQuestForConv(groupId, quest);
-
       onStartQuest(groupId);
     } catch {
       setError("generic");
@@ -118,19 +127,44 @@ export default function QuestLauncher({
     }
   };
 
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Section header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-display text-base font-extrabold">🎭 Roleplay Quests</h2>
-          <p className="text-xs text-muted">AI-generated scenarios, tailored to your level</p>
-        </div>
-      </div>
+  const inChat = !!existingGroupId;
 
-      {/* Theme chips */}
-      <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
-        {QUEST_THEMES.map((t) => (
+  return (
+    <div
+      className={
+        inChat
+          ? "flex flex-col gap-3"
+          : "flex flex-col gap-3 rounded-2xl border-2 border-border bg-card p-4"
+      }
+    >
+      {!inChat && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <div>
+            <h2 className="font-display text-base font-extrabold">
+              🎭 Roleplay Quests
+            </h2>
+            <p className="text-xs text-muted">
+              Optional scenarios with Kai, tailored to your level
+            </p>
+          </div>
+          <span className="text-muted" aria-hidden>
+            {expanded ? "▴" : "▾"}
+          </span>
+        </button>
+      )}
+
+      {(expanded || inChat) && (
+        <>
+      {/* Theme chips — primary few, then More */}
+      <div className="flex flex-wrap gap-2">
+        {(showMoreThemes
+          ? QUEST_THEMES
+          : QUEST_THEMES.filter((t) => PRIMARY_THEME_IDS.includes(t.id))
+        ).map((t) => (
           <button
             key={t.id}
             onClick={() => handleThemeClick(t.id)}
@@ -144,6 +178,15 @@ export default function QuestLauncher({
             {t.emoji} {t.label}
           </button>
         ))}
+        {!showMoreThemes && (
+          <button
+            type="button"
+            onClick={() => setShowMoreThemes(true)}
+            className="rounded-full border-2 border-dashed border-border px-3 py-1.5 text-xs font-semibold text-muted hover:border-indigo-ai hover:text-indigo-ai"
+          >
+            More…
+          </button>
+        )}
       </div>
 
       {/* Custom Scenario Prompt Form */}
@@ -152,7 +195,7 @@ export default function QuestLauncher({
           type="text"
           value={customInput}
           onChange={(e) => setCustomInput(e.target.value)}
-          placeholder="Or describe your own custom roleplay idea..."
+          placeholder="Or describe your own…"
           disabled={generating}
           className="flex-1 rounded-full border-2 border-border bg-card px-4 py-2 text-xs outline-none placeholder:text-muted/50 focus:border-indigo-ai focus:bg-card transition-all"
         />
@@ -276,7 +319,11 @@ export default function QuestLauncher({
               disabled={starting}
               className="btn-pop flex items-center gap-1.5 rounded-full bg-indigo-ai px-5 py-2 text-sm font-bold text-white shadow-md disabled:opacity-60"
             >
-              {starting ? "Starting…" : "Start Quest →"}
+              {starting
+                ? "Starting…"
+                : inChat
+                  ? "Start in this chat →"
+                  : "Start Quest →"}
             </button>
           </div>
         </div>
@@ -289,6 +336,8 @@ export default function QuestLauncher({
             Pick a theme above to generate your personalized quest
           </p>
         </div>
+      )}
+        </>
       )}
     </div>
   );

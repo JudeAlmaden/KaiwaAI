@@ -22,6 +22,12 @@ export type MemoryCategory =
   | "goal"
   | "relationship";
 
+export type MemorySuggestion = {
+  content: string;
+  category: MemoryCategory;
+  importance: number;
+};
+
 /** One word in Kai's reply, produced by Gemini structured output. */
 export type CachedToken = {
   surface: string; // text as it appears (may be conjugated)
@@ -85,7 +91,8 @@ export type KaiResponse = {
   correction: Correction | null; // grammar feedback on the user's Japanese
   tokens: CachedToken[];
   newWords: string[]; // dictForms deliberately introduced this turn
-  memorySuggestions: string[]; // durable facts about the user worth remembering
+  memorySuggestions: MemorySuggestion[]; // durable facts about the user
+  mood?: string; // optional model-classified mood hint
   usedModel?: string; // which model actually answered (after any fallback)
 };
 

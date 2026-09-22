@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
+import Avatar from "../chat/Avatar";
 
 type Memory = {
   id: string;
@@ -28,8 +29,9 @@ export default function MemoryClient() {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [category, setCategory] = useState("fact");
-  const [personas, setPersonas] = useState<{ id: string; name: string; avatar: string; builtin: boolean }[]>([]);
-  // Which persona's memory we're viewing (a real persona id, "" until loaded).
+  const [personas, setPersonas] = useState<
+    { id: string; name: string; avatar: string; builtin: boolean }[]
+  >([]);
   const [activePersona, setActivePersona] = useState("");
   const searchParams = useSearchParams();
   const requestedPersona = searchParams.get("persona");
@@ -48,7 +50,6 @@ export default function MemoryClient() {
       .then((d) => {
         const list = d.personas ?? [];
         setPersonas(list);
-        // Honor a ?persona=<id> deep link; else default to Kai, else first.
         setActivePersona((cur) => {
           if (cur) return cur;
           if (
@@ -58,7 +59,8 @@ export default function MemoryClient() {
             return requestedPersona;
           }
           const kai = list.find(
-            (p: { builtin: boolean; name: string }) => p.builtin && p.name === "Kai"
+            (p: { builtin: boolean; name: string }) =>
+              p.builtin && p.name === "Kai"
           );
           return kai?.id ?? list[0]?.id ?? "";
         });
@@ -74,8 +76,17 @@ export default function MemoryClient() {
     load(activePersona);
   }, [load, activePersona]);
 
-  const activeName =
-    personas.find((p) => p.id === activePersona)?.name ?? "Persona";
+  const active = personas.find((p) => p.id === activePersona);
+  const activeName = active?.name ?? "Persona";
+  const isKai =
+    !!active?.builtin && active.name.trim().toLowerCase() === "kai";
+
+  const sortedMemories = useMemo(() => {
+    if (!memories) return null;
+    return [...memories].sort(
+      (a, b) => (b.importance ?? 0) - (a.importance ?? 0)
+    );
+  }, [memories]);
 
   async function add() {
     const content = draft.trim();
@@ -109,12 +120,13 @@ export default function MemoryClient() {
         title="Persona Memory"
         jp="日記"
         subtitle="What each persona remembers about you. Edit anytime."
+        compact
       />
 
       <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8">
         <div className="mx-auto max-w-2xl">
-          {/* persona switcher */}
-          <div className="mb-4 flex flex-wrap gap-2">
+          {/* Horizontal-scroll persona tabs */}
+          <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {personas.map((p) => (
               <PersonaTab
                 key={p.id}
@@ -125,11 +137,17 @@ export default function MemoryClient() {
             ))}
           </div>
 
-          {/* diary book */}
           <div className="overflow-hidden rounded-2xl border-2 border-border shadow-md">
-            {/* cover header */}
             <div className="flex items-center gap-3 bg-gradient-to-r from-indigo-ai to-indigo-soft px-5 py-4 text-white">
-              <Kai size={36} />
+              {isKai ? (
+                <Kai size={36} />
+              ) : (
+                <Avatar
+                  name={activeName}
+                  emoji={active?.avatar}
+                  size={36}
+                />
+              )}
               <div>
                 <p className="font-display text-lg font-extrabold">
                   {activeName}&apos;s Diary
@@ -140,14 +158,12 @@ export default function MemoryClient() {
               </div>
             </div>
 
-            {/* lined paper */}
             <div className="diary-paper px-5 py-5 sm:pl-14">
-              {/* add entry */}
               <div className="mb-5">
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Tell Kai something to remember… (e.g. I have a cat named Pochi)"
+                  placeholder={`Tell ${activeName} something to remember… (e.g. I have a cat named Pochi)`}
                   rows={2}
                   className="w-full resize-none rounded-xl border-2 border-border bg-white/70 px-3 py-2 font-jp text-sm leading-8 outline-none focus:border-indigo-ai"
                 />
@@ -173,22 +189,21 @@ export default function MemoryClient() {
                 </div>
               </div>
 
-              {/* entries */}
-              {memories === null ? (
+              {sortedMemories === null ? (
                 <p className="py-6 text-center text-sm text-muted">Loading…</p>
-              ) : memories.length === 0 ? (
+              ) : sortedMemories.length === 0 ? (
                 <div className="py-10 text-center">
                   <p className="font-jp text-base text-indigo-ai">
                     まだ何も書いていません
                   </p>
                   <p className="mt-1 text-sm text-muted">
-                    Kai hasn&apos;t written anything down yet. As you chat, she&apos;ll
-                    remember things here — or add one yourself above.
+                    {activeName} hasn&apos;t written anything down yet. As you
+                    chat, memories land here — or add one yourself above.
                   </p>
                 </div>
               ) : (
                 <ul className="flex flex-col">
-                  {memories.map((m) => (
+                  {sortedMemories.map((m) => (
                     <li
                       key={m.id}
                       className="group flex items-start gap-3 py-2 leading-8"
@@ -198,6 +213,14 @@ export default function MemoryClient() {
                       </span>
                       <p className="flex-1 font-jp text-[15px] text-foreground">
                         {m.content}
+                        {(m.importance ?? 0) >= 3 && (
+                          <span
+                            className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-amber"
+                            title="High importance"
+                          >
+                            pinned
+                          </span>
+                        )}
                       </p>
                       <button
                         onClick={() => remove(m.id)}
@@ -236,7 +259,7 @@ function PersonaTab({
   return (
     <button
       onClick={onClick}
-      className={`whitespace-nowrap rounded-full border-2 px-3 py-1.5 text-sm font-bold transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-full border-2 px-3 py-1.5 text-sm font-bold transition-colors ${
         active
           ? "border-indigo-ai bg-indigo-ai text-white"
           : "border-border text-muted hover:border-indigo-ai hover:text-indigo-ai"

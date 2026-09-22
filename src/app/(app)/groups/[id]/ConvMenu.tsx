@@ -3,17 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DotsThree } from "@phosphor-icons/react/dist/ssr";
+import ModelSwitcher from "../../chat/ModelSwitcher";
 
-// Three-dots options for a conversation: view the persona's memory, clear
-// messages (any member), and delete the whole conversation (owner only).
+// Conversation options: profile, quest, clear, delete.
 export default function ConvMenu({
   isOwner,
   personaId,
+  showModelPicker = false,
+  canStartQuest = false,
+  onStartQuest,
   onClear,
   onDelete,
 }: {
   isOwner: boolean;
   personaId?: string | null;
+  showModelPicker?: boolean;
+  canStartQuest?: boolean;
+  onStartQuest?: () => void;
   onClear: () => Promise<void> | void;
   onDelete: () => Promise<void> | void;
 }) {
@@ -57,23 +63,50 @@ export default function ConvMenu({
 
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border-2 border-border bg-card p-1.5 shadow-xl">
-          {/* View this persona's memory */}
+          {showModelPicker && (
+            <div className="border-b border-border/60 px-3 py-2.5 sm:hidden">
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                Model
+              </p>
+              <ModelSwitcher />
+            </div>
+          )}
+
           {personaId && (
             <Link
               href={`/memory?persona=${encodeURIComponent(personaId)}`}
               className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
+              onClick={() => setOpen(false)}
             >
-              <span className="text-lg">🧠</span>
+              <span className="text-lg">📔</span>
               <span>
-                <span className="block text-sm font-bold">View memory</span>
+                <span className="block text-sm font-bold">Open full diary</span>
                 <span className="block text-xs text-muted">
-                  See and edit what this persona remembers about you.
+                  All memories across personas — different from the quick profile above.
                 </span>
               </span>
             </Link>
           )}
 
-          {/* Clear messages */}
+          {canStartQuest && onStartQuest && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onStartQuest();
+              }}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
+            >
+              <span className="text-lg">🎭</span>
+              <span>
+                <span className="block text-sm font-bold">Start a quest</span>
+                <span className="block text-xs text-muted">
+                  Roleplay scenario in this chat.
+                </span>
+              </span>
+            </button>
+          )}
+
           {confirm === "clear" ? (
             <ConfirmRow
               title="Clear all messages?"
@@ -98,13 +131,13 @@ export default function ConvMenu({
             </button>
           )}
 
-          {/* Delete conversation - always available for any member */}
           {confirm === "delete" ? (
             <ConfirmRow
               title="Delete conversation?"
-              note={isOwner 
-                ? "Permanently deletes the conversation and all its messages for everyone. This can't be undone."
-                : "Removes this conversation from your list. Reappears if someone messages you."
+              note={
+                isOwner
+                  ? "Permanently deletes the conversation and all its messages for everyone. This can't be undone."
+                  : "Removes this conversation from your list. Reappears if someone messages you."
               }
               actionLabel={busy === "delete" ? "Deleting…" : "Delete"}
               onConfirm={() => run("delete")}
@@ -122,7 +155,9 @@ export default function ConvMenu({
                   Delete conversation
                 </span>
                 <span className="block text-xs text-muted">
-                  {isOwner ? "Remove it for everyone, permanently." : "Remove from your list."}
+                  {isOwner
+                    ? "Remove it for everyone, permanently."
+                    : "Remove from your list."}
                 </span>
               </span>
             </button>

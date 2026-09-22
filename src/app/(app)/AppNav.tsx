@@ -335,10 +335,12 @@ export function BottomTabs() {
   );
 }
 
-/** Mobile top bar with logo + streak. */
+/** Mobile top bar with logo + streak. Hidden on lg+, inside a conversation,
+ *  and on the chat hub (PageHeader already titles that screen). */
 export function MobileTopBar({ streak }: { streak: number }) {
   const pathname = usePathname();
   if (isConversationRoute(pathname)) return null;
+  if (pathname === "/chat") return null;
 
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between border-b-2 border-border bg-card/90 px-4 py-3 backdrop-blur-xl lg:hidden">

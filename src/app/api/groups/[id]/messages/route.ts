@@ -11,9 +11,12 @@ import {
 import { MAX_MESSAGE_CHARS, charLength, hasFeedback } from "@/lib/types";
 import { normalizeCorrection } from "@/lib/types";
 import { messageLimiter } from "@/lib/rate-limiter";
+import { nextChatMood, blendMood, isMood } from "@/lib/mood";
+import { validateTokens } from "@/lib/tokenization";
+import { applyEnrichments } from "@/lib/dictionary-enrich";
+import { enrichTokensFromDb } from "@/lib/dictionary-enrich-db";
+import { resolveReplyFields, serializeMessage } from "@/lib/message-serialize";
 
-// DELETE: clear all messages in the conversation (keeps the conversation).
-// Any accepted member may clear; this affects everyone in the conversation.
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -32,34 +35,75 @@ export async function DELETE(
   return NextResponse.json({ ok: true });
 }
 
-function rowToMsg(m: {
-  id: string;
-  senderName: string;
-  senderKind: string;
-  content: string;
-  english: string | null;
-  tokens: string | null;
-  correction: string | null;
-  userCorrection: string | null;
-  senderUserId: string | null;
-  createdAt: Date;
-}, meId: string) {
-  return {
-    id: m.id,
-    senderName: m.senderName,
-    senderKind: m.senderKind,
-    content: m.content,
-    english: m.english,
-    tokens: m.tokens,
-    correction: m.correction,
-    userCorrection: m.userCorrection,
-    isMe: m.senderUserId === meId,
-    createdAt: m.createdAt,
-  };
+function rowToMsg(
+  m: Parameters<typeof serializeMessage>[0],
+  meId: string
+) {
+  return serializeMessage(m, meId);
 }
 
-// POST: send a human message; if the conversation has a persona + key, the
-// persona replies once with the rich (tokens/english/correction) payload.
+async function bumpMoodOnUserReply(chatId: string, kind: string) {
+  if (kind !== "persona") return null;
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: { moodScore: true, mood: true },
+  });
+  if (!chat) return null;
+
+  const recent = await prisma.message.findMany({
+    where: { chatId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { senderKind: true, createdAt: true },
+  });
+
+  let consecutiveIgnored = 0;
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i].senderKind === "persona") consecutiveIgnored++;
+    else break;
+  }
+
+  const priorUser = recent.find((m, i) => i > 0 && m.senderKind === "user");
+  const hoursSinceUserReply = priorUser
+    ? (Date.now() - priorUser.createdAt.getTime()) / 3.6e6
+    : Infinity;
+
+  const next = nextChatMood({
+    hoursSinceUserReply,
+    consecutiveIgnored,
+    userJustReplied: true,
+    moodScore: chat.moodScore,
+  });
+
+  await prisma.chat.update({
+    where: { id: chatId },
+    data: {
+      mood: next.mood,
+      moodScore: next.moodScore,
+      moodUpdatedAt: new Date(),
+    },
+  });
+  return next;
+}
+
+async function applyModelMood(chatId: string, modelMood: unknown) {
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: { mood: true, moodScore: true },
+  });
+  if (!chat) return;
+  const det = isMood(chat.mood) ? chat.mood : "neutral";
+  const blended = blendMood(det, modelMood, chat.moodScore);
+  await prisma.chat.update({
+    where: { id: chatId },
+    data: {
+      mood: blended.mood,
+      moodScore: blended.moodScore,
+      moodUpdatedAt: new Date(),
+    },
+  });
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -82,14 +126,16 @@ export async function POST(
   });
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
 
-  let body: { 
-    content?: string; 
+  let body: {
+    content?: string;
     userCorrection?: string;
-    aiReply?: { 
-      reply: string; 
-      english?: string; 
-      tokens?: unknown[]; 
+    quotedMessageId?: string;
+    aiReply?: {
+      reply: string;
+      english?: string;
+      tokens?: unknown[];
       correction?: unknown;
+      mood?: string;
     };
   };
   try {
@@ -108,18 +154,34 @@ export async function POST(
 
   const senderName = user.name || user.email;
 
-  // Unhide the conversation for all members who have it hidden when a new message arrives
   const hiddenMembers = await prisma.chatMember.findMany({
     where: { chatId: id, hidden: true, kind: "user" },
     select: { id: true },
   });
-  
+
   if (hiddenMembers.length > 0) {
     await prisma.chatMember.updateMany({
       where: { id: { in: hiddenMembers.map((m) => m.id) } },
       data: { hidden: false },
     });
   }
+
+  const replyFields = await resolveReplyFields(
+    (qid) =>
+      prisma.message.findUnique({
+        where: { id: qid },
+        select: {
+          id: true,
+          chatId: true,
+          senderName: true,
+          senderKind: true,
+          senderUserId: true,
+          content: true,
+        },
+      }),
+    id,
+    body.quotedMessageId
+  );
 
   const humanMsg = await prisma.message.create({
     data: {
@@ -130,6 +192,7 @@ export async function POST(
       senderKind: "user",
       content,
       userCorrection: body.userCorrection || null,
+      ...(replyFields ?? {}),
     },
   });
 
@@ -140,14 +203,24 @@ export async function POST(
     },
   });
 
+  const moodUpdate = await bumpMoodOnUserReply(id, group?.kind ?? "group");
   const newMessages = [rowToMsg(humanMsg, user.id)];
-
   const personaMember = group?.members.find((m) => m.persona);
 
-  // ── Path A: client already generated the AI reply (BYOK solo persona chat).
-  // Trust it only when this is a persona conversation and a persona exists.
   if (body.aiReply && body.aiReply.reply && personaMember?.persona) {
     const a = body.aiReply;
+    const { tokens: validated } = validateTokens(a.reply, a.tokens);
+    const enrichments = await enrichTokensFromDb(
+      user.id,
+      validated.map((t) => ({
+        surface: t.surface,
+        dictForm: t.dictForm,
+        reading: t.reading,
+        meaning: t.meaning,
+        pos: t.pos,
+      }))
+    );
+    const tokens = applyEnrichments(validated, enrichments);
     const saved = await prisma.message.create({
       data: {
         chatId: id,
@@ -156,17 +229,21 @@ export async function POST(
         senderKind: "persona",
         content: a.reply,
         english: typeof a.english === "string" && a.english ? a.english : null,
-        tokens: Array.isArray(a.tokens) && a.tokens.length ? JSON.stringify(a.tokens) : null,
+        tokens: tokens.length ? JSON.stringify(tokens) : null,
         correction: hasFeedback(normalizeCorrection(a.correction))
           ? JSON.stringify(normalizeCorrection(a.correction))
           : null,
       },
     });
+    if (a.mood) await applyModelMood(id, a.mood);
     newMessages.push(rowToMsg(saved, user.id));
-    return NextResponse.json({ messages: newMessages });
+    return NextResponse.json({
+      messages: newMessages,
+      mood: moodUpdate?.mood,
+      moodScore: moodUpdate?.moodScore,
+    });
   }
 
-  // ── Path B: server-side generation with the owner's key (group chats).
   let keys: string[] = [];
   if (group?.apiKeyEnc) {
     try {
@@ -192,9 +269,12 @@ export async function POST(
     });
     const turns: ConvTurn[] = recent
       .reverse()
-      .map((m) => ({ senderName: m.senderName, senderKind: m.senderKind, content: m.content }));
+      .map((m) => ({
+        senderName: m.senderName,
+        senderKind: m.senderKind,
+        content: m.content,
+      }));
 
-    // Other human speakers (so the persona knows who's in the room).
     const humanNames = await prisma.chatMember.findMany({
       where: { chatId: id, kind: "user" },
       include: { user: { select: { name: true, email: true } } },
@@ -226,12 +306,17 @@ export async function POST(
               : null,
           },
         });
+        if (r.mood) await applyModelMood(id, r.mood);
         newMessages.push(rowToMsg(saved, user.id));
       }
     } catch {
-      // best-effort: human message still saved
+      // best-effort
     }
   }
 
-  return NextResponse.json({ messages: newMessages });
+  return NextResponse.json({
+    messages: newMessages,
+    mood: moodUpdate?.mood,
+    moodScore: moodUpdate?.moodScore,
+  });
 }

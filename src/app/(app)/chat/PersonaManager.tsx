@@ -67,9 +67,11 @@ export default function PersonaManager({
                       setEditing(p);
                       setCreating(false);
                     }}
-                    className="text-xs font-bold text-muted hover:text-indigo-ai cursor-pointer"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
+                    aria-label={`Edit ${p.name}`}
+                    title="Edit"
                   >
-                    Edit ⚙️
+                    ⋯
                   </button>
                 ) : (
                   <span className="rounded-full bg-border/50 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted/80">
@@ -78,9 +80,9 @@ export default function PersonaManager({
                 )}
                 <button
                   onClick={() => onStartChat(p.id)}
-                  className="rounded-full bg-indigo-ai/10 px-3 py-1 text-xs font-extrabold text-indigo-ai transition-colors hover:bg-indigo-ai hover:text-white cursor-pointer"
+                  className="rounded-full bg-indigo-ai px-3 py-1 text-xs font-extrabold text-white transition-colors hover:bg-indigo-deep cursor-pointer"
                 >
-                  Chat →
+                  Chat
                 </button>
               </div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import WordToken from "./WordToken";
 import LookupToken from "./LookupToken";
@@ -115,14 +115,16 @@ export function RichKaiText({
       .catch(() => setVocabLoaded(true));
   }, [externalSavedWords]);
 
-  let tokens: CachedToken[] | null = null;
-  if (tokensJson) {
+  // Stable across renders for the same JSON — a fresh array every render
+  // would retrigger the handle-position layout effect and loop setState.
+  const tokens = useMemo((): CachedToken[] | null => {
+    if (!tokensJson) return null;
     try {
-      tokens = repairSplitTokenSurfaces(JSON.parse(tokensJson) as CachedToken[]);
+      return repairSplitTokenSurfaces(JSON.parse(tokensJson) as CachedToken[]);
     } catch {
-      tokens = null;
+      return null;
     }
-  }
+  }, [tokensJson]);
 
   const clearTokenRange = useCallback(() => {
     setTokenRange(null);
@@ -147,6 +149,7 @@ export function RichKaiText({
 
       const tokenEl = document
         .elementsFromPoint(clientX, clientY)
+        .filter((el) => !(el as HTMLElement).closest?.("[data-token-selection-ui]"))
         .map((el) => (el as HTMLElement).closest?.("[data-token-index]"))
         .find(
           (el): el is HTMLElement =>
@@ -243,9 +246,21 @@ export function RichKaiText({
     if (!start || !end) return;
     const startRect = start.getBoundingClientRect();
     const endRect = end.getBoundingClientRect();
-    setHandlePositions({
+    const next: HandlePositions = {
       start: { left: startRect.left - 6, top: startRect.top + startRect.height / 2 },
       end: { left: endRect.right + 6, top: endRect.top + endRect.height / 2 },
+    };
+    setHandlePositions((prev) => {
+      if (
+        prev &&
+        prev.start.left === next!.start.left &&
+        prev.start.top === next!.start.top &&
+        prev.end.left === next!.end.left &&
+        prev.end.top === next!.end.top
+      ) {
+        return prev;
+      }
+      return next;
     });
   }, [tokenRange]);
 

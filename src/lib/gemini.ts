@@ -6,6 +6,13 @@ import { normalizeCorrection } from "./types";
 import { getModel, getMaxOutputTokens, getAutoFallback, modelFallbackOrder } from "./model-config";
 import { keysForRequest, hasAnyKey } from "./api-keys";
 import { repairSplitTokenSurfaces } from "./token-repair";
+import {
+  RESPONSE_SCHEMA,
+  tokenizationPromptFragment,
+  validateTokens,
+} from "./tokenization";
+import { normalizeMemorySuggestions } from "./memory-normalize";
+import { moodToneLine, type Mood } from "./mood";
 
 export type PromptContext = {
   level: string;
@@ -14,6 +21,9 @@ export type PromptContext = {
   knownCount: number;
   memories: string[];
   recentTurns: { role: "kai" | "user"; content: string }[];
+  mood?: Mood;
+  hoursSinceUserReply?: number;
+  summary?: string | null;
 };
 
 function systemPrompt(ctx: PromptContext, persona?: string): string {
@@ -25,6 +35,12 @@ function systemPrompt(ctx: PromptContext, persona?: string): string {
     ctx.reinforce.length > 0
       ? `\nDeliberately reuse these words the user is learning: ${ctx.reinforce.join(", ")}.`
       : "";
+  const summaryBlock = ctx.summary
+    ? `\n\n======================== PREVIOUSLY ========================\nPreviously, you two talked about: ${ctx.summary}`
+    : "";
+  const moodBlock = ctx.mood
+    ? moodToneLine(ctx.mood, ctx.hoursSinceUserReply)
+    : "";
 
   const identity =
     persona ??
@@ -33,6 +49,7 @@ function systemPrompt(ctx: PromptContext, persona?: string): string {
   return `${identity}
 
 Help the user enjoy learning Japanese through natural, friendly chat. Always react to what they said, keep it encouraging, and end most replies with a short follow-up question. Never give dead-end replies.
+${moodBlock}${summaryBlock}
 
 ======================== HOW YOU SPEAK ========================
 Speak with MORE Japanese (70%) and less English (30%): Japanese is now the main language with some English mixed in. You should use full Japanese sentences with occasional English words or short phrases for clarity.
@@ -58,111 +75,17 @@ Teach like a friendly tutor: short, example-driven, no long lectures. Stay aroun
 ======================== OUTPUT FORMAT ========================
 Respond ONLY with valid JSON matching this schema:
 {
-  "reply": "<English-led Japanglish reply; Japanese in kana/kanji, no romaji shadows; playful, ends with something that keeps the chat going>",
+  "reply": "<Japanese-heavy reply; Japanese in kana/kanji, no romaji shadows; playful, ends with something that keeps the chat going>",
   "correction": { "status": "correct|unnatural|incorrect|none", "explanation": "<empty if none>", "corrected": "<corrected Japanese, empty if none>", "romaji": "<romaji, empty if none>", "natural": "<more natural version, empty if none>" },
   "english": "<English gloss of any Japanese in your reply; empty string if already fully English>",
-  "tokens": [{ "surface": "<as written>", "reading": "<kana, or surface if not Japanese>", "romaji": "<romaji, or surface if not Japanese>", "meaning": "<English meaning, or surface if not Japanese>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|phrase|other", "dictForm": "<dictionary form>", "words": [<only for pos=phrase: array of the SAME token structure for each component word>] }],
+  "tokens": [{ "surface": "<Japanese as written>", "reading": "<kana>", "romaji": "<romaji>", "meaning": "<English>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|phrase|other", "dictForm": "<dictionary form>", "words": [<only for pos=phrase>] }],
   "newWords": ["<dictForm of any NEW Japanese words you introduced>"],
-  "memorySuggestions": ["<a durable fact the user revealed about THEMSELVES this turn worth remembering long-term — e.g. 'Has a cat named Pochi', 'Birthday is March 16, 2004', 'Is 20 years old'. Stable facts only, NOT small talk. Empty array if none. Short third-person notes. CRITICAL REQUIREMENT: MUST BE WRITTEN IN CLEAR ENGLISH ONLY. NEVER USE JAPANESE KANA/KANJI OR MIXED JAPANESE SCRIPT IN MEMORY SUGGESTIONS.>"]
+  "memorySuggestions": [{ "content": "<durable third-person fact about the user — CLEAR ENGLISH ONLY, never kana/kanji>", "category": "profile|preference|fact|goal|relationship", "importance": 1 }],
+  "mood": "<optional: cheerful|hopeful|wistful|sad|givingUp|dormant|neutral — how you feel toward them right now>"
 }
-Tokenize your ENTIRE reply into "tokens" in order. CRITICAL TOKENIZATION RULES:
-
-JAPANESE TOKENIZATION (READ CAREFULLY):
-- Each COMPLETE inflected/conjugated Japanese word is ONE SINGLE token
-- DO NOT split verb stems from their endings - the conjugated form is the complete word
-- DO NOT split adjective stems from their endings - the inflected form is the complete word
-- Examples of CORRECT single tokens:
-  * "食べたい" = ONE token (not "食べ" + "たい")
-  * "食べます" = ONE token (not "食べ" + "ます")
-  * "行きます" = ONE token (not "行き" + "ます")
-  * "見ている" = ONE token (not "見て" + "いる" or "見" + "ている")
-  * "寝たい" = ONE token (not "寝" + "たい")
-  * "食べました" = ONE token (not "食べ" + "ました")
-  * "高かった" = ONE token (not "高" + "かった")
-  * "静かです" = ONE token (not "静か" + "です")
-- Noun + particle = SEPARATE tokens (e.g. "猫" then "は")
-- Standalone particles are separate tokens (は, が, を, に, も, で, へ, と, か, や, よ, ね, の, etc.)
-
-KANJI + OKURIGANA WORDS (CRITICAL — READ CAREFULLY):
-- A kanji character immediately followed by hiragana that together form ONE dictionary word must NEVER be split.
-- Examples of CORRECT single tokens:
-  * 終わり (おわり) = ONE token (not 終 + わり)
-  * 始まり (はじまり) = ONE token (not 始 + まり)
-  * 帰り (かえり) = ONE token (not 帰 + り)
-  * 分かる (わかる) = ONE token (not 分 + かる)
-  * 向かい (むかい) = ONE token (not 向 + かい)
-  * 乗り換え (のりかえ) = ONE token (not 乗り + 換え)
-  * 待ち合わせ (まちあわせ) = ONE token (not 待ち + 合わせ)
-  * 終わった (おわった) = ONE token (not 終わ + った)
-- Rule: if kanji + hiragana together appear in the dictionary as a single entry, they are ONE token.
-
-PHRASES (TWO-LAYER TOKENS):
-- Fixed multi-word expressions (e.g. こんにちは, ありがとうございます, という, お願いします, どういたしまして) should be tokenized as ONE phrase token with pos="phrase"
-- For each phrase token, populate "words" with the component words: each entry has the SAME structure (surface, reading, romaji, meaning, pos, dictForm, no nested words)
-- Example: こんにちは → { surface: "こんにちは", reading: "こんにちは", romaji: "konnichiwa", meaning: "hello / good afternoon", pos: "phrase", dictForm: "こんにちは", words: [ { surface: "今", reading: "こん", romaji: "kon", meaning: "this", pos: "noun", dictForm: "今" }, { surface: "日", reading: "にち", romaji: "nichi", meaning: "day", pos: "noun", dictForm: "日" }, { surface: "は", reading: "は", romaji: "wa", meaning: "(topic particle)", pos: "particle", dictForm: "は" } ] }
-- "words" MUST be populated for any phrase that can be decomposed into recognisable component words. Only use "words": [] for truly indivisible units (e.g. はい, いいえ, うん) that have no meaningful sub-structure.
-
-ENGLISH & OTHER:
-- Each English word is one token
-- Emoji and punctuation use pos "other"
-
-The "tokens" array must NEVER be empty — cover every word so any Japanese word is tappable. Be accurate with readings, dictionary forms, and romaji.`;
+${tokenizationPromptFragment()}`;
 }
 
-const TOKEN_ITEM_SCHEMA = {
-  type: "object" as const,
-  properties: {
-    surface: { type: "string" as const },
-    reading: { type: "string" as const },
-    romaji: { type: "string" as const },
-    meaning: { type: "string" as const },
-    pos: { type: "string" as const },
-    dictForm: { type: "string" as const },
-    // words is populated only for phrase tokens
-    words: {
-      type: "array" as const,
-      items: {
-        type: "object" as const,
-        properties: {
-          surface: { type: "string" as const },
-          reading: { type: "string" as const },
-          romaji: { type: "string" as const },
-          meaning: { type: "string" as const },
-          pos: { type: "string" as const },
-          dictForm: { type: "string" as const },
-        },
-        required: ["surface", "reading", "romaji", "meaning", "pos", "dictForm"],
-      },
-    },
-  },
-  required: ["surface", "reading", "romaji", "meaning", "pos", "dictForm"],
-};
-
-const RESPONSE_SCHEMA = {
-  type: "object",
-  properties: {
-    reply: { type: "string" },
-    correction: {
-      type: "object",
-      properties: {
-        status: { type: "string" },
-        explanation: { type: "string" },
-        corrected: { type: "string" },
-        romaji: { type: "string" },
-        natural: { type: "string" },
-      },
-      required: ["status", "explanation", "corrected", "romaji", "natural"],
-    },
-    english: { type: "string" },
-    tokens: {
-      type: "array",
-      items: TOKEN_ITEM_SCHEMA,
-    },
-    newWords: { type: "array", items: { type: "string" } },
-    memorySuggestions: { type: "array", items: { type: "string" } },
-  },
-  required: ["reply", "correction", "english", "tokens", "newWords"],
-};
 
 type GeminiContent = { role: string; parts: { text: string }[] };
 
@@ -243,11 +166,12 @@ export function salvageKaiResponse(text: string): KaiResponse | null {
   const reply = extractJsonString(text, "reply");
   if (!reply) return null;
   const english = extractJsonString(text, "english") ?? "";
+  const { tokens } = validateTokens(reply, []);
   return {
     reply,
     english,
     correction: null,
-    tokens: [],
+    tokens,
     newWords: [],
     memorySuggestions: [],
   };
@@ -426,12 +350,15 @@ async function executeKaiTurn(
         }
         parsed.english = parsed.english ?? "";
         parsed.newWords = parsed.newWords ?? [];
-        parsed.memorySuggestions = Array.isArray(parsed.memorySuggestions)
-          ? parsed.memorySuggestions
-              .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
-              .map((s) => cleanMemorySuggestion(s))
-              .filter((s) => s.length > 0)
-          : [];
+        parsed.memorySuggestions = normalizeMemorySuggestions(
+          parsed.memorySuggestions
+        ).map((s) => ({ ...s, content: cleanMemorySuggestion(s.content) }))
+          .filter((s) => s.content.length > 0);
+        const validated = validateTokens(parsed.reply, parsed.tokens);
+        parsed.tokens = validated.tokens;
+        if (typeof (parsed as { mood?: unknown }).mood === "string") {
+          parsed.mood = (parsed as { mood: string }).mood;
+        }
         parsed.correction = normalizeCorrection(parsed.correction);
         stripRomajiShadows(parsed);
         repairSplitTokens(parsed);

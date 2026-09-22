@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { encryptSecret } from "@/lib/crypto";
+import { serializeMessage } from "@/lib/message-serialize";
 
 async function membership(userId: string, groupId: string) {
   return prisma.chatMember.findFirst({
@@ -51,18 +52,7 @@ export async function GET(
     });
 
     return NextResponse.json({
-      messages: newMessages.map((m) => ({
-        id: m.id,
-        senderName: m.senderName,
-        senderKind: m.senderKind,
-        content: m.content,
-        english: m.english,
-        tokens: m.tokens,
-        correction: m.correction,
-        userCorrection: m.userCorrection,
-        isMe: m.senderUserId === user.id,
-        createdAt: m.createdAt,
-      })),
+      messages: newMessages.map((m) => serializeMessage(m, user.id)),
     });
   }
 
@@ -91,6 +81,10 @@ export async function GET(
       kind: group.kind,
       isOwner: group.ownerId === user.id,
       hasKey: Boolean(group.apiKeyEnc),
+      mood: group.mood,
+      moodScore: group.moodScore,
+      summary: group.summary,
+      summaryUpToId: group.summaryUpToId,
       persona: personaMember?.persona
         ? {
             id: personaMember.persona.id,
@@ -111,18 +105,7 @@ export async function GET(
         })),
     },
     hasMore,
-    messages: page.map((m) => ({
-      id: m.id,
-      senderName: m.senderName,
-      senderKind: m.senderKind,
-      content: m.content,
-      english: m.english,
-      tokens: m.tokens,
-      correction: m.correction,
-      userCorrection: m.userCorrection,
-      isMe: m.senderUserId === user.id,
-      createdAt: m.createdAt,
-    })),
+    messages: page.map((m) => serializeMessage(m, user.id)),
   });
 }
 

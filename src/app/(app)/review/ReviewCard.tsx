@@ -46,6 +46,13 @@ export const GRADES = [
   { grade: 3, label: "Easy", key: "4", color: "bg-emerald-500 text-white border-b-4 border-emerald-600", icon: Smiley },
 ];
 
+/** After Again, the card requeues in-session as a relearn: Good + Easy off. */
+export const RELEARN_DISABLED_GRADES = [2, 3] as const;
+
+export function disabledGradesForRelearn(alreadyAttemptedThisSession: boolean): number[] {
+  return alreadyAttemptedThisSession ? [...RELEARN_DISABLED_GRADES] : [];
+}
+
 export interface ReviewCardProps {
   card: Card & { _dir?: "jp-to-en" | "en-to-jp" };
   reviewType?: "vocabulary" | "kanji" | "mixed";
@@ -537,7 +544,11 @@ export default function ReviewCard({
                       ? "opacity-30 grayscale cursor-not-allowed pointer-events-none border-2 border-border bg-card/40 text-muted"
                       : `hover:-translate-y-0.5 hover:brightness-105 active:translate-y-[2px] ${g.color}`
                   }`}
-                  title={isDisabled ? "Disabled because card was marked 'Again' in this session" : undefined}
+                  title={
+                    isDisabled
+                      ? "Pass this relearn with Hard (or fail Again) — Good/Easy are off"
+                      : undefined
+                  }
                 >
                   <Icon size={18} className="mb-0.5" />
                   <span>{g.label}</span>

@@ -2,6 +2,40 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.1.0] - Unreleased (`dev`)
+
+Chat relationship mood, tokenization consistency, richer memory, in-thread quests, and related UX. Developing on `dev`; not yet released from `main` (still at 2.0.0). See also `documentation/RECENT_CHANGES.md`.
+
+### Added
+- **Per-conversation mood** — `Chat.mood` / `moodScore` / `moodUpdatedAt` with shared domain in `src/lib/mood.ts`; tone injected into every AI turn; header emoji + hub row indicators; proactive replies gated by mood (independent of outreach `consecutiveIgnored`).
+- **Shared tokenization contract** — `src/lib/tokenization.ts` (`validateTokens`, JP-only model tokens, schemas used by client Gemini and server group-chat).
+- **Dictionary enrichment on persist** — `dictionary-enrich` + `POST /api/dictionary/enrich` fills readings/meanings from local Word/Phrase tables after validation.
+- **Saved-words session context** — `SavedWordsContext` fetches vocab once per chat session; shared `TokenPopup` for WordToken and LookupToken.
+- **Lookup session cache** — `src/lib/lookup-cache.ts` avoids repeat Gemini/dict fetches for the same surface.
+- **Rich memory suggestions** — Model returns `{ content, category, importance }`; normalize + server upsert/dedup (`memory-upsert`) and soft supersede (`Memory.supersededById` / `lastUsedAt`).
+- **Bulk memory save** — `POST /api/memory/bulk` for auto-memory.
+- **Conversation summaries** — `Chat.summary` / `summaryUpToId` + `POST /api/groups/[id]/summary` for long threads (~40+ turns).
+- **Messenger-style reply quotes** — `Message.replyTo*` denormalized preview fields + serialize/preview helpers.
+- **In-chat roleplay quests** — ⋯ → Start a quest attaches `QuestLauncher` to the current thread (`existingGroupId`) without leaving the conversation.
+- **Lean project docs** — Restored/cleaned `documentation/` (CHAT, DESIGN, MOBILE_SETUP, APP_BLOCKER, AUTO_SYNC, session-composer, RECENT_CHANGES).
+
+### Changed
+- **Chat hub chrome** — URL-synced tabs, personas before quests, slimmer mobile header / nav on `/chat`.
+- **Profile entry points** — Name/avatar opens the profile & memory drawer; removed duplicate Profile chip and Profile & Memory header button; ⋯ keeps Open full diary (`/memory`).
+- **Memory suggestions UI** — Collapsed pill / durable chips with category cues; pending suggestions cached per conversation.
+- **Prompt context** — `/api/chat/context` scoped with `chatId` (recent turns, mood, summary, memories).
+- **Relearn grades** — Again + Hard only on relearn (Good/Easy disabled) with unit coverage.
+- **Kai avatar** — Restored brand SVG mark in chat (not the `image.png` crop).
+
+### Fixed
+- **PC token range handles** — Hit-testing skips `[data-token-selection-ui]` so ‹ › drag works when chrome sits under the cursor.
+- **Outreach / context memory scoping** — Persona-filtered memories; superseded rows excluded from injection.
+
+### Technical
+- Migrations: `20260922100000_chat_mood_memory_summary`, `20260922120000_message_reply_to`
+- New libs/routes: `mood`, `tokenization`, `memory-normalize`, `memory-upsert`, `dictionary-enrich*`, `lookup-cache`, `reply-preview`, `message-serialize`, `api/dictionary/enrich`, `api/memory/bulk`, `api/groups/[id]/summary`, chat `TokenPopup` / `SavedWordsContext` / `SelectionLookupPopup`
+- Touched: `GroupChatClient`, `ConvMenu`, `ChatHub`, `QuestLauncher`, `RichText`, `MemorySuggestions`, `MemoryClient`, `gemini`, `group-chat`, message/proactive/memory/context routes, `prisma/schema.prisma`
+
 ## [2.0.0] - 2026-09-20
 
 ### Added

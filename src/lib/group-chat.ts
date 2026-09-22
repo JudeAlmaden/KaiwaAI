@@ -3,6 +3,11 @@ import { decodeKeys } from "./gemini-server";
 import { personaSystemPrompt } from "./personas";
 import { normalizeCorrection } from "./types";
 import type { CachedToken, Correction } from "./types";
+import {
+  GROUP_REPLY_SCHEMA,
+  tokenizationPromptFragment,
+  validateTokens,
+} from "./tokenization";
 
 // Group / conversation AI. A conversation has AT MOST ONE persona. The persona
 // replies using the conversation OWNER's key, and — like Kai's 1:1 chat —
@@ -26,42 +31,23 @@ export type PersonaReply = {
   english: string;
   correction: Correction | null;
   tokens: CachedToken[];
+  mood?: string;
 };
 
-const REPLY_SCHEMA = {
-  type: "object",
-  properties: {
-    reply: { type: "string" },
-    correction: {
-      type: "object",
-      properties: {
-        status: { type: "string" },
-        explanation: { type: "string" },
-        corrected: { type: "string" },
-        romaji: { type: "string" },
-        natural: { type: "string" },
-      },
-      required: ["status", "explanation", "corrected", "romaji", "natural"],
-    },
-    english: { type: "string" },
-    tokens: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          surface: { type: "string" },
-          reading: { type: "string" },
-          romaji: { type: "string" },
-          meaning: { type: "string" },
-          pos: { type: "string" },
-          dictForm: { type: "string" },
-        },
-        required: ["surface", "reading", "romaji", "meaning", "pos", "dictForm"],
-      },
-    },
-  },
-  required: ["reply", "correction", "english", "tokens"],
-};
+function outputContract(): string {
+  return `\n\nThis is a group conversation, but reply ONLY as yourself with ONE short message.
+
+Respond ONLY with valid JSON matching this schema:
+{
+  "reply": "<your message — match the speakers' language; keep it short and natural>",
+  "correction": { "status": "correct|unnatural|incorrect|none", "explanation": "<empty if none>", "corrected": "<corrected Japanese, empty if none>", "romaji": "<romaji, empty if none>", "natural": "<more natural version, empty if none>" },
+  "english": "<English gloss of any Japanese in your reply; empty if already English>",
+  "tokens": [{ "surface": "<Japanese as written>", "reading": "<kana>", "romaji": "<romaji>", "meaning": "<English>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|phrase|other", "dictForm": "<dictionary form>", "words": [] }],
+  "mood": "<optional: cheerful|hopeful|wistful|sad|givingUp|dormant|neutral>"
+}
+If the most recent human turn contains Japanese, check it and fill "correction" (status none/correct/unnatural/incorrect).
+${tokenizationPromptFragment()}`;
+}
 
 /** Render the recent transcript as labeled lines for the model. */
 export function renderTranscript(turns: ConvTurn[]): string {
@@ -81,25 +67,6 @@ export function mentionsPersona(message: string, personaName: string): boolean {
     const handle = t.slice(1);
     return handle === name || handle === compact || name.startsWith(handle) && handle.length >= 2;
   });
-}
-
-function outputContract(): string {
-  return `\n\nThis is a group conversation, but reply ONLY as yourself with ONE short message.
-
-Respond ONLY with valid JSON matching this schema:
-{
-  "reply": "<your message — match the speakers' language; keep it short and natural>",
-  "correction": { "status": "correct|unnatural|incorrect|none", "explanation": "<empty if none>", "corrected": "<corrected Japanese, empty if none>", "romaji": "<romaji, empty if none>", "natural": "<more natural version, empty if none>" },
-  "english": "<English gloss of any Japanese in your reply; empty if already English>",
-  "tokens": [{ "surface": "<as written>", "reading": "<kana or surface>", "romaji": "<romaji or surface>", "meaning": "<English or surface>", "pos": "verb|adjective|noun|particle|adverb|pronoun|expression|other", "dictForm": "<dictionary form>" }]
-}
-If the most recent human turn contains Japanese, check it and fill "correction" (status none/correct/unnatural/incorrect). Tokenize your ENTIRE reply into "tokens" in order, including English, emoji, and punctuation (pos "other" for non-Japanese).
-
-JAPANESE TOKENIZATION RULES:
-- Each COMPLETE inflected/conjugated word is ONE token. Do NOT split verb/adjective stems from their endings.
-- KANJI + OKURIGANA: a kanji immediately followed by hiragana forming one dictionary word must NEVER be split.
-  Examples: 終わり=ONE token (not 終+わり), 帰り=ONE token (not 帰+り), 分かる=ONE token (not 分+かる).
-- Standalone particles (は, が, を, に, も, で, へ, と, か, や, よ, ね, の) are always SEPARATE tokens.`;
 }
 
 /** Generate the single persona's rich reply, using an owner key. */
@@ -131,7 +98,7 @@ export async function generatePersonaReply(args: {
     ],
     generationConfig: {
       responseMimeType: "application/json",
-      responseSchema: REPLY_SCHEMA,
+      responseSchema: GROUP_REPLY_SCHEMA,
       temperature: 0.85,
       maxOutputTokens: 1024,
       thinkingConfig: { thinkingBudget: 0 },
@@ -155,11 +122,14 @@ export async function generatePersonaReply(args: {
       try {
         const parsed = JSON.parse(text);
         if (!parsed.reply) return null;
+        const reply = String(parsed.reply);
+        const { tokens } = validateTokens(reply, parsed.tokens);
         return {
-          reply: String(parsed.reply),
+          reply,
           english: typeof parsed.english === "string" ? parsed.english : "",
           correction: normalizeCorrection(parsed.correction),
-          tokens: Array.isArray(parsed.tokens) ? parsed.tokens : [],
+          tokens,
+          mood: typeof parsed.mood === "string" ? parsed.mood : undefined,
         };
       } catch {
         return null;

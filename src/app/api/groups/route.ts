@@ -50,6 +50,7 @@ export async function GET() {
         kind: m.chat.kind,
         isOwner: m.chat.ownerId === user.id,
         hasKey: Boolean(m.chat.apiKeyEnc),
+        mood: m.chat.mood,
         lastMessage: last
           ? {
               content: last.content,

@@ -1,7 +1,7 @@
-import Image from "next/image";
+import Kai from "../../Kai";
 
-/** A round avatar for a conversation/persona. Kai uses the chibi character art;
- *  everyone else uses their emoji (personas) or initial (people/groups). */
+/** A round avatar for a conversation/persona. Kai uses the brand mark; everyone
+ *  else uses their emoji (personas) or initial (people/groups). */
 export default function Avatar({
   name,
   emoji,
@@ -19,24 +19,7 @@ export default function Avatar({
       style={{ width: size, height: size }}
     >
       {isKai ? (
-        /* Crop to the full standing chibi on the left of the sprite sheet */
-        <span
-          className="overflow-hidden rounded-full"
-          style={{ width: size, height: size }}
-        >
-          <Image
-            src="/assets/svg/image.png"
-            alt="Kai"
-            width={size * 2.8}
-            height={size * 2.8}
-            style={{
-              marginTop: size * 0.18,
-              marginLeft: -(size * 0.9),
-              objectFit: "cover",
-            }}
-            draggable={false}
-          />
-        </span>
+        <Kai size={Math.round(size * 0.62)} />
       ) : emoji ? (
         <span style={{ fontSize: Math.round(size * 0.5) }}>{emoji}</span>
       ) : (

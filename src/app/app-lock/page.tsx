@@ -283,6 +283,7 @@ export default function StandaloneAppLockPage() {
       if (!card) return;
 
       const isFirstAttempt = !gradedIds.has(card.id);
+      if (!isFirstAttempt && (grade === 2 || grade === 3)) return;
 
       if (isFirstAttempt && !practice) {
         const cardType = card.type || 'vocabulary';

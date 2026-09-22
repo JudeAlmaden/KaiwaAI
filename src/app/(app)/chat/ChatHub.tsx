@@ -12,6 +12,7 @@ import Avatar from "./Avatar";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
 import { cacheKeys, readCache, writeCache, isUnread } from "@/lib/chat-cache";
+import { MOOD_EMOJI, MOOD_LABEL, isMood } from "@/lib/mood";
 
 type Conversation = {
   id: string;
@@ -21,6 +22,7 @@ type Conversation = {
   hasKey: boolean;
   lastMessage: { content: string; senderName: string; fromMe?: boolean } | null;
   lastAt?: string;
+  mood?: string;
   members: { kind: string; name?: string | null; avatar?: string | null }[];
 };
 
@@ -38,13 +40,23 @@ export default function ChatHub() {
   const searchParams = useSearchParams();
   const [convos, setConvos] = useState<Conversation[] | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
-  const [tab, setTab] = useState<"chats" | "ai" | "friends">(
-    (searchParams.get("tab") as "chats" | "ai" | "friends") ?? "chats"
-  );
+  const tabParam = searchParams.get("tab");
+  const tab: "chats" | "ai" | "friends" =
+    tabParam === "ai" || tabParam === "friends" || tabParam === "chats"
+      ? tabParam
+      : "chats";
   const [composing, setComposing] = useState(false);
   const [pending, setPending] = useState(0);
   const [starting, setStarting] = useState(false);
   const [query, setQuery] = useState("");
+
+  function setTab(next: "chats" | "ai" | "friends") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "chats") params.delete("tab");
+    else params.set("tab", next);
+    const qs = params.toString();
+    router.replace(qs ? `/chat?${qs}` : "/chat", { scroll: false });
+  }
 
   const loadConvos = useCallback(() => {
     fetch("/api/groups")
@@ -144,14 +156,37 @@ export default function ChatHub() {
     return "Talk to AI personas, friends, and groups";
   }, [unreadCount, convos]);
 
+  const hasKaiThread = useMemo(
+    () =>
+      !!convos?.some(
+        (c) =>
+          c.kind === "persona" &&
+          c.name.trim().toLowerCase() === "kai"
+      ),
+    [convos]
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title="Chat"
         jp="会話"
         subtitle={dynamicSubtitle}
+        compact
+        action={
+          tab === "chats" ? (
+            <button
+              onClick={() => setComposing(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+              aria-label="New chat"
+              title="New chat"
+            >
+              <PencilSimple size={18} weight="bold" />
+            </button>
+          ) : undefined
+        }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-8 sm:py-5">
         <div className="mx-auto max-w-2xl flex flex-col gap-4">
           <div className="flex items-center gap-2">
             {tabs.map((t) => (
@@ -171,26 +206,19 @@ export default function ChatHub() {
                 )}
               </button>
             ))}
-
-            {tab === "chats" && (
-              <button
-                onClick={() => setComposing(true)}
-                className="btn-pop ml-auto flex items-center gap-1.5 rounded-full bg-indigo-ai px-4 py-2 text-sm font-bold text-white"
-              >
-                <PencilSimple size={16} weight="bold" />
-                New chat
-              </button>
-            )}
           </div>
 
           {tab === "chats" && (
             <div className="flex flex-col gap-3">
-              {/* Kai hero shortcut — always pinned at the top */}
-              <KaiHeroCard onStartChat={startPersonaChat} personas={personas} loading={starting} />
+              {/* Kai hero only when no Kai thread exists yet */}
+              {!hasKaiThread && (
+                <KaiHeroCard
+                  onStartChat={startPersonaChat}
+                  personas={personas}
+                  loading={starting}
+                />
+              )}
 
-
-
-              {/* search */}
               {convos && convos.length > 4 && (
                 <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
                   <MagnifyingGlass size={16} className="text-muted" />
@@ -221,10 +249,9 @@ export default function ChatHub() {
               )}
 
               {convos?.length === 0 && (
-                <div className="rounded-3xl border-2 border-dashed border-border px-6 py-8 text-center">
-                  <p className="font-display font-bold text-muted">No other conversations yet</p>
-                  <p className="mt-1 text-sm text-muted">
-                    Start chatting with a friend or create a group.
+                <div className="rounded-3xl border-2 border-dashed border-border px-6 py-6 text-center">
+                  <p className="text-sm text-muted">
+                    Tap Kai above to start — or use + for a friend or group.
                   </p>
                 </div>
               )}
@@ -234,13 +261,15 @@ export default function ChatHub() {
                   key={c.id}
                   convo={c}
                   onHide={(id) => {
-                    // Optimistically remove from list
-                    setConvos((convos) => convos?.filter((conv) => conv.id !== id) ?? null);
-                    // Hide on server
-                    fetch(`/api/groups/${id}/hide`, { method: "POST" }).catch(() => {
-                      // If failed, reload to restore
-                      loadConvos();
-                    });
+                    setConvos(
+                      (convos) =>
+                        convos?.filter((conv) => conv.id !== id) ?? null
+                    );
+                    fetch(`/api/groups/${id}/hide`, { method: "POST" }).catch(
+                      () => {
+                        loadConvos();
+                      }
+                    );
                   }}
                 />
               ))}
@@ -255,26 +284,28 @@ export default function ChatHub() {
 
           {tab === "ai" && (
             <div className="flex flex-col gap-6">
-              {/* AI-generated roleplay quests */}
+              <p className="text-sm text-muted">
+                Custom personas for 1:1 chat. Roleplay quests live below.
+              </p>
+              <PersonaManager
+                personas={personas}
+                onChange={loadPersonas}
+                onStartChat={startPersonaChat}
+              />
+
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-xs font-bold uppercase tracking-wider text-muted/60">
+                  Quests
+                </span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
               <QuestLauncher
                 onStartQuest={(groupId) => {
                   loadConvos();
                   router.push(`/chat/c/${groupId}`);
                 }}
-              />
-
-              {/* Divider */}
-              <div className="flex items-center gap-3">
-                <span className="h-px flex-1 bg-border" />
-                <span className="text-xs font-bold uppercase tracking-wider text-muted/60">Personas</span>
-                <span className="h-px flex-1 bg-border" />
-              </div>
-
-              {/* Custom persona grid */}
-              <PersonaManager
-                personas={personas}
-                onChange={loadPersonas}
-                onStartChat={startPersonaChat}
               />
             </div>
           )}
@@ -321,6 +352,7 @@ function ConversationRow({
     kind: string;
     lastMessage: { content: string; senderName: string; fromMe?: boolean } | null;
     lastAt?: string;
+    mood?: string;
     members: { kind: string; name?: string | null; avatar?: string | null }[];
   };
   onHide: (id: string) => void;
@@ -389,6 +421,15 @@ function ConversationRow({
           <span className={`truncate ${unread ? "font-extrabold" : "font-bold"}`}>
             {convo.name}
           </span>
+          {isAi && isMood(convo.mood) && (
+            <span
+              className="shrink-0 text-sm leading-none"
+              title={`Mood: ${MOOD_LABEL[convo.mood]}`}
+              aria-label={`Mood: ${MOOD_LABEL[convo.mood]}`}
+            >
+              {MOOD_EMOJI[convo.mood]}
+            </span>
+          )}
           {isGroup && (
             <span className="rounded-full bg-indigo-ai/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-indigo-ai">
               Group

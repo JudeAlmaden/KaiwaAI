@@ -119,6 +119,16 @@ model Chat {
   // (AES-256-GCM). JSON array of keys. Null = no AI replies.
   apiKeyEnc String?
 
+  // Per-conversation relationship mood (persona chats). Independent of the
+  // user-level outreach ladder on User.consecutiveIgnored.
+  mood          String    @default("neutral") // cheerful|hopeful|wistful|sad|givingUp|dormant|neutral
+  moodScore     Int       @default(0) // -10..+10
+  moodUpdatedAt DateTime?
+
+  // Rolling conversation summary for long chats (injected into system prompt).
+  summary       String?
+  summaryUpToId String? // last Message.id included in summary
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -177,6 +187,17 @@ model Message {
   // AI grammar correction for user's Japanese messages (JSON string). Generated
   // client-side when user sends Japanese text.
   userCorrection String?
+
+  // Reply-to (Messenger-style). Denormalized preview so quotes survive when the
+  // original message scrolls out of the loaded page or is deleted.
+  replyToId           String?
+  replyTo             Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies             Message[] @relation("MessageReply")
+  replyToSenderName   String?
+  replyToContent      String?
+  replyToSenderKind   String?
+  replyToSenderUserId String?
+
   createdAt      DateTime @default(now())
 
   @@index([chatId, createdAt])
@@ -196,6 +217,14 @@ model Memory {
   category     String  @default("fact") // profile | preference | fact | goal | relationship
   importance   Int     @default(1) // 1..5
   sourceDayKey String?
+
+  // Touched when a memory is injected into chat context (recency bias).
+  lastUsedAt DateTime?
+
+  // When a newer fact replaces this one (soft supersede).
+  supersededById String?
+  supersededBy   Memory?  @relation("MemorySupersede", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes     Memory[] @relation("MemorySupersede")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

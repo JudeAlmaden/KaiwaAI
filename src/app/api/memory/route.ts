@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { resolvePersonaId } from "@/lib/personas-server";
-
-const CATEGORIES = ["profile", "preference", "fact", "goal", "relationship"];
+import { MEMORY_CATEGORIES, upsertMemory } from "@/lib/memory-upsert";
 
 export async function GET(req: Request) {
   const user = await getCurrentUser();
@@ -13,7 +12,7 @@ export async function GET(req: Request) {
   const personaId = await resolvePersonaId(sp.get("personaId"));
 
   const memories = await prisma.memory.findMany({
-    where: { userId: user.id, personaId },
+    where: { userId: user.id, personaId, supersededById: null },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json({ memories });
@@ -28,6 +27,7 @@ export async function POST(req: Request) {
     category?: string;
     importance?: number;
     personaId?: string | null;
+    supersedesId?: string | null;
   };
   try {
     body = await req.json();
@@ -38,11 +38,12 @@ export async function POST(req: Request) {
   const content = (body.content ?? "").trim();
   if (!content) return NextResponse.json({ error: "Content required." }, { status: 400 });
 
-  const category = CATEGORIES.includes(body.category ?? "") ? body.category! : "fact";
+  const category = (MEMORY_CATEGORIES as readonly string[]).includes(body.category ?? "")
+    ? body.category!
+    : "fact";
   const importance = Math.min(Math.max(body.importance ?? 1, 1), 5);
   const personaId = await resolvePersonaId(body.personaId);
 
-  // Make sure the persona belongs to the user (or is built-in).
   if (personaId) {
     const persona = await prisma.persona.findFirst({
       where: { id: personaId, OR: [{ builtin: true }, { userId: user.id }] },
@@ -52,8 +53,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unknown persona." }, { status: 400 });
   }
 
-  const memory = await prisma.memory.create({
-    data: { userId: user.id, personaId, content, category, importance },
+  const result = await upsertMemory({
+    userId: user.id,
+    personaId,
+    content,
+    category,
+    importance,
+    supersedesId: body.supersedesId,
   });
-  return NextResponse.json({ memory });
+
+  return NextResponse.json(result);
 }

@@ -14,8 +14,8 @@ import { RichKaiText } from "../../chat/RichText";
 import Avatar from "../../chat/Avatar";
 import ModelSwitcher from "../../chat/ModelSwitcher";
 import MemorySuggestions from "../../chat/MemorySuggestions";
-import { BookBookmark } from "@phosphor-icons/react/dist/ssr";
 import PersonaProfileDrawer from "../../chat/PersonaProfileDrawer";
+import QuestLauncher from "../../chat/QuestLauncher";
 import GroupKeyDialog from "./GroupKeyDialog";
 import ConvMenu from "./ConvMenu";
 import {
@@ -35,6 +35,14 @@ import {
   extractQuestCompletions,
   type ActiveQuestState,
 } from "@/lib/quests";
+import {
+  MOOD_EMOJI,
+  MOOD_LABEL,
+  canBeProactiveForMood,
+  isMood,
+  type Mood,
+} from "@/lib/mood";
+import type { MemorySuggestion } from "@/lib/types";
 
 type GMsg = {
   id: string;
@@ -72,6 +80,7 @@ type GroupInfo = {
   clientGenerated: boolean;
   persona: PersonaInfo | null;
   members: Member[];
+  mood?: string;
 };
 
 export default function GroupChatClient({ groupId }: { groupId: string }) {
@@ -83,9 +92,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
+  const [showQuestPicker, setShowQuestPicker] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [hasKey, setHasKey] = useState(true);
-  const [memSuggestions, setMemSuggestions] = useState<string[]>([]);
+  const [memSuggestions, setMemSuggestions] = useState<
+    Array<MemorySuggestion | string>
+  >([]);
+  const [chatMood, setChatMood] = useState<Mood>("neutral");
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [quotedMessage, setQuotedMessage] = useState<GMsg | null>(null);
@@ -191,6 +204,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       .then((d) => {
         if (!d) return;
         setGroup(d.group);
+        if (isMood(d.group?.mood)) setChatMood(d.group.mood);
         const msgs: GMsg[] = d.messages ?? [];
         setMessages(msgs);
         setHasMore(Boolean(d.hasMore));
@@ -288,7 +302,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     group?.kind === "persona" &&
     !!group.persona?.personality &&
     getProactiveChat() &&
-    hasAnyKey();
+    hasAnyKey() &&
+    canBeProactiveForMood(chatMood);
 
   function clearProactiveTimers() {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -389,8 +404,14 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   // persona's own memory from the server (scoped per persona).
   async function buildCtx(personaId: string): Promise<PromptContext> {
     try {
-      const res = await fetch(`/api/chat/context?personaId=${encodeURIComponent(personaId)}`);
-      if (res.ok) return (await res.json()) as PromptContext;
+      const res = await fetch(
+        `/api/chat/context?personaId=${encodeURIComponent(personaId)}&chatId=${encodeURIComponent(groupId)}`
+      );
+      if (res.ok) {
+        const data = (await res.json()) as PromptContext & { mood?: string };
+        if (isMood(data.mood)) setChatMood(data.mood);
+        return { ...data, mood: data.mood ?? chatMood };
+      }
     } catch {}
     return {
       level: "N5",
@@ -399,6 +420,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       knownCount: 0,
       memories: [],
       recentTurns: [],
+      mood: chatMood,
     };
   }
 
@@ -527,6 +549,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               english: kai.english,
               tokens: kai.tokens,
               correction: kai.correction,
+              mood: kai.mood,
             },
           }),
         });
@@ -543,19 +566,25 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           if (sugg.length > 0) {
             if (getAutoMemory()) {
               for (const s of sugg) {
+                const payload =
+                  typeof s === "string"
+                    ? { content: s, personaId: persona!.id, category: "fact" }
+                    : {
+                        content: s.content,
+                        personaId: persona!.id,
+                        category: s.category,
+                        importance: s.importance,
+                      };
                 await fetch("/api/memory", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    content: s,
-                    personaId: persona!.id,
-                    category: "fact",
-                  }),
+                  body: JSON.stringify(payload),
                 }).catch(() => {});
               }
             }
           setMemSuggestions(sugg);
           }
+          if (typeof d.mood === "string" && isMood(d.mood)) setChatMood(d.mood);
           // Kai answered once; maybe a spontaneous follow-up, then re-arm idle.
           consecutiveAi.current = 1;
           maybeScheduleFollowup();
@@ -663,10 +692,14 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           onClick={() => group?.persona && setShowProfileDrawer(true)}
           className={`flex min-w-0 flex-1 items-center gap-2 sm:gap-3 ${
             group?.persona
-              ? "cursor-pointer rounded-xl p-1 transition-all hover:bg-indigo-ai/10 active:scale-[0.99]"
+              ? "cursor-pointer rounded-xl p-1 -ml-1 transition-all hover:bg-indigo-ai/10 active:scale-[0.99]"
               : ""
           }`}
-          title={group?.persona ? `Click to view ${group.persona.name}'s profile & memories` : undefined}
+          title={
+            group?.persona
+              ? `View ${group.persona.name}'s profile & memories`
+              : undefined
+          }
         >
           <div className="relative shrink-0">
             {group?.persona ? (
@@ -678,40 +711,39 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             ) : (
               <Avatar name={group?.name} size={36} />
             )}
-            {group?.persona && (
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai text-[9px] text-white ring-2 ring-card">
-                📖
-              </span>
-            )}
           </div>
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <p className="truncate font-display text-sm font-extrabold">
-                {group?.name ?? "…"}
-              </p>
-              {group?.persona && (
-                <span className="hidden sm:inline-block rounded-full bg-indigo-ai/10 px-1.5 py-0.5 text-[9px] font-bold text-indigo-ai shrink-0">
-                  Profile
+            <p className="truncate font-display text-sm font-extrabold">
+              {group?.name ?? "…"}
+              {group?.kind === "persona" && (
+                <span
+                  className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-muted"
+                  title={`Mood: ${MOOD_LABEL[chatMood]} — how ${group.name} feels about this conversation`}
+                >
+                  {MOOD_EMOJI[chatMood]}
+                  {chatMood !== "neutral" && chatMood !== "cheerful" && (
+                    <span className="hidden sm:inline">{MOOD_LABEL[chatMood]}</span>
+                  )}
                 </span>
               )}
-            </div>
-            <p className="truncate text-[11px] sm:text-xs text-muted">
-              {group?.persona ? "Tap for profile & memory" : group?.members.map((m) => m.name).join(", ")}
             </p>
+            {group?.persona ? (
+              <p className="truncate text-[11px] text-muted">
+                Tap for profile &amp; memory
+              </p>
+            ) : (
+              <p className="truncate text-[11px] sm:text-xs text-muted">
+                {group?.members.map((m) => m.name).filter(Boolean).join(", ")}
+              </p>
+            )}
           </div>
         </div>
 
-        {group?.persona && (
-          <button
-            onClick={() => setShowProfileDrawer(true)}
-            className="hidden md:flex items-center gap-1.5 shrink-0 rounded-full border-2 border-indigo-ai/20 bg-indigo-ai/5 px-3 py-1.5 text-xs font-bold text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white shadow-xs"
-            title="View Profile & Memory"
-          >
-            <BookBookmark size={15} weight="bold" />
-            <span>Profile & Memory</span>
-          </button>
+        {group?.clientGenerated && (
+          <div className="hidden sm:block">
+            <ModelSwitcher />
+          </div>
         )}
-        {group?.clientGenerated && <ModelSwitcher />}
         {group?.isOwner && !group.clientGenerated && personaCount > 0 && (
           <button
             onClick={() => setShowKey(true)}
@@ -724,6 +756,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           <ConvMenu
             isOwner={group.isOwner}
             personaId={group.persona?.id ?? null}
+            showModelPicker={!!group.clientGenerated}
+            canStartQuest={
+              !!group.persona && (!questState || !!questState.completed)
+            }
+            onStartQuest={
+              group.persona ? () => setShowQuestPicker(true) : undefined
+            }
             onClear={clearMessages}
             onDelete={deleteGroup}
           />
@@ -748,39 +787,9 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         </p>
       )}
 
-      {/* Quest objectives panel */}
+      {/* Quest objectives — one-line summary; expand for chips */}
       {questState && !questState.completed && (
-        <div className="border-b-2 border-indigo-ai/20 bg-indigo-ai/5 px-5 py-3 sm:px-8">
-          <div className="mx-auto max-w-2xl">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-extrabold text-indigo-ai">
-                {questState.quest.emoji} {questState.quest.title}
-              </p>
-              <span className="text-xs text-muted">
-                {questState.completedObjectiveIds.length} / {questState.quest.objectives.length}
-              </span>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {questState.quest.objectives.map((obj) => {
-                const done = questState.completedObjectiveIds.includes(obj.id);
-                return (
-                  <div
-                    key={obj.id}
-                    title={done ? obj.description : `Hint: ${obj.jpHint}`}
-                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                      done
-                        ? "bg-mint/20 text-mint line-through opacity-60"
-                        : "bg-indigo-ai/10 text-indigo-ai"
-                    }`}
-                  >
-                    <span>{done ? "✅" : "⬜"}</span>
-                    <span>{obj.description}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <QuestStrip state={questState} />
       )}
 
       {/* Quest completion overlay */}
@@ -1003,6 +1012,41 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           onClose={() => setShowProfileDrawer(false)}
         />
       )}
+
+      {showQuestPicker && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 py-6 sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close"
+            onClick={() => setShowQuestPicker(false)}
+          />
+          <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-border bg-card p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-display text-base font-extrabold">
+                Start a roleplay quest
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowQuestPicker(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-border hover:text-foreground"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <QuestLauncher
+              existingGroupId={groupId}
+              defaultExpanded
+              onStartQuest={() => {
+                const state = loadQuestForConv(groupId);
+                if (state) setQuestState(state);
+                setShowQuestPicker(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1035,6 +1079,55 @@ function dayLabel(d: Date): string {
 
 function timeLabel(d: Date): string {
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/** Collapsed quest progress; expand to see objective chips. */
+function QuestStrip({ state }: { state: ActiveQuestState }) {
+  const [open, setOpen] = useState(false);
+  const done = state.completedObjectiveIds.length;
+  const total = state.quest.objectives.length;
+  return (
+    <div className="border-b-2 border-indigo-ai/20 bg-indigo-ai/5 px-5 py-2 sm:px-8">
+      <div className="mx-auto max-w-2xl">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <p className="min-w-0 flex-1 truncate text-xs font-extrabold text-indigo-ai">
+            {state.quest.emoji} {state.quest.title}
+          </p>
+          <span className="shrink-0 text-xs text-muted">
+            {done}/{total}
+          </span>
+          <span className="text-muted" aria-hidden>
+            {open ? "▴" : "▾"}
+          </span>
+        </button>
+        {open && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {state.quest.objectives.map((obj) => {
+              const isDone = state.completedObjectiveIds.includes(obj.id);
+              return (
+                <div
+                  key={obj.id}
+                  title={isDone ? obj.description : `Hint: ${obj.jpHint}`}
+                  className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    isDone
+                      ? "bg-mint/20 text-mint line-through opacity-60"
+                      : "bg-indigo-ai/10 text-indigo-ai"
+                  }`}
+                >
+                  <span>{isDone ? "✅" : "⬜"}</span>
+                  <span>{obj.description}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function GroupBubble({
@@ -1158,7 +1251,9 @@ function GroupBubble({
         <button
           onClick={onReply}
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white ${
-            showReply || Math.abs(swipeOffset) > 20 ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
+            showReply || Math.abs(swipeOffset) > 20 || endGroup
+              ? "opacity-100 scale-100 sm:opacity-40 sm:group-hover:opacity-100"
+              : "opacity-0 scale-75 pointer-events-none sm:opacity-0"
           }`}
           title="Reply"
         >
@@ -1274,7 +1369,9 @@ function GroupBubble({
       <button
         onClick={onReply}
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white ${
-          showReply || Math.abs(swipeOffset) > 20 ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
+          showReply || Math.abs(swipeOffset) > 20 || endGroup
+            ? "opacity-100 scale-100 sm:opacity-40 sm:group-hover:opacity-100"
+            : "opacity-0 scale-75 pointer-events-none sm:opacity-0"
         }`}
         title="Reply"
       >

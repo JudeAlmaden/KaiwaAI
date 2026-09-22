@@ -49,7 +49,7 @@ describe("salvageKaiResponse", () => {
     expect(r!.reply).toBe("ジャガイモが好きです");
     expect(r!.english).toBe("I like potatoes");
     expect(r!.correction).toBeNull();
-    expect(r!.tokens).toEqual([]);
+    expect(r!.tokens.length).toBeGreaterThan(0); // Segmenter fallback fills JP tokens
     expect(r!.newWords).toEqual([]);
   });
 
