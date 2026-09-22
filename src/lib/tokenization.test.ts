@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { validateTokens, segmentJapanese } from "./tokenization";
+import {
+  validateTokens,
+  segmentJapanese,
+  isJapaneseSurface,
+  tokenizationPromptFragment,
+  RESPONSE_SCHEMA,
+  GROUP_REPLY_SCHEMA,
+} from "./tokenization";
 
 describe("validateTokens", () => {
   it("aligns Japanese tokens and keeps English from reply", () => {
@@ -66,10 +73,55 @@ describe("validateTokens", () => {
     expect(usedFallback).toBe(true);
     expect(tokens.length).toBeGreaterThan(0);
   });
+
+  it("fills gaps between partial token coverage", () => {
+    const reply = "猫が好き";
+    const { tokens, usedFallback } = validateTokens(reply, [
+      {
+        surface: "猫",
+        reading: "ねこ",
+        romaji: "neko",
+        meaning: "cat",
+        pos: "noun",
+        dictForm: "猫",
+      },
+      {
+        surface: "好き",
+        reading: "すき",
+        romaji: "suki",
+        meaning: "like",
+        pos: "adjective",
+        dictForm: "好き",
+      },
+    ]);
+    expect(usedFallback).toBe(false);
+    expect(tokens.map((t) => t.surface).join("")).toBe(reply);
+    expect(tokens.some((t) => t.surface === "が")).toBe(true);
+  });
 });
 
 describe("segmentJapanese", () => {
   it("returns at least one token", () => {
     expect(segmentJapanese("こんにちは").length).toBeGreaterThan(0);
+  });
+});
+
+describe("isJapaneseSurface", () => {
+  it("detects JP vs latin", () => {
+    expect(isJapaneseSurface("猫")).toBe(true);
+    expect(isJapaneseSurface("hello")).toBe(false);
+  });
+});
+
+describe("shared schemas / prompt", () => {
+  it("exposes mood on response schemas", () => {
+    expect(RESPONSE_SCHEMA.properties).toHaveProperty("mood");
+    expect(GROUP_REPLY_SCHEMA.properties).toHaveProperty("mood");
+  });
+
+  it("prompt fragment asks for Japanese-only tokens", () => {
+    const frag = tokenizationPromptFragment();
+    expect(frag.toLowerCase()).toMatch(/japanese/);
+    expect(frag.toLowerCase()).toMatch(/token/);
   });
 });

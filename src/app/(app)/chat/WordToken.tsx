@@ -310,7 +310,7 @@ function WordTokenBody({
     const cacheKey = dictLookupCacheKey(token.dictForm, token.surface);
     const cached = cacheGet<WordLookupResult>(cacheKey);
     if (cached) {
-      setLookupResult(cached);
+      setTimeout(() => setLookupResult(cached), 0);
       return;
     }
     setTimeout(() => setLoading(true), 0);

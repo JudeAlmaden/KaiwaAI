@@ -61,13 +61,15 @@ export default function SelectionLookupPopup({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setFailed(false);
-    setErrorKind(null);
-    setAiResult(null);
-    setDictLookup(null);
 
     async function fetchDefinition() {
+      if (cancelled) return;
+      setLoading(true);
+      setFailed(false);
+      setErrorKind(null);
+      setAiResult(null);
+      setDictLookup(null);
+
       const clean = text.trim();
       const cacheKey = dictLookupCacheKey(clean, singleWord ? "1" : "n");
       const cached = cacheGet<WordLookupResult | { ai: LookupResult }>(cacheKey);

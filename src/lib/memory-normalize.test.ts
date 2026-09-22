@@ -22,6 +22,22 @@ describe("normalizeMemorySuggestions", () => {
     expect(out[0].importance).toBe(5);
     expect(out[0].category).toBe("goal");
   });
+
+  it("returns empty for non-arrays", () => {
+    expect(normalizeMemorySuggestions(null)).toEqual([]);
+    expect(normalizeMemorySuggestions("x")).toEqual([]);
+  });
+
+  it("defaults unknown category and non-numeric importance", () => {
+    const out = normalizeMemorySuggestions([
+      { content: "Likes tea", category: "hobby", importance: "nope" },
+    ]);
+    expect(out[0]).toEqual({
+      content: "Likes tea",
+      category: "fact",
+      importance: 1,
+    });
+  });
 });
 
 describe("memory near-dup", () => {
@@ -33,5 +49,10 @@ describe("memory near-dup", () => {
     expect(
       memorySimilarity("Has a cat named Pochi", "Has a cat named pochi")
     ).toBeGreaterThan(0.8);
+  });
+
+  it("returns 0 for empty sides", () => {
+    expect(memorySimilarity("", "hello")).toBe(0);
+    expect(memorySimilarity("!!!", "???")).toBe(0);
   });
 });
