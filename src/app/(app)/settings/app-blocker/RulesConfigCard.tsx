@@ -1,8 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, X, Minus, Plus, Sliders, Question } from '@phosphor-icons/react';
+import { Target, X, Sliders } from '@phosphor-icons/react';
 import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
+import InterceptionRulesEditor, {
+  type InterceptionRulesState,
+} from './InterceptionRulesEditor';
 
 interface RulesConfigCardProps {
   flashcardCount: number;
@@ -15,6 +18,7 @@ interface RulesConfigCardProps {
   showFurigana?: boolean;
   noDueAction?: BlockerNoDueAction;
   earlyReviewStrategy?: 'practice' | 'proportional';
+  learningRatio?: number;
   onUpdateFlashcardCount: (count: number) => void;
   onUpdateAppBlockerConfig?: (updates: {
     count?: number;
@@ -27,16 +31,9 @@ interface RulesConfigCardProps {
     showFurigana?: boolean;
     noDueAction?: BlockerNoDueAction;
     earlyReviewStrategy?: 'practice' | 'proportional';
+    learningRatio?: number;
   }) => void;
 }
-
-const STUDY_MODES: { id: BlockerStudyMode; label: string; hint: string }[] = [
-  { id: 'due', label: 'Due', hint: 'SRS scheduled now' },
-  { id: 'all', label: 'All', hint: 'Any card (study ahead)' },
-  { id: 'recent', label: 'Recent', hint: 'Added in 7 days' },
-  { id: 'struggling', label: 'Struggling', hint: 'Low ease factor' },
-  { id: 'leeches', label: 'Leeches', hint: 'Stuck short-interval' },
-];
 
 export default function RulesConfigCard({
   flashcardCount,
@@ -49,21 +46,39 @@ export default function RulesConfigCard({
   showFurigana = true,
   noDueAction = 'autoOpen',
   earlyReviewStrategy = 'practice',
+  learningRatio = 0.5,
   onUpdateFlashcardCount,
   onUpdateAppBlockerConfig,
 }: RulesConfigCardProps) {
   const [showModal, setShowModal] = useState(false);
 
-  function handleCountChange(newCount: number) {
-    onUpdateFlashcardCount(newCount);
-    if (onUpdateAppBlockerConfig) {
-      onUpdateAppBlockerConfig({ count: newCount });
+  const editorValues: InterceptionRulesState = {
+    count: flashcardCount,
+    blockChance,
+    unlockDurationMinutes,
+    reviewType: reviewType as InterceptionRulesState['reviewType'],
+    direction: direction as InterceptionRulesState['direction'],
+    studyMode,
+    practice,
+    showFurigana,
+    noDueAction,
+    earlyReviewStrategy,
+    learningRatio,
+  };
+
+  function handleEditorChange(updates: Partial<InterceptionRulesState>) {
+    if (updates.count !== undefined) {
+      onUpdateFlashcardCount(updates.count);
+    }
+    const pluginUpdates = { ...updates };
+    delete pluginUpdates.useReviewDefaults;
+    if (Object.keys(pluginUpdates).length > 0) {
+      onUpdateAppBlockerConfig?.(pluginUpdates);
     }
   }
 
   return (
     <>
-      {/* Summary Card with Modal Trigger Button */}
       <section className="rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="w-10 h-10 rounded-2xl bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold shrink-0">
@@ -90,17 +105,15 @@ export default function RulesConfigCard({
         </button>
       </section>
 
-      {/* Rules & Interception Configuration Modal */}
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           onClick={() => setShowModal(false)}
         >
           <div
-            className="relative w-full max-w-md rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-2xl space-y-5"
+            className="relative w-full max-w-md rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-indigo-ai/10 text-indigo-ai flex items-center justify-center font-bold shrink-0">
@@ -108,9 +121,9 @@ export default function RulesConfigCard({
                 </div>
                 <div>
                   <h3 className="font-display text-base font-bold text-foreground">
-                    Edit Interception Rules
+                    Interception rules
                   </h3>
-                  <p className="text-xs text-muted">Customize flashcard goal &amp; grace duration</p>
+                  <p className="text-xs text-muted">Focus Guard study &amp; unlock behavior</p>
                 </div>
               </div>
 
@@ -122,332 +135,17 @@ export default function RulesConfigCard({
               </button>
             </div>
 
-            {/* 1. Flashcard Goal Stepper & Presets */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                Required Flashcard Goal
-              </span>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleCountChange(Math.max(1, flashcardCount - 1))}
-                    disabled={flashcardCount <= 1}
-                    className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40"
-                  >
-                    <Minus size={14} />
-                  </button>
-                  <span className="w-8 text-center font-display font-extrabold text-foreground text-sm">
-                    {flashcardCount}
-                  </span>
-                  <button
-                    onClick={() => handleCountChange(Math.min(100, flashcardCount + 1))}
-                    disabled={flashcardCount >= 100}
-                    className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
+            <InterceptionRulesEditor
+              values={editorValues}
+              onChange={handleEditorChange}
+              onCountChange={onUpdateFlashcardCount}
+            />
 
-                <div className="flex items-center gap-1">
-                  {[5, 10, 15, 20].map((preset) => (
-                    <button
-                      key={preset}
-                      onClick={() => handleCountChange(preset)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
-                        flashcardCount === preset
-                          ? 'bg-indigo-ai text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Probability & Re-lock Grace */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Probability
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {[25, 50, 75, 100].map((pct) => (
-                    <button
-                      key={pct}
-                      onClick={() => onUpdateAppBlockerConfig?.({ blockChance: pct })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold text-center transition ${
-                        blockChance === pct
-                          ? 'bg-amber-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {pct}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Unlock Grace
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {[5, 15, 30, 60].map((mins) => (
-                    <button
-                      key={mins}
-                      onClick={() => onUpdateAppBlockerConfig?.({ unlockDurationMinutes: mins })}
-                      className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold text-center transition ${
-                        unlockDurationMinutes === mins
-                          ? 'bg-emerald-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {mins}m
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Study Mode */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                Study Mode (Which cards?)
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {STUDY_MODES.map((m) => (
-                  <button
-                    key={m.id}
-                    title={m.hint}
-                    onClick={() => onUpdateAppBlockerConfig?.({ studyMode: m.id })}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition ${
-                      studyMode === m.id
-                        ? 'bg-indigo-ai text-white'
-                        : 'border border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-muted leading-snug">
-                {STUDY_MODES.find(m => m.id === studyMode)?.hint}
-              </p>
-            </div>
-
-            {/* 4. Session Type + Direction */}
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Card Type
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
-                  {(['mixed', 'vocabulary', 'kanji'] as const).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => onUpdateAppBlockerConfig?.({ reviewType: type })}
-                      className={`px-3 py-1 rounded-xl capitalize transition ${
-                        reviewType === type
-                          ? 'bg-indigo-ai text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  Direction
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(['jp-to-en', 'en-to-jp', 'mixed'] as const).map((dir) => (
-                    <button
-                      key={dir}
-                      onClick={() => onUpdateAppBlockerConfig?.({ direction: dir })}
-                      className={`px-2.5 py-1 rounded-xl transition text-[11px] font-bold ${
-                        direction === dir
-                          ? 'bg-indigo-ai text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {dir === 'jp-to-en'
-                        ? 'JP → EN'
-                        : dir === 'en-to-jp'
-                        ? 'EN → JP'
-                        : 'Mixed Dir'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Practice Mode & Furigana Display */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                      Practice Mode
-                    </span>
-                    <div className="group relative cursor-pointer text-muted hover:text-foreground">
-                      <Question size={12} weight="bold" />
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
-                        Disables database/SRS updates for ALL reviews in the session, even if cards are due.
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateAppBlockerConfig?.({ practice: !practice })}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border-2 text-xs font-bold transition ${
-                      practice
-                        ? 'border-violet-400 bg-violet-500/10 text-violet-600'
-                        : 'border-border bg-card text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span>{practice ? 'Active' : 'Disabled'}</span>
-                    <span
-                      className={`w-9 h-5 rounded-full relative transition shrink-0 ${
-                        practice ? 'bg-violet-500' : 'bg-muted/40'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-                          practice ? 'left-4' : 'left-0.5'
-                        }`}
-                      />
-                    </span>
-                  </button>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                      Furigana
-                    </span>
-                    <div className="group relative cursor-pointer text-muted hover:text-foreground">
-                      <Question size={12} weight="bold" />
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
-                        Display reading annotations above kanji characters on flashcards.
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateAppBlockerConfig?.({ showFurigana: !showFurigana })}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border-2 text-xs font-bold transition ${
-                      showFurigana
-                        ? 'border-indigo-400 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                        : 'border-border bg-card text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span>{showFurigana ? 'Enabled' : 'Disabled'}</span>
-                    <span
-                      className={`w-9 h-5 rounded-full relative transition shrink-0 ${
-                        showFurigana ? 'bg-indigo-ai' : 'bg-muted/40'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-                          showFurigana ? 'left-4' : 'left-0.5'
-                        }`}
-                      />
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* If Nothing Due */}
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  If Nothing Due
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'autoOpen' })}
-                    className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
-                      noDueAction === 'autoOpen'
-                        ? 'bg-emerald-500 text-white'
-                        : 'border border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Auto-Open
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateAppBlockerConfig?.({ noDueAction: 'studyAny' })}
-                    className={`flex-1 py-1 px-2 rounded-xl text-[11px] font-bold transition ${
-                      noDueAction === 'studyAny'
-                        ? 'bg-sky-500 text-white'
-                        : 'border border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Use Any
-                  </button>
-                </div>
-              </div>
-
-              {/* Early Review Strategy Section */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                    Early Review Strategy
-                  </span>
-                  <div className="group relative cursor-pointer text-muted hover:text-foreground">
-                    <Question size={12} weight="bold" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 bg-card border border-border text-[10px] text-muted p-2 rounded-xl shadow-lg z-50 leading-snug pointer-events-none">
-                      How SRS behaves when reviewing cards before they are due (e.g. via &apos;Study Any&apos;).
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'practice' })}
-                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
-                      earlyReviewStrategy === 'practice'
-                        ? 'bg-indigo-ai text-white border-indigo-ai'
-                        : 'border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Skip SRS (Practice)
-                  </button>
-                  <button
-                    onClick={() => onUpdateAppBlockerConfig?.({ earlyReviewStrategy: 'proportional' })}
-                    className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold border transition ${
-                      earlyReviewStrategy === 'proportional'
-                        ? 'bg-indigo-ai text-white border-indigo-ai'
-                        : 'border-border bg-background text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Proportional (Scale)
-                  </button>
-                </div>
-                <p className="text-[10px] text-muted leading-snug">
-                  {earlyReviewStrategy === 'practice'
-                    ? '🔒 Early reviews act as practice and do not alter existing intervals/SRS schedules.'
-                    : '📈 Intervals are adjusted proportionally based on how early you reviewed the card.'}
-                </p>
-              </div>
-
-              {(practice || noDueAction === 'studyAny') && (
-                <p className="text-[10px] text-muted leading-snug rounded-xl bg-muted/10 p-2">
-                  {practice && '🧪 Practice mode: unlock answers still count, but SRS/status in DB is not updated.'}
-                  {practice && noDueAction === 'studyAny' && <><br /></>}
-                  {noDueAction === 'studyAny' && '📚 If no cards match Study Mode, fall back to "All" cards so the lock is always usable.'}
-                </p>
-              )}
-            </div>
-
-            {/* Done Action */}
             <button
               onClick={() => setShowModal(false)}
               className="w-full py-3 bg-indigo-ai border-b-4 border-indigo-deep hover:brightness-105 active:translate-y-[2px] text-white font-bold text-xs rounded-2xl shadow-xs transition"
             >
-              Done Editing
+              Done
             </button>
           </div>
         </div>

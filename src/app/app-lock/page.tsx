@@ -10,6 +10,7 @@ import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from '@/lib/fall
 import Kai from '@/app/Kai';
 import ReviewCard, { Card } from '@/app/(app)/review/ReviewCard';
 import OfflineBanner from '@/components/OfflineBanner';
+import { getLearningConfig } from '@/lib/learning-config';
 
 type InitResult =
   | { kind: 'session' }
@@ -116,7 +117,7 @@ export default function StandaloneAppLockPage() {
       : `/api/${reviewType === 'kanji' ? 'kanji' : 'flashcards'}/review`;
 
     try {
-      const res = await fetch(`${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=50&learningRatio=${learningRatio}`);
+      const res = await fetch(`${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${getLearningConfig().maxDailyReviews}&learningRatio=${learningRatio}`);
       if (res.ok) {
         const data = await res.json();
         return data.cards ?? [];

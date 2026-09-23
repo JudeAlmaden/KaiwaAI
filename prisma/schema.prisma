@@ -241,7 +241,7 @@ model UserKanji {
   kanjiId String
   kanji   Kanji  @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
 
-  // SRS (SM-2). Same as Flashcard
+  // SRS (SM-2). Same as Flashcard - retained for backward compatibility
   status         String    @default("new") // new | learning | known
   easeFactor     Float     @default(2.5)
   interval       Int       @default(0)
@@ -249,6 +249,11 @@ model UserKanji {
   timesReviewed  Int       @default(0)
   nextReview     DateTime  @default(now())
   lastReviewedAt DateTime?
+
+  // FSRS v4 fields (null for unmigrated cards)
+  difficulty     Float?
+  stability      Float?
+  retrievability Float?
 
   // User's custom mnemonic for remembering this kanji
   mnemonic String?
@@ -449,6 +454,7 @@ model UserFlashcard {
   wordFormId String?
   wordForm   WordForm? @relation(fields: [wordFormId], references: [id], onDelete: SetNull)
 
+  // SM-2 fields (retained for backward compatibility)
   status         FlashcardStatus @default(new)
   easeFactor     Float           @default(2.5)
   interval       Int             @default(0)
@@ -457,6 +463,11 @@ model UserFlashcard {
   exposures      Int             @default(0)
   nextReview     DateTime        @default(now())
   lastReviewedAt DateTime?
+
+  // FSRS v4 fields (null for unmigrated cards)
+  difficulty     Float?
+  stability      Float?
+  retrievability Float?
 
   note      String? // User's personal notes
   createdAt DateTime @default(now())

@@ -5,6 +5,8 @@ import ApiKeyCard from "./ApiKeyCard";
 import ServerKeyCard from "./ServerKeyCard";
 import ModelCard from "./ModelCard";
 import ProactiveChatCard from "./ProactiveChatCard";
+import FsrsSettingsCard from "./FsrsSettingsCard";
+import ReviewDefaultsCard from "./ReviewDefaultsCard";
 import UserSettingsTab from "./UserSettingsTab";
 import AppBlockerSettings from "./app-blocker/page";
 import LearningResetCard from "./LearningResetCard";
@@ -52,14 +54,16 @@ export default function SettingsClient({ email }: { email: string }) {
         <div className="flex flex-col gap-5">
           <ApiKeyCard />
           <ServerKeyCard />
+          <ModelCard />
+          <ProactiveChatCard />
         </div>
       )}
 
       {/* Learning Tab */}
       {tab === "learning" && (
         <div className="flex flex-col gap-5">
-          <ModelCard />
-          <ProactiveChatCard />
+          <FsrsSettingsCard />
+          <ReviewDefaultsCard />
           <LearningResetCard />
         </div>
       )}

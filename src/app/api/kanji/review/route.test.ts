@@ -20,9 +20,18 @@ vi.mock("@/lib/srs", () => ({
   applyReview: vi.fn(),
 }));
 
+vi.mock("@/lib/fsrs/apply-review", () => ({
+  applyFsrsReview: vi.fn(),
+  buildReviewPersistData: vi.fn(),
+  EarlyReviewStrategy: {
+    PRACTICE: "practice",
+    PROPORTIONAL: "proportional",
+  },
+}));
+
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { applyReview } from "@/lib/srs";
+import { applyFsrsReview, buildReviewPersistData, type ReviewUpdatePayload } from "@/lib/fsrs/apply-review";
 
 describe("Kanji Review API - GET", () => {
   const mockUser = { id: "user-123", email: "test@example.com" };
@@ -342,18 +351,35 @@ describe("Kanji Review API - POST", () => {
   it("should successfully grade a kanji card", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userKanji.findFirst).mockResolvedValueOnce(mockUserKanji as never);
-    vi.mocked(applyReview).mockReturnValueOnce({
-      easeFactor: 2.6,
+    const fsrsResult: ReviewUpdatePayload = {
+      easeFactor: 2.5,
       interval: 6,
       repetitions: 1,
       status: "learning",
       nextReview: new Date(),
-    });
-    vi.mocked(prisma.userKanji.update).mockResolvedValueOnce({
-      ...mockUserKanji,
-      easeFactor: 2.6,
+      difficulty: 5,
+      stability: 6,
+      retrievability: 1.0,
+      lastReviewedAt: new Date(),
+      timesReviewedIncrement: 1,
+    };
+    vi.mocked(applyFsrsReview).mockReturnValueOnce(fsrsResult);
+    const persistData = {
+      easeFactor: 2.5,
       interval: 6,
       repetitions: 1,
+      status: "learning",
+      nextReview: fsrsResult.nextReview,
+      difficulty: 5,
+      stability: 6,
+      retrievability: 1.0,
+      lastReviewedAt: fsrsResult.lastReviewedAt,
+      timesReviewed: { increment: 1 },
+    };
+    vi.mocked(buildReviewPersistData).mockReturnValueOnce(persistData as never);
+    vi.mocked(prisma.userKanji.update).mockResolvedValueOnce({
+      ...mockUserKanji,
+      ...persistData,
     } as never);
 
     const req = new Request("http://localhost/api/kanji/review", {
@@ -365,22 +391,30 @@ describe("Kanji Review API - POST", () => {
 
     expect(response.status).toBe(200);
     expect(data.card).toBeDefined();
-    expect(applyReview).toHaveBeenCalledWith(
-      {
-        easeFactor: 2.5,
-        interval: 1,
-        repetitions: 0,
-      },
-      2
+    expect(applyFsrsReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        card: expect.objectContaining({
+          id: "uk1",
+          easeFactor: 2.5,
+          interval: 1,
+          repetitions: 0,
+        }),
+        grade: 2,
+        cardType: "kanji",
+      })
     );
+    expect(buildReviewPersistData).toHaveBeenCalledWith(fsrsResult);
     expect(prisma.userKanji.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "uk1" },
         data: expect.objectContaining({
-          easeFactor: 2.6,
+          easeFactor: 2.5,
           interval: 6,
           repetitions: 1,
           status: "learning",
+          difficulty: 5,
+          stability: 6,
+          retrievability: 1.0,
           timesReviewed: { increment: 1 },
         }),
       })
@@ -392,13 +426,21 @@ describe("Kanji Review API - POST", () => {
       vi.clearAllMocks();
       vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
       vi.mocked(prisma.userKanji.findFirst).mockResolvedValueOnce(mockUserKanji as never);
-      vi.mocked(applyReview).mockReturnValueOnce({
+      vi.mocked(applyFsrsReview).mockReturnValueOnce({
         easeFactor: 2.5,
         interval: grade === 0 ? 0 : 6,
         repetitions: grade === 0 ? 0 : 1,
         status: "learning",
         nextReview: new Date(),
+        difficulty: grade === 0 ? 7 : 5,
+        stability: grade === 0 ? 0.5 : 6,
+        retrievability: 1.0,
+        lastReviewedAt: new Date(),
+        timesReviewedIncrement: 1,
       });
+      vi.mocked(buildReviewPersistData).mockReturnValueOnce({
+        timesReviewed: { increment: 1 },
+      } as never);
       vi.mocked(prisma.userKanji.update).mockResolvedValueOnce(mockUserKanji as never);
 
       const req = new Request("http://localhost/api/kanji/review", {
@@ -408,7 +450,9 @@ describe("Kanji Review API - POST", () => {
       const response = await POST(req);
 
       expect(response.status).toBe(200);
-      expect(applyReview).toHaveBeenCalledWith(expect.anything(), grade);
+      expect(applyFsrsReview).toHaveBeenCalledWith(
+        expect.objectContaining({ grade })
+      );
     }
   });
 

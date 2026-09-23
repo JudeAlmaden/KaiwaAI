@@ -20,9 +20,18 @@ vi.mock("@/lib/srs", () => ({
   applyReview: vi.fn(),
 }));
 
+vi.mock("@/lib/fsrs/apply-review", () => ({
+  applyFsrsReview: vi.fn(),
+  buildReviewPersistData: vi.fn(),
+  EarlyReviewStrategy: {
+    PRACTICE: "practice",
+    PROPORTIONAL: "proportional",
+  },
+}));
+
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { applyReview } from "@/lib/srs";
+import { applyFsrsReview, buildReviewPersistData, type ReviewUpdatePayload } from "@/lib/fsrs/apply-review";
 
 describe("Review API - GET", () => {
   const mockUser = { id: "user-123", email: "test@example.com" };
@@ -463,18 +472,35 @@ describe("Review API - POST", () => {
   it("should successfully grade a card", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
-    vi.mocked(applyReview).mockReturnValueOnce({
-      easeFactor: 2.6,
+    const fsrsResult: ReviewUpdatePayload = {
+      easeFactor: 2.5,
       interval: 6,
       repetitions: 1,
       status: "learning",
       nextReview: new Date(),
-    });
-    vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce({
-      ...mockCard,
-      easeFactor: 2.6,
+      difficulty: 5,
+      stability: 6,
+      retrievability: 1.0,
+      lastReviewedAt: new Date(),
+      timesReviewedIncrement: 1,
+    };
+    vi.mocked(applyFsrsReview).mockReturnValueOnce(fsrsResult);
+    const persistData = {
+      easeFactor: 2.5,
       interval: 6,
       repetitions: 1,
+      status: "learning",
+      nextReview: fsrsResult.nextReview,
+      difficulty: 5,
+      stability: 6,
+      retrievability: 1.0,
+      lastReviewedAt: fsrsResult.lastReviewedAt,
+      timesReviewed: { increment: 1 },
+    };
+    vi.mocked(buildReviewPersistData).mockReturnValueOnce(persistData as never);
+    vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce({
+      ...mockCard,
+      ...persistData,
     } as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
@@ -486,22 +512,30 @@ describe("Review API - POST", () => {
 
     expect(response.status).toBe(200);
     expect(data.card).toBeDefined();
-    expect(applyReview).toHaveBeenCalledWith(
-      {
-        easeFactor: 2.5,
-        interval: 1,
-        repetitions: 0,
-      },
-      2
+    expect(applyFsrsReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        card: expect.objectContaining({
+          id: "card-1",
+          easeFactor: 2.5,
+          interval: 1,
+          repetitions: 0,
+        }),
+        grade: 2,
+        cardType: "flashcard",
+      })
     );
+    expect(buildReviewPersistData).toHaveBeenCalledWith(fsrsResult);
     expect(prisma.userFlashcard.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "card-1" },
         data: expect.objectContaining({
-          easeFactor: 2.6,
+          easeFactor: 2.5,
           interval: 6,
           repetitions: 1,
           status: "learning",
+          difficulty: 5,
+          stability: 6,
+          retrievability: 1.0,
           timesReviewed: { increment: 1 },
         }),
       })
@@ -511,13 +545,22 @@ describe("Review API - POST", () => {
   it("should handle grade 0 (again)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
-    vi.mocked(applyReview).mockReturnValueOnce({
+    vi.mocked(applyFsrsReview).mockReturnValueOnce({
       easeFactor: 2.5,
       interval: 0,
       repetitions: 0,
       status: "learning",
       nextReview: new Date(Date.now() + 10 * 60 * 1000),
+      difficulty: 7,
+      stability: 0.5,
+      retrievability: 1.0,
+      lastReviewedAt: new Date(),
+      timesReviewedIncrement: 1,
     });
+    vi.mocked(buildReviewPersistData).mockReturnValueOnce({
+      timesReviewed: { increment: 1 },
+      lastReviewedAt: expect.any(Date),
+    } as never);
     vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce(mockCard as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
@@ -527,19 +570,30 @@ describe("Review API - POST", () => {
     const response = await POST(req);
 
     expect(response.status).toBe(200);
-    expect(applyReview).toHaveBeenCalledWith(expect.anything(), 0);
+    expect(applyFsrsReview).toHaveBeenCalledWith(
+      expect.objectContaining({ grade: 0 })
+    );
   });
 
   it("should handle grade 3 (easy)", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
-    vi.mocked(applyReview).mockReturnValueOnce({
+    vi.mocked(applyFsrsReview).mockReturnValueOnce({
       easeFactor: 2.8,
-      interval: 6,
+      interval: 15,
       repetitions: 1,
       status: "learning",
       nextReview: new Date(),
+      difficulty: 3.5,
+      stability: 15,
+      retrievability: 1.0,
+      lastReviewedAt: new Date(),
+      timesReviewedIncrement: 1,
     });
+    vi.mocked(buildReviewPersistData).mockReturnValueOnce({
+      timesReviewed: { increment: 1 },
+      lastReviewedAt: expect.any(Date),
+    } as never);
     vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce(mockCard as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {
@@ -549,19 +603,38 @@ describe("Review API - POST", () => {
     const response = await POST(req);
 
     expect(response.status).toBe(200);
-    expect(applyReview).toHaveBeenCalledWith(expect.anything(), 3);
+    expect(applyFsrsReview).toHaveBeenCalledWith(
+      expect.objectContaining({ grade: 3 })
+    );
   });
 
   it("should increment timesReviewed counter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
     vi.mocked(prisma.userFlashcard.findFirst).mockResolvedValueOnce(mockCard as never);
-    vi.mocked(applyReview).mockReturnValueOnce({
-      easeFactor: 2.6,
+    vi.mocked(applyFsrsReview).mockReturnValueOnce({
+      easeFactor: 2.5,
       interval: 6,
       repetitions: 1,
       status: "learning",
       nextReview: new Date(),
+      difficulty: 5,
+      stability: 6,
+      retrievability: 1.0,
+      lastReviewedAt: new Date(),
+      timesReviewedIncrement: 1,
     });
+    vi.mocked(buildReviewPersistData).mockReturnValueOnce({
+      easeFactor: 2.5,
+      interval: 6,
+      repetitions: 1,
+      status: "learning",
+      nextReview: new Date(),
+      difficulty: 5,
+      stability: 6,
+      retrievability: 1.0,
+      timesReviewed: { increment: 1 },
+      lastReviewedAt: new Date(),
+    } as never);
     vi.mocked(prisma.userFlashcard.update).mockResolvedValueOnce(mockCard as never);
 
     const req = new Request("http://localhost/api/flashcards/review", {

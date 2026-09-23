@@ -18,6 +18,18 @@ Chat relationship mood, tokenization consistency, richer memory, in-thread quest
 - **Messenger-style reply quotes** — `Message.replyTo*` denormalized preview fields + serialize/preview helpers.
 - **In-chat roleplay quests** — ⋯ → Start a quest attaches `QuestLauncher` to the current thread (`existingGroupId`) without leaving the conversation.
 - **Lean project docs** — Restored/cleaned `documentation/` (CHAT, DESIGN, MOBILE_SETUP, APP_BLOCKER, AUTO_SYNC, session-composer, RECENT_CHANGES).
+- **FSRS v4 Scheduling (SM-2 Migration)** — Replaced SM-2 scheduler with FSRS-19-param DSR model across vocabulary and kanji reviews.
+  - Core (`src/lib/fsrs/`): scheduler, state (serialize/parse + SM-2 compatible `fsrs_v1` metadata), converter (SM-2 → FSRS deterministic mapping), config (retention 0.7–0.98), fallback handler (SM-2 recovery on malformed FSRS state).
+  - New Prisma fields on `UserFlashcard` + `UserKanji`: `difficulty Float`, `stability Float`, `retrievability Float`.
+  - Data migration: `scripts/migrate-to-fsrs.ts` (idempotent, 500-row batches, preserves SM-2 originals for rollback), `npm run migrate:fsrs` alias.
+  - Review endpoints wired: `api/flashcards/review`, `api/kanji/review`, `api/review/mixed` — unified orchestration via `lib/fsrs/apply-review.ts`.
+  - Progress: `0.7·clamp(S/90)+0.3·clamp((10−D)/9)` in `lib/progress/calculator.ts` (with SM-2 fallback).
+  - Status: known iff `S > 21 ∧ D < 6` in `lib/status/calculator.ts` (with SM-2 mature fallback ≥3 reps ∧ interval ≥21d).
+  - Session composer weights weak cards (`D > 7 ∧ S < 5`).
+  - Learning preferences: `lib/learning-config.ts` (desired retention 0.7–0.98, maxDailyReviews/maxNewCards limits, earlyReviewStrategy, direction/furigana/learningRatio defaults), stored in localStorage.
+  - Settings UI: `FsrsSettingsCard` (retention slider, max daily reviews / new cards, early review strategy).
+  - Debug endpoint: `GET /api/debug/fsrs-state` with 3 modes — `?cardId=uf_xxx` (single-card DSR inspection + per-grade projections + SM-2 vs FSRS interval delta), `?userId=xxx&limit=20` (aggregate + per-card summary), no params (runtime FSRS parameters dump).
+  - Correctness properties (100-iteration per-test): P13 migration idempotency / post-conversion bounds in `converter.test.ts`; P14 progress bounds [0,1] in `progress/calculator.test.ts`; P15 status classification rules + P16 status-progress consistency in `status/calculator.test.ts`.
 
 ### Changed
 - **Chat hub chrome** — URL-synced tabs, personas before quests, slimmer mobile header / nav on `/chat`.
@@ -26,15 +38,20 @@ Chat relationship mood, tokenization consistency, richer memory, in-thread quest
 - **Prompt context** — `/api/chat/context` scoped with `chatId` (recent turns, mood, summary, memories).
 - **Relearn grades** — Again + Hard only on relearn (Good/Easy disabled) with unit coverage.
 - **Kai avatar** — Restored brand SVG mark in chat (not the `image.png` crop).
+- **Review quest card session limits** — Standardized to better single-sitting sizes: Vocabulary preset 5→15 cards; Gauntlet/rescue preset 50→30 (struggling cards are cognitively more tiring). Synced PRESET_DEFAULTS (words=15, rescue=30) in `lib/review/presets.ts`.
+- **Focus Guard (`/app-lock`) review-pull limit** — Now reads `maxDailyReviews` from `learning-config.ts` (user's FSRS SRS preferences) instead of hard-coding 50; matches the user's configured SRS workload.
+- **FSRS data migration script** — Loads `DATABASE_URL` via `dotenv/config` so `npx tsx scripts/migrate-to-fsrs.ts` works without manual env injection.
 
 ### Fixed
 - **PC token range handles** — Hit-testing skips `[data-token-selection-ui]` so ‹ › drag works when chrome sits under the cursor.
 - **Outreach / context memory scoping** — Persona-filtered memories; superseded rows excluded from injection.
 
 ### Technical
-- Migrations: `20260922100000_chat_mood_memory_summary`, `20260922120000_message_reply_to`
-- New libs/routes: `mood`, `tokenization`, `memory-normalize`, `memory-upsert`, `dictionary-enrich*`, `lookup-cache`, `reply-preview`, `message-serialize`, `api/dictionary/enrich`, `api/memory/bulk`, `api/groups/[id]/summary`, chat `TokenPopup` / `SavedWordsContext` / `SelectionLookupPopup`
-- Touched: `GroupChatClient`, `ConvMenu`, `ChatHub`, `QuestLauncher`, `RichText`, `MemorySuggestions`, `MemoryClient`, `gemini`, `group-chat`, message/proactive/memory/context routes, `prisma/schema.prisma`
+- Migrations: `20260922100000_chat_mood_memory_summary`, `20260922120000_message_reply_to`, `20260924000000_add_fsrs_fields`
+- New libs/routes: `mood`, `tokenization`, `memory-normalize`, `memory-upsert`, `dictionary-enrich*`, `lookup-cache`, `reply-preview`, `message-serialize`, `fsrs/*` (scheduler, state, config, converter, fallback, apply-review), `learning-config`, `progress/calculator`, `status/calculator`, `api/dictionary/enrich`, `api/memory/bulk`, `api/groups/[id]/summary`, `api/debug/fsrs-state`, chat `TokenPopup` / `SavedWordsContext` / `SelectionLookupPopup`
+- New scripts: `scripts/migrate-to-fsrs.ts` (`npm run migrate:fsrs`)
+- Tests: 541 passing (58 test files) — 33 new for FSRS: scheduler (P1–P6), converter (P13), progress/calculator (P14 + units), status/calculator (P15–P16 + units), customSession (2)
+- Touched: `GroupChatClient`, `ConvMenu`, `ChatHub`, `QuestLauncher`, `RichText`, `MemorySuggestions`, `MemoryClient`, `gemini`, `group-chat`, message/proactive/memory/context routes, flashcards/kanji/mixed review routes, `prisma/schema.prisma`, `QuestGallery`, `app-lock/page.tsx`, `FsrsSettingsCard`, `presets`, `package.json`
 
 ## [2.0.0] - 2026-09-20
 

@@ -128,7 +128,7 @@ export default function QuestGallery({
             onStart={() =>
               onStartQuest({
                 studyMode: "struggling",
-                limit: 50,
+                limit: 30,
                 isContinuous: false,
                 reviewType: "mixed",
                 activeLimit: 5,
@@ -142,7 +142,7 @@ export default function QuestGallery({
             onStart={() =>
               onStartQuest({
                 studyMode: "all",
-                limit: 5,
+                limit: 15,
                 isContinuous: false,
                 reviewType: "vocabulary",
                 direction: "mixed",

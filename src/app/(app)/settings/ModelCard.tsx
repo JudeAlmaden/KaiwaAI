@@ -5,8 +5,6 @@ import {
   OUTPUT_TOKEN_OPTIONS,
   getMaxOutputTokens,
   setMaxOutputTokens,
-  getAutoSaveWords,
-  setAutoSaveWords,
   getAutoFallback,
   setAutoFallback,
   getAutoMemory,
@@ -16,14 +14,12 @@ import { Chip, Toggle, Surface } from "../ui";
 
 export default function ModelCard() {
   const [tokens, setTokensState] = useState<number>(0);
-  const [autoSave, setAutoSaveState] = useState(false);
   const [fallback, setFallbackState] = useState(true);
   const [autoMemory, setAutoMemoryState] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTokensState(getMaxOutputTokens());
-    setAutoSaveState(getAutoSaveWords());
     setFallbackState(getAutoFallback());
     setAutoMemoryState(getAutoMemory());
   }, []);
@@ -31,12 +27,6 @@ export default function ModelCard() {
   function chooseTokens(n: number) {
     setMaxOutputTokens(n);
     setTokensState(n);
-  }
-
-  function toggleAutoSave() {
-    const next = !autoSave;
-    setAutoSaveWords(next);
-    setAutoSaveState(next);
   }
 
   function toggleFallback() {
@@ -83,18 +73,6 @@ export default function ModelCard() {
           </p>
         </div>
         <Toggle on={fallback} onClick={toggleFallback} />
-      </div>
-
-      <div className="mt-5 flex items-start justify-between gap-4 border-t-2 border-border pt-4">
-        <div>
-          <p className="text-sm font-bold">Auto-save new words</p>
-          <p className="text-xs text-muted">
-            When on, every word Kai introduces is added to your deck. Off
-            (default): only words you tap{" "}
-            <span className="font-bold">+ Add to vocabulary</span> are saved.
-          </p>
-        </div>
-        <Toggle on={autoSave} onClick={toggleAutoSave} />
       </div>
 
       <div className="mt-5 flex items-start justify-between gap-4 border-t-2 border-border pt-4">

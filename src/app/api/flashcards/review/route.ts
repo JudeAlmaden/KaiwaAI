@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { applyReview, type ReviewGrade } from "@/lib/srs";
+import type { ReviewGrade } from "@/lib/srs";
 import { composeSession } from "@/lib/session-composer";
+import {
+  applyFsrsReview,
+  buildReviewPersistData,
+  type EarlyReviewStrategy,
+} from "@/lib/fsrs/apply-review";
 
 import { FlashcardStatus, PartOfSpeech, Prisma } from "@/generated/prisma/client";
 
@@ -196,12 +201,17 @@ export async function GET(req: Request) {
   return NextResponse.json({ cards: formattedCards });
 }
 
-// Grade a card and reschedule it via SM-2.
+// Grade a card and reschedule it via FSRS v4 (SM-2 fallback on error).
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { cardId?: string; grade?: number; earlyReviewStrategy?: 'practice' | 'proportional' };
+  let body: {
+    cardId?: string;
+    grade?: number;
+    earlyReviewStrategy?: EarlyReviewStrategy;
+    desiredRetention?: number;
+  };
   try {
     body = await req.json();
   } catch {
@@ -217,64 +227,32 @@ export async function POST(req: Request) {
   });
   if (!card) return NextResponse.json({ error: "Card not found." }, { status: 404 });
 
-  const isEarly = card.nextReview && new Date(card.nextReview) > new Date();
+  const fsrsResult = applyFsrsReview({
+    card: {
+      id: card.id,
+      userId: card.userId,
+      easeFactor: card.easeFactor,
+      interval: card.interval,
+      repetitions: card.repetitions,
+      status: card.status,
+      nextReview: card.nextReview,
+      lastReviewedAt: card.lastReviewedAt,
+      timesReviewed: card.timesReviewed,
+      difficulty: card.difficulty,
+      stability: card.stability,
+      retrievability: card.retrievability,
+    },
+    grade: body.grade as ReviewGrade,
+    cardType: "flashcard",
+    earlyReviewStrategy: body.earlyReviewStrategy,
+    desiredRetention: body.desiredRetention,
+  });
 
-  if (isEarly && body.earlyReviewStrategy === 'practice') {
-    // Recommendation A: Treat early reviews as practice - do not update SRS parameters
-    const updated = await prisma.userFlashcard.update({
-      where: { id: card.id },
-      data: {
-        lastReviewedAt: new Date(),
-      },
-    });
-    return NextResponse.json({ card: updated });
-  }
-
-  let options = undefined;
-  if (isEarly && body.earlyReviewStrategy === 'proportional') {
-    // Recommendation B: Proportional scaling based on actual elapsed days
-    const lastReviewed = card.lastReviewedAt ? new Date(card.lastReviewedAt) : null;
-    const now = new Date();
-    const daysElapsed = lastReviewed
-      ? Math.max(0, (now.getTime() - lastReviewed.getTime()) / (1000 * 60 * 60 * 24))
-      : card.interval;
-
-    options = {
-      isEarly: true,
-      daysElapsed,
-    };
-  }
-
-  const result = options
-    ? applyReview(
-        {
-          easeFactor: card.easeFactor,
-          interval: card.interval,
-          repetitions: card.repetitions,
-        },
-        body.grade as ReviewGrade,
-        options
-      )
-    : applyReview(
-        {
-          easeFactor: card.easeFactor,
-          interval: card.interval,
-          repetitions: card.repetitions,
-        },
-        body.grade as ReviewGrade
-      );
+  const persist = buildReviewPersistData(fsrsResult);
 
   const updated = await prisma.userFlashcard.update({
     where: { id: card.id },
-    data: {
-      easeFactor: result.easeFactor,
-      interval: result.interval,
-      repetitions: result.repetitions,
-      status: result.status,
-      nextReview: result.nextReview,
-      timesReviewed: { increment: 1 },
-      lastReviewedAt: new Date(),
-    },
+    data: persist,
   });
 
   return NextResponse.json({ card: updated });

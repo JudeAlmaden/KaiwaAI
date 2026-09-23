@@ -268,11 +268,23 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
 }
 
 /** Mobile modern floating island bottom navigation. */
-export function BottomTabs() {
+export function BottomTabs({ initialDueNow = 0 }: { initialDueNow?: number }) {
   const pathname = usePathname();
   const hasUnreadKai = useUnreadKaiMessages();
+  const [dueCount, setDueCount] = useState(initialDueNow);
+
+  useEffect(() => {
+    fetch("/api/stats")
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.dueNow === "number") setDueCount(data.dueNow);
+      })
+      .catch(() => {});
+  }, [pathname]);
 
   if (isConversationRoute(pathname)) return null;
+
+  const reviewsDue = dueCount > 0;
 
   return (
     <div className="fixed bottom-3 inset-x-4 z-40 max-w-sm mx-auto pointer-events-none lg:hidden">
@@ -290,14 +302,19 @@ export function BottomTabs() {
         {/* Review */}
         <Link
           href="/review"
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-bold transition-all ${pathname.startsWith("/review") ? "text-indigo-ai scale-105" : "text-muted hover:text-foreground"
+          className={`relative flex flex-col items-center gap-0.5 text-[10px] font-bold transition-all ${pathname.startsWith("/review") ? "text-indigo-ai scale-105" : "text-muted hover:text-foreground"
             }`}
         >
           <ArrowsClockwise size={22} weight={pathname.startsWith("/review") ? "fill" : "duotone"} />
           <span>Review</span>
+          {reviewsDue && !pathname.startsWith("/review") && (
+            <span className="absolute -top-0.5 right-0 min-w-[18px] rounded-full bg-amber px-1 py-px text-[9px] font-extrabold text-white ring-2 ring-card">
+              {dueCount > 99 ? "99+" : dueCount}
+            </span>
+          )}
         </Link>
 
-        {/* Elevated Center Chat Action */}
+        {/* Elevated center action — always Talk to Kai (brand purple) */}
         <Link
           href="/chat"
           className="relative -top-4 flex h-13 w-13 items-center justify-center rounded-full bg-indigo-ai text-white shadow-xl shadow-indigo-ai/40 ring-4 ring-bg transition-transform active:scale-95"

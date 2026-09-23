@@ -63,3 +63,6 @@ keystore-base64.txt
 
 # IDE settings
 .idea/
+
+# Kiro spec artifacts
+.kiro/

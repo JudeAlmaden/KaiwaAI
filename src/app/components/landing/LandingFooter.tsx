@@ -1,6 +1,6 @@
 "use client";
 
-import Kai from "./Kai";
+import Kai from "../../Kai";
 import Link from "next/link";
 import {
   ChatCircleDots,
@@ -46,20 +46,6 @@ export default function LandingFooter() {
             <p className="max-w-sm text-sm leading-relaxed text-muted">
               Your AI companion that helps you speak Japanese naturally. Real-time conversations, instant Furigana lookups, Spaced Repetition reviews, and immersive roleplay quests.
             </p>
-
-            <div className="flex items-center gap-2 pt-1 font-jp text-xs text-muted/80">
-              <span className="font-bold text-foreground">「言葉は心をつなぐ」</span>
-              <span>— Words connect hearts</span>
-            </div>
-
-            {/* Live operational status pill */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-mint/30 bg-mint/5 px-3 py-1 text-xs font-semibold text-mint">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-mint opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-mint" />
-              </span>
-              <span>Gemini 2.5 &amp; 3.0 Compatible · BYOK</span>
-            </div>
           </div>
 
           {/* Col 1: Learning Tools */}

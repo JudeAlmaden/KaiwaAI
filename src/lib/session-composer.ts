@@ -6,6 +6,9 @@ interface Card {
   nextReview: Date;
   createdAt: Date;
   lastReviewedAt?: Date | null;
+  difficulty?: number | null;
+  stability?: number | null;
+  retrievability?: number | null;
 }
 
 interface SessionComposition<T extends Card> {
@@ -56,9 +59,25 @@ export function composeSession<T extends Card>(
   const maintenancePool: T[] = [];
 
   for (const card of allCards) {
-    // Active pool criteria: prioritize new cards, then weak short-interval cards
+    // Active pool criteria: prioritize new cards, then weak short-interval cards.
+    // When FSRS fields (D, S) are present we use those for the "weak" detection;
+    // otherwise we fall back to the SM-2 heuristic (easeFactor + interval).
     const isNew = card.repetitions === 0;
-    const isWeakAndShort = card.easeFactor < 2.2 && card.interval < 3;
+    const hasFsrs =
+      card.difficulty != null &&
+      card.stability != null &&
+      !isNaN(card.difficulty) &&
+      !isNaN(card.stability);
+    let isWeakAndShort: boolean;
+    if (hasFsrs) {
+      // FSRS-active: high difficulty (struggling) AND low stability (short memory)
+      const D = card.difficulty!;
+      const S = card.stability!;
+      isWeakAndShort = D > 7 && S < 5;
+    } else {
+      // SM-2 fallback
+      isWeakAndShort = card.easeFactor < 2.2 && card.interval < 3;
+    }
     const isActive = isNew || isWeakAndShort;
 
     if (isActive) {

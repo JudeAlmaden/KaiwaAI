@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Brain, PushPin, ForkKnife, Airplane } from "@phosphor-icons/react";
-import Kai from "./Kai";
+import Kai from "../../Kai";
 
 export default function LandingMemoryStory() {
   return (
