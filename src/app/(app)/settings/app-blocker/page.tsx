@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { AppBlocker, type AppInfo, type AppBlockerConfig } from '@/plugins/app-blocker';
-import type { BlockerStudyMode, BlockerNoDueAction, BlockerFuriganaMode } from '@/plugins/app-blocker/definitions';
+import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
+import { getLearningConfig } from '@/lib/learning-config';
 import PageHeader from '@/app/(app)/PageHeader';
 import Kai from '@/app/Kai';
 
@@ -32,7 +33,7 @@ const RECOMMENDED_APPS: RecommendedApp[] = [
   { appName: 'Netflix', packageName: 'com.netflix.mediaclient', domain: 'netflix.com', category: 'Media' },
 ];
 
-const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction' | 'earlyReviewStrategy' | 'showFurigana' | 'furiganaMode' | 'learningRatio'>> = {
+const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction' | 'earlyReviewStrategy' | 'learningRatio'>> = {
   count: 10,
   blockChance: 100,
   unlockDurationMinutes: 15,
@@ -42,8 +43,6 @@ const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 
   practice: false,
   noDueAction: 'autoOpen',
   earlyReviewStrategy: 'practice',
-  showFurigana: true,
-  furiganaMode: 'always',
   learningRatio: 0.5,
 };
 
@@ -61,8 +60,6 @@ export default function AppBlockerSettings() {
   const [direction, setDirection] = useState<'jp-to-en' | 'en-to-jp' | 'mixed'>(DEFAULT_CONFIG.direction);
   const [studyMode, setStudyMode] = useState<BlockerStudyMode>(DEFAULT_CONFIG.studyMode);
   const [practice, setPractice] = useState<boolean>(DEFAULT_CONFIG.practice);
-  const [showFurigana, setShowFurigana] = useState<boolean>(DEFAULT_CONFIG.showFurigana);
-  const [furiganaMode, setFuriganaMode] = useState<BlockerFuriganaMode>(DEFAULT_CONFIG.furiganaMode);
   const [learningRatio, setLearningRatio] = useState<number>(DEFAULT_CONFIG.learningRatio);
   const [noDueAction, setNoDueAction] = useState<BlockerNoDueAction>(DEFAULT_CONFIG.noDueAction);
   const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>(DEFAULT_CONFIG.earlyReviewStrategy);
@@ -127,8 +124,6 @@ export default function AppBlockerSettings() {
         setDirection(config.direction ?? 'jp-to-en');
         setStudyMode(config.studyMode ?? 'all');
         setPractice(config.practice ?? false);
-        setShowFurigana(config.showFurigana ?? true);
-        setFuriganaMode(config.furiganaMode ?? (config.showFurigana === false ? 'never' : 'always'));
         setLearningRatio(config.learningRatio ?? 0.5);
         setNoDueAction(config.noDueAction ?? 'autoOpen');
         setEarlyReviewStrategy(config.earlyReviewStrategy ?? 'practice');
@@ -210,8 +205,6 @@ export default function AppBlockerSettings() {
           direction,
           studyMode,
           practice,
-          showFurigana,
-          furiganaMode,
           learningRatio,
           noDueAction,
           earlyReviewStrategy,
@@ -259,8 +252,6 @@ export default function AppBlockerSettings() {
     direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
     studyMode?: BlockerStudyMode;
     practice?: boolean;
-    showFurigana?: boolean;
-    furiganaMode?: BlockerFuriganaMode;
     learningRatio?: number;
     noDueAction?: BlockerNoDueAction;
     earlyReviewStrategy?: 'practice' | 'proportional';
@@ -273,11 +264,6 @@ export default function AppBlockerSettings() {
     if (updates.direction !== undefined) setDirection(updates.direction);
     if (updates.studyMode !== undefined) setStudyMode(updates.studyMode);
     if (updates.practice !== undefined) setPractice(updates.practice);
-    if (updates.showFurigana !== undefined) setShowFurigana(updates.showFurigana);
-    if (updates.furiganaMode !== undefined) {
-      setFuriganaMode(updates.furiganaMode);
-      setShowFurigana(updates.furiganaMode !== 'never');
-    }
     if (updates.learningRatio !== undefined) setLearningRatio(updates.learningRatio);
     if (updates.noDueAction !== undefined) setNoDueAction(updates.noDueAction);
     if (updates.earlyReviewStrategy !== undefined) setEarlyReviewStrategy(updates.earlyReviewStrategy);
@@ -402,8 +388,6 @@ export default function AppBlockerSettings() {
           direction={direction}
           studyMode={studyMode}
           practice={practice}
-          showFurigana={showFurigana}
-          furiganaMode={furiganaMode}
           learningRatio={learningRatio}
           noDueAction={noDueAction}
           earlyReviewStrategy={earlyReviewStrategy}
@@ -534,9 +518,16 @@ export default function AppBlockerSettings() {
                   practice: practice ? '1' : '0',
                   noDueAction,
                   earlyReviewStrategy,
-                  showFurigana: furiganaMode === 'never' ? '0' : '1',
-                  furiganaMode,
                   learningRatio: String(learningRatio),
+                  // Furigana is owned by Learning settings now; mirror it into
+                  // the native config so the interceptor URL stays correct.
+                  ...(() => {
+                    const mode = getLearningConfig().defaultFuriganaMode;
+                    return {
+                      furiganaMode: mode,
+                      showFurigana: mode === 'never' ? '0' : '1',
+                    };
+                  })(),
                 });
                 window.open(`/app-lock?${params.toString()}`, '_blank');
               }}

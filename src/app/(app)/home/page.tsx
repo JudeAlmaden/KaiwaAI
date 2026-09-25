@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { getDashboardStatsForUser } from "@/lib/dashboard-stats";
-import HomeClient from "./HomeClient";
+import KaiRoomClient from "./KaiRoomClient";
 
 export default async function HomePage() {
   const user = await getCurrentUser();
@@ -9,5 +9,5 @@ export default async function HomePage() {
 
   const initialStats = await getDashboardStatsForUser(user);
 
-  return <HomeClient initialStats={initialStats} />;
+  return <KaiRoomClient initialStats={initialStats} />;
 }

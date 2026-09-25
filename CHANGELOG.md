@@ -2,11 +2,18 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
-## [2.1.0] - Unreleased (`dev`)
+## [2.1.0] - 2025-01-19
 
-Chat relationship mood, tokenization consistency, richer memory, in-thread quests, and related UX. Developing on `dev`; not yet released from `main` (still at 2.0.0). See also `documentation/RECENT_CHANGES.md`.
+Chat relationship mood, tokenization consistency, richer memory, in-thread quests, and related UX. See also `documentation/RECENT_CHANGES.md`.
 
 ### Added
+- **Kai's Room home screen** — Replaced the banner-based dashboard with a pet-style, game-like home where Kai is the room: a full-bleed mood scene at every breakpoint, driven by real app data.
+  - Mood engine (`src/lib/kai-mood.ts`, unit-tested): `DashboardStats` + hour → `idle` / `worried` (dueNow > 15) / `proud` (streak ≥ 3 & active today) / `lapsed` (streak broken) / `sleepy` (22:00–05:00), with Japanese greeting by time of day and per-mood speech lines.
+  - Portrait scenes: renamed `public/images/kai/portraits/frame_00xx.png` → semantic names (`greeting_wave`, `studying`, `looking_away`, `snack_break`, `sparkling_joy`, `sleeping`) and mapped one scene per mood, crossfaded only when the mood changes — no timer-driven art swaps.
+  - Living-room details: breathing bob, ambient sway, sparkle accents, tap = poke and press-hold = pet (with burst animations) anywhere on the room; greeting wave on load; poke/pet speech reactions.
+  - Game HUD: level ring (progressLevel + %), streak and due-count pills, daily-quest checklist (review / chat), chunky Duolingo-style action buttons with a pixel-aligned two-column layout, and compact stats footer.
+  - Cross-screen celebrations: `queueKaiCelebration()` (`src/lib/kai-mood.ts`) marks a session-complete flag that plays Kai's celebrate scene on the next `/home` mount.
+  - New components under `src/app/(app)/home/`: `KaiRoomClient.tsx`, `KaiAvatar.tsx` (backdrop room, tap/pet handling), `KaiSpeechBubble.tsx` (tail bubble with animated line swaps); replaces `HomeClient.tsx`.
 - **Per-conversation mood** — `Chat.mood` / `moodScore` / `moodUpdatedAt` with shared domain in `src/lib/mood.ts`; tone injected into every AI turn; header emoji + hub row indicators; proactive replies gated by mood (independent of outreach `consecutiveIgnored`).
 - **Shared tokenization contract** — `src/lib/tokenization.ts` (`validateTokens`, JP-only model tokens, schemas used by client Gemini and server group-chat).
 - **Dictionary enrichment on persist** — `dictionary-enrich` + `POST /api/dictionary/enrich` fills readings/meanings from local Word/Phrase tables after validation.
@@ -32,6 +39,10 @@ Chat relationship mood, tokenization consistency, richer memory, in-thread quest
   - Correctness properties (100-iteration per-test): P13 migration idempotency / post-conversion bounds in `converter.test.ts`; P14 progress bounds [0,1] in `progress/calculator.test.ts`; P15 status classification rules + P16 status-progress consistency in `status/calculator.test.ts`.
 
 ### Changed
+- **Furigana setting unified under Learning defaults** — The Always / Smart / Off furigana selector in **Settings → Learning → Review defaults** is now the single source of truth for furigana on flashcards across **all** review surfaces, not just the Focus Guard interceptor:
+  - Regular review quests (`/review`) now honor it — previously furigana was always shown regardless of the setting (`ReviewClient` never passed `showFurigana` to `ReviewCard`).
+  - Changing the setting mirrors `furiganaMode` (+ legacy `showFurigana`) into the native AppBlocker config (`AppBlocker.setAppBlockerConfig`), so the Android interceptor picks it up without a rebuild; pre-existing native values stay in effect until the user touches the Learning setting.
+  - Focus Guard Interception Rules UI no longer edits furigana — the modal row (`FocusGuardStatusCard`), the editor toggle (`InterceptionRulesEditor`), and related props/state were removed; `/app-lock` resolution order is URL param → saved native config → legacy `showFurigana` → Learning config → `'always'`.
 - **Chat hub chrome** — URL-synced tabs, personas before quests, slimmer mobile header / nav on `/chat`.
 - **Profile entry points** — Name/avatar opens the profile & memory drawer; removed duplicate Profile chip and Profile & Memory header button; ⋯ keeps Open full diary (`/memory`).
 - **Memory suggestions UI** — Collapsed pill / durable chips with category cues; pending suggestions cached per conversation.

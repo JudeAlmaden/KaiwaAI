@@ -15,7 +15,6 @@ interface RulesConfigCardProps {
   direction?: string;
   studyMode?: BlockerStudyMode;
   practice?: boolean;
-  showFurigana?: boolean;
   noDueAction?: BlockerNoDueAction;
   earlyReviewStrategy?: 'practice' | 'proportional';
   learningRatio?: number;
@@ -28,7 +27,6 @@ interface RulesConfigCardProps {
     direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
     studyMode?: BlockerStudyMode;
     practice?: boolean;
-    showFurigana?: boolean;
     noDueAction?: BlockerNoDueAction;
     earlyReviewStrategy?: 'practice' | 'proportional';
     learningRatio?: number;
@@ -43,7 +41,6 @@ export default function RulesConfigCard({
   direction = 'mixed',
   studyMode = 'all',
   practice = false,
-  showFurigana = true,
   noDueAction = 'autoOpen',
   earlyReviewStrategy = 'practice',
   learningRatio = 0.5,
@@ -60,7 +57,6 @@ export default function RulesConfigCard({
     direction: direction as InterceptionRulesState['direction'],
     studyMode,
     practice,
-    showFurigana,
     noDueAction,
     earlyReviewStrategy,
     learningRatio,

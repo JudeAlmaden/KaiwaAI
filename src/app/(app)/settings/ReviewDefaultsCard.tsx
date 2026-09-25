@@ -8,6 +8,7 @@ import {
 } from "@/lib/learning-config";
 import type { FuriganaMode, ReviewDirection } from "@/lib/review/types";
 import { getAutoSaveWords, setAutoSaveWords } from "@/lib/model-config";
+import { AppBlocker } from "@/plugins/app-blocker";
 import { Chip, Surface, Toggle } from "../ui";
 
 const DIRECTIONS: { id: ReviewDirection; label: string }[] = [
@@ -35,6 +36,15 @@ export default function ReviewDefaultsCard() {
   function patch(updates: Partial<LearningConfig>) {
     const next = setLearningConfig(updates);
     setConfig(next);
+    // Furigana is the single source of truth here — mirror it into the
+    // AppBlocker config so the Focus Guard interceptor (Android
+    // SharedPreferences) picks it up without rebuilding the app.
+    if (updates.defaultFuriganaMode !== undefined) {
+      AppBlocker.setAppBlockerConfig({
+        furiganaMode: updates.defaultFuriganaMode,
+        showFurigana: updates.defaultFuriganaMode !== "never",
+      }).catch(() => {});
+    }
   }
 
   function toggleAutoSave() {
@@ -68,17 +78,34 @@ export default function ReviewDefaultsCard() {
 
       <div className="mt-5">
         <p className="text-sm font-bold">Furigana</p>
+        <p className="mb-2 text-xs text-muted">
+          Reading hints on flashcards — applies to every review session and Focus Guard.
+        </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {FURIGANA.map((f) => (
             <Chip
               key={f.id}
               active={config.defaultFuriganaMode === f.id}
+              title={
+                f.id === "learning_only"
+                  ? "Show on learning cards, hide on known ones"
+                  : f.id === "never"
+                    ? "Hide ruby annotations for maximum recall challenge"
+                    : "Always show reading hints"
+              }
               onClick={() => patch({ defaultFuriganaMode: f.id })}
             >
               {f.label}
             </Chip>
           ))}
         </div>
+        <p className="mt-2 text-xs text-muted">
+          {config.defaultFuriganaMode === "learning_only"
+            ? "Smart: furigana shows while you're learning, hides once a card is known."
+            : config.defaultFuriganaMode === "never"
+              ? "Off: clean kanji — recall readings from memory."
+              : "Always: readings shown above kanji."}
+        </p>
       </div>
 
       <div className="mt-5">

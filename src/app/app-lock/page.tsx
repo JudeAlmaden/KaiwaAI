@@ -178,12 +178,18 @@ export default function StandaloneAppLockPage() {
 
         const urlFuriganaMode = params.get('furiganaMode') as BlockerFuriganaMode | null;
         const urlShowFurigana = params.get('showFurigana');
+        // Furigana is owned by Learning settings; the learning config acts as a
+        // fallback for the web/preview case where the native plugin config is
+        // in-memory and resets on reload.
+        const learningFuriganaMode = getLearningConfig().defaultFuriganaMode as BlockerFuriganaMode;
         const resolvedFuriganaMode: BlockerFuriganaMode =
           urlFuriganaMode ??
           savedConfig?.furiganaMode ??
           (urlShowFurigana !== null
             ? (urlShowFurigana === '1' || urlShowFurigana === 'true' ? 'always' : 'never')
-            : (savedConfig?.showFurigana === false ? 'never' : 'always'));
+            : (savedConfig?.showFurigana === false
+              ? 'never'
+              : (learningFuriganaMode ?? 'always')));
 
         const urlLearningRatio = params.get('learningRatio');
         const resolvedLearningRatio: number =

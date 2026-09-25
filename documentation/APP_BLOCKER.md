@@ -109,6 +109,7 @@ To preview the Focus Guard App Lock UI on PC during development:
 │  │  - blocked_apps: Set<String> │                 │
 │  │  - flashcard_requirement: Int│                 │
 │  │  - flashcards_completed: Bool│                 │
+│  │  - furigana_mode: String     │ // mirrored from Learning settings │
 │  └──────────────────────────────┘                 │
 └─────────────────────────────────────────────────────┘
 ```
@@ -255,6 +256,11 @@ await AppBlocker.markFlashcardsCompleted();
 const config = await AppBlocker.getAppBlockerConfig();
 console.log(config.blockedApps); // ['com.youtube', ...]
 ```
+
+> **Furigana note:** `furiganaMode` (`'always' | 'learning_only' | 'never'`) is owned by
+> **Settings → Learning → Review defaults** (`lib/learning-config.ts`). Changing it there
+> mirrors the value into this plugin's config so the interceptor URL stays correct. The
+> legacy `showFurigana` boolean is kept in sync (`false` only when mode is `'never'`).
 
 ---
 

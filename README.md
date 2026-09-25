@@ -337,7 +337,7 @@ Key UI files:
 | `src/app/(app)/kanji/[character]/KanjiDetailClient.tsx` | Kanji detail, mnemonics, and vocabulary examples |
 | `src/app/(app)/memory/MemoryClient.tsx` | Persona memory notebook |
 | `src/app/(app)/settings/SettingsClient.tsx` | User, AI-key, and learning settings tabs |
-| `src/app/(app)/home/HomeClient.tsx` | Dashboard and activity entry point |
+| `src/app/(app)/home/KaiRoomClient.tsx` | Kai's Room dashboard and activity entry point |
 
 ## Security and data handling
 

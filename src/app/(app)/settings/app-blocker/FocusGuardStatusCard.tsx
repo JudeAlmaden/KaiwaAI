@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Kai from '@/app/Kai';
 import { ShieldWarning, Sliders, X, Minus, Plus, ArrowsClockwise, CheckCircle, XCircle } from '@phosphor-icons/react';
-import type { BlockerStudyMode, BlockerNoDueAction, BlockerFuriganaMode } from '@/plugins/app-blocker/definitions';
+import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
 
 interface FocusGuardStatusCardProps {
   isMonitoring: boolean;
@@ -15,8 +15,6 @@ interface FocusGuardStatusCardProps {
   direction?: string;
   studyMode?: BlockerStudyMode;
   practice?: boolean;
-  showFurigana?: boolean;
-  furiganaMode?: BlockerFuriganaMode;
   learningRatio?: number;
   noDueAction?: BlockerNoDueAction;
   earlyReviewStrategy?: 'practice' | 'proportional';
@@ -35,8 +33,6 @@ interface FocusGuardStatusCardProps {
     direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
     studyMode?: BlockerStudyMode;
     practice?: boolean;
-    showFurigana?: boolean;
-    furiganaMode?: BlockerFuriganaMode;
     learningRatio?: number;
     noDueAction?: BlockerNoDueAction;
     earlyReviewStrategy?: 'practice' | 'proportional';
@@ -61,7 +57,6 @@ export default function FocusGuardStatusCard({
   direction = 'mixed',
   studyMode = 'all',
   practice = false,
-  furiganaMode = 'always',
   learningRatio = 0.5,
   noDueAction = 'autoOpen',
   hasPermissions,
@@ -443,34 +438,6 @@ export default function FocusGuardStatusCard({
               <div className="space-y-1">
                 <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Options</span>
                 <div className="rounded-2xl border border-border overflow-hidden divide-y divide-border/60">
-
-                  {/* Furigana */}
-                  <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
-                    <span className="text-xs font-semibold text-foreground shrink-0">Furigana</span>
-                    <div className="flex gap-1">
-                      {[
-                        { id: 'always' as const, label: 'Always' },
-                        { id: 'learning_only' as const, label: 'Smart' },
-                        { id: 'never' as const, label: 'Off' },
-                      ].map((mode) => (
-                        <button
-                          key={mode.id}
-                          type="button"
-                          onClick={() => onUpdateAppBlockerConfig?.({
-                            furiganaMode: mode.id,
-                            showFurigana: mode.id !== 'never',
-                          })}
-                          className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition ${
-                            furiganaMode === mode.id
-                              ? 'bg-indigo-ai text-white'
-                              : 'text-muted hover:text-foreground'
-                          }`}
-                        >
-                          {mode.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
                   {/* Practice mode */}
                   <div className="flex items-center justify-between px-3 py-2.5 gap-2 bg-card">

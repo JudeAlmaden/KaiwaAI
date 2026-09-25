@@ -109,7 +109,8 @@ To preview the Focus Guard App Lock UI on PC during development:
 │  │  - blocked_apps: Set<String> │                 │
 │  │  - flashcard_requirement: Int│                 │
 │  │  - flashcards_completed: Bool│                 │
-│  │  - show_furigana: Bool       │                 │
+│  │  - show_furigana: Bool       │  // legacy mirror of Learning furiganaMode │
+│  │  - furigana_mode: String     │  // 'always' | 'learning_only' | 'never' │
 │  └──────────────────────────────┘                 │
 └─────────────────────────────────────────────────────┘
 ```
@@ -259,7 +260,7 @@ console.log(config);
 // Update configuration
 await AppBlocker.setAppBlockerConfig({
   count: 10,
-  showFurigana: true, // Enable/disable furigana reading annotations on flashcards
+  showFurigana: true, // Legacy mirror of the Learning-tab furigana setting
   studyMode: 'all',
   direction: 'jp-to-en',
 });
@@ -276,7 +277,8 @@ await AppBlocker.setAppBlockerConfig({
 | `direction` | `'jp-to-en' \| 'en-to-jp' \| 'mixed'` | `'jp-to-en'` | Flashcard prompt and answer direction |
 | `studyMode` | `BlockerStudyMode` | `'all'` | Card selection pool (`due`, `all`, `recent`, `struggling`, `leeches`) |
 | `practice` | `boolean` | `false` | Practice mode (does not alter SRS/database review history) |
-| `showFurigana` | `boolean` | `true` | Show reading annotations above kanji on flashcards |
+| `showFurigana` | `boolean` | `true` | Legacy mirror of the furigana setting; owned by Learning settings (`furiganaMode`) |
+| `furiganaMode` | `'always' \| 'learning_only' \| 'never'` | `'always'` | Furigana display — owned by **Settings → Learning → Review defaults**, which mirrors changes here so the interceptor URL stays correct |
 | `noDueAction` | `'autoOpen' \| 'studyAny'` | `'autoOpen'` | Action when no cards match study mode |
 | `earlyReviewStrategy` | `'practice' \| 'proportional'` | `'practice'` | SRS scheduling behavior for early reviews |
 

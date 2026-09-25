@@ -17,7 +17,6 @@ export interface InterceptionRulesState {
   direction: ReviewDirection;
   studyMode: BlockerStudyMode;
   practice: boolean;
-  showFurigana: boolean;
   noDueAction: BlockerNoDueAction;
   earlyReviewStrategy: EarlyReviewStrategy;
   learningRatio?: number;
@@ -91,7 +90,6 @@ export default function InterceptionRulesEditor({
       direction: cfg.defaultDirection,
       earlyReviewStrategy: cfg.earlyReviewStrategy,
       learningRatio: cfg.defaultLearningRatio,
-      showFurigana: cfg.defaultFuriganaMode !== "never",
     });
   }
 
@@ -102,7 +100,7 @@ export default function InterceptionRulesEditor({
           <div>
             <p className="text-xs font-bold text-foreground">Use my review defaults</p>
             <p className="text-[10px] text-muted">
-              Direction, furigana, mix, and early-review from Learning settings
+              Direction, mix, and early-review from Learning settings
             </p>
           </div>
           <button
@@ -247,32 +245,18 @@ export default function InterceptionRulesEditor({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1">
-              <SectionTitle>Practice mode</SectionTitle>
-              <Question size={12} className="text-muted" />
-            </div>
-            <Segmented
-              active={values.practice}
-              onClick={() => onChange({ practice: !values.practice })}
-              className="w-full py-1.5"
-            >
-              {values.practice ? "On — no SRS updates" : "Off"}
-            </Segmented>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1">
+            <SectionTitle>Practice mode</SectionTitle>
+            <Question size={12} className="text-muted" />
           </div>
-          <div className="space-y-1.5">
-            <SectionTitle>Furigana</SectionTitle>
-            <Segmented
-              active={values.showFurigana}
-              onClick={() =>
-                onChange({ showFurigana: !values.showFurigana, useReviewDefaults: false })
-              }
-              className="w-full py-1.5"
-            >
-              {values.showFurigana ? "Show" : "Hide"}
-            </Segmented>
-          </div>
+          <Segmented
+            active={values.practice}
+            onClick={() => onChange({ practice: !values.practice })}
+            className="w-full py-1.5"
+          >
+            {values.practice ? "On — no SRS updates" : "Off"}
+          </Segmented>
         </div>
 
         {values.learningRatio != null && (

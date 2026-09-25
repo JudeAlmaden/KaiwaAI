@@ -12,6 +12,8 @@ import OfflineBanner from "@/components/OfflineBanner";
 import { AppBlocker } from "@/plugins/app-blocker";
 import ReviewCard, { Card } from "./ReviewCard";
 import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from "@/lib/fallback-cards";
+import { getLearningConfig } from "@/lib/learning-config";
+import type { FuriganaMode } from "@/lib/review/types";
 
 type StudyMode = 
   | "due"           // Cards with nextReview in the past
@@ -63,6 +65,8 @@ export default function ReviewClient() {
   const [tally, setTally] = useState({ again: 0, good: 0 });
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
+  // Furigana preference (Learning settings) — snapshotted at session start
+  const [furiganaMode, setFuriganaMode] = useState<FuriganaMode>("always");
 
   // App Blocker Completion Tracking (only successful cards count towards unlock)
   const completedCount = passedCardIds.size;
@@ -325,6 +329,9 @@ export default function ReviewClient() {
       setPhase("empty");
       return;
     }
+
+    // Snapshot furigana preference (Learning settings) for this session
+    setFuriganaMode(getLearningConfig().defaultFuriganaMode);
     
     // Shuffle for mixed direction
     const shuffled = s.direction === "mixed" 
@@ -786,6 +793,13 @@ export default function ReviewClient() {
           reviewType={setup.reviewType}
           flipped={flipped}
           disabledGrades={isCardFailed ? [2, 3] : undefined}
+          showFurigana={
+            furiganaMode === "always"
+              ? true
+              : furiganaMode === "never"
+                ? false
+                : card.status !== "known" // learning_only: hide on known cards
+          }
           onFlip={() => setFlipped((f) => !f)}
           onGrade={(g) => grade(g)}
           showHint={showHint}
