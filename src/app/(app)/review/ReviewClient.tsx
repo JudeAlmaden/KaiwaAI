@@ -13,6 +13,7 @@ import { AppBlocker } from "@/plugins/app-blocker";
 import ReviewCard, { Card } from "./ReviewCard";
 import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from "@/lib/fallback-cards";
 import { getLearningConfig } from "@/lib/learning-config";
+import { resolveShowFurigana } from "@/lib/review/furigana";
 import type { FuriganaMode } from "@/lib/review/types";
 
 type StudyMode = 
@@ -793,13 +794,7 @@ export default function ReviewClient() {
           reviewType={setup.reviewType}
           flipped={flipped}
           disabledGrades={isCardFailed ? [2, 3] : undefined}
-          showFurigana={
-            furiganaMode === "always"
-              ? true
-              : furiganaMode === "never"
-                ? false
-                : card.status !== "known" // learning_only: hide on known cards
-          }
+          showFurigana={resolveShowFurigana(furiganaMode, card)}
           onFlip={() => setFlipped((f) => !f)}
           onGrade={(g) => grade(g)}
           showHint={showHint}

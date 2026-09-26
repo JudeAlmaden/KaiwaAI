@@ -132,7 +132,7 @@ export default function ReviewCard({
                 <>
                   <SpeakerButton text={card.word || ""} />
                   <span className="font-bold font-jp text-5xl">
-                    {card.word && card.reading && card._pool !== "maintenance" && showFurigana ? (
+                    {card.word && card.reading && showFurigana ? (
                       <Furigana word={card.word} reading={card.reading} className="text-5xl" />
                     ) : (
                       card.word

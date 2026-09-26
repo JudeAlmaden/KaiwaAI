@@ -2,6 +2,17 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.1.1] - 2026-09-26
+
+Furigana display fix for Daily Quest / maintenance-pool cards.
+
+### Fixed
+- **Furigana setting on Daily Quest & composed sessions** — Removed the v1.7.0 hard-coded maintenance-pool furigana suppression from `ReviewCard`; the Learning-tab furigana mode now wins on every card. Previously, "Always" still hid furigana on maintenance-pool cards (half the Daily Quest deck), and "Smart" behaved inconsistently across composed sessions. New `resolveShowFurigana()` in `lib/review/furigana.ts` (unit-tested matrix) is shared by `/review` and `/app-lock`.
+
+### Technical
+- New: `src/lib/review/furigana.ts`, `src/lib/review/furigana.test.ts`
+- Modified: `ReviewCard.tsx`, `ReviewClient.tsx`, `app-lock/page.tsx` (suppression logic removed in favor of shared resolver)
+
 ## [2.1.0] - 2025-01-19
 
 Chat relationship mood, tokenization consistency, richer memory, in-thread quests, and related UX. See also `documentation/RECENT_CHANGES.md`.
@@ -54,6 +65,7 @@ Chat relationship mood, tokenization consistency, richer memory, in-thread quest
 - **FSRS data migration script** — Loads `DATABASE_URL` via `dotenv/config` so `npx tsx scripts/migrate-to-fsrs.ts` works without manual env injection.
 
 ### Fixed
+- **Furigana setting on Daily Quest & composed sessions** — Removed the v1.7.0 hard-coded maintenance-pool furigana suppression from `ReviewCard`; the Learning-tab furigana mode now wins on every card. Previously, "Always" still hid furigana on maintenance-pool cards (half the Daily Quest deck), and "Smart" behaved inconsistently across composed sessions. New `resolveShowFurigana()` in `lib/review/furigana.ts` (unit-tested matrix) is shared by `/review` and `/app-lock`.
 - **PC token range handles** — Hit-testing skips `[data-token-selection-ui]` so ‹ › drag works when chrome sits under the cursor.
 - **Outreach / context memory scoping** — Persona-filtered memories; superseded rows excluded from injection.
 

@@ -11,6 +11,7 @@ import Kai from '@/app/Kai';
 import ReviewCard, { Card } from '@/app/(app)/review/ReviewCard';
 import OfflineBanner from '@/components/OfflineBanner';
 import { getLearningConfig } from '@/lib/learning-config';
+import { resolveShowFurigana } from '@/lib/review/furigana';
 
 type InitResult =
   | { kind: 'session' }
@@ -472,13 +473,7 @@ export default function StandaloneAppLockPage() {
           reviewType={currentCard.type || "vocabulary"}
           flipped={flipped}
           disabledGrades={isCardFailed ? [2, 3] : undefined}
-          showFurigana={
-            furiganaMode === 'always'
-              ? true
-              : furiganaMode === 'never'
-              ? false
-              : currentCard.status !== 'known'
-          }
+          showFurigana={resolveShowFurigana(furiganaMode, currentCard)}
           onFlip={() => setFlipped(!flipped)}
           onGrade={(g) => handleGrade(g)}
           showHint={showHint}
