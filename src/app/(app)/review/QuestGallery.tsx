@@ -156,7 +156,7 @@ export default function QuestGallery({
             onStart={() =>
               onStartQuest({
                 studyMode: "due",
-                limit: Math.max(10, dueCount),
+                limit: 50,
                 isContinuous: false,
                 reviewType: "mixed",
                 activeLimit: 5,
@@ -171,7 +171,7 @@ export default function QuestGallery({
             onStart={() =>
               onStartQuest({
                 studyMode: "struggling",
-                limit: 30,
+                limit: 50,
                 isContinuous: false,
                 reviewType: "mixed",
                 activeLimit: 5,

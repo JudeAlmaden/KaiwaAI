@@ -97,14 +97,16 @@ describe("/api/review/mixed GET", () => {
   it("respects limit parameter", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
     
+    const now = new Date();
     const mockVocab = Array.from({ length: 50 }, (_, i) => ({
       id: `v${i}`,
-      word: "word",
-      reading: "reading",
-      romaji: "romaji",
-      meaning: "meaning",
-      partOfSpeech: "noun",
+      word: { dictionary: "語", reading: "ご", meanings: '["word"]', partOfSpeech: "noun" },
       status: "learning",
+      repetitions: 0,
+      easeFactor: 2.5,
+      interval: 0,
+      nextReview: now,
+      createdAt: now,
     }));
     
     const mockKanji = Array.from({ length: 50 }, (_, i) => ({
@@ -117,6 +119,11 @@ describe("/api/review/mixed GET", () => {
       },
       mnemonic: "test",
       status: "learning",
+      repetitions: 0,
+      easeFactor: 2.5,
+      interval: 0,
+      nextReview: now,
+      createdAt: now,
     }));
 
     vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue(mockVocab as never);
@@ -126,6 +133,41 @@ describe("/api/review/mixed GET", () => {
     const res = await GET(req);
     const json = await res.json();
 
+    expect(json.cards.length).toBeLessThanOrEqual(10);
+  });
+
+  it("backfills from kanji when vocab pool is empty", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
+
+    const now = new Date();
+    // No vocab cards due at all
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([] as never);
+
+    const mockKanji = Array.from({ length: 20 }, (_, i) => ({
+      id: `k${i}`,
+      kanji: {
+        character: "字",
+        meanings: '["character"]',
+        readingsOn: '["ジ"]',
+        readingsKun: '["あざ"]',
+      },
+      mnemonic: null,
+      status: "learning",
+      repetitions: 0,
+      easeFactor: 2.5,
+      interval: 0,
+      nextReview: now,
+      createdAt: now,
+    }));
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue(mockKanji as never);
+
+    const req = new Request("http://localhost/api/review/mixed?studyMode=due&limit=10");
+    const res = await GET(req);
+    const json = await res.json();
+
+    // Should return up to 10 kanji cards even though vocab pool is empty
+    expect(json.cards.length).toBeGreaterThan(0);
+    expect(json.cards.every((c: { type: string }) => c.type === "kanji")).toBe(true);
     expect(json.cards.length).toBeLessThanOrEqual(10);
   });
 
@@ -142,3 +184,4 @@ describe("/api/review/mixed GET", () => {
     expect(json.cards).toHaveLength(0);
   });
 });
+

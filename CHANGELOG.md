@@ -2,6 +2,21 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.1] - 2026-09-28
+
+Fixes across all review session types: state persistence in ReviewClient, mixed endpoint backfill, accurate mixed due counts, and UI card limit alignments.
+
+### Fixed
+- **Stale setup state across all review modes** — `ReviewClient.start()` now persists resolved session config via `setSetup(s)`. Previously, `setup` remained frozen at its initial default values throughout the session, causing Endless Zen continuous refills (`fetchMoreCards`), SRS routing (`grade`), and AppBlocker unlock checks to query with stale parameters.
+- **Mixed review pool backfill** — `/api/review/mixed` previously split limits 50/50 between vocabulary and kanji with no backfill, causing sessions to return half-decks if one pool was empty or sparse. Both the standard composer (`due`/`all`) and legacy (`struggling`/`leeches`) paths now donate unused capacity to the surplus pool so requested limits are fulfilled.
+- **Daily Quest due count & 50-card cap** — The review dashboard due counter now queries `/api/review/mixed` to count both vocab and kanji cards due, instead of querying vocab only. Daily Quest now launches with `limit: 50` matching the "Up to 50 cards" UI copy, preventing artificial 5- or 10-card caps when kanji counts were omitted.
+- **Gauntlet session limit mismatch** — Gauntlet mode in `QuestGallery` now passes `limit: 50` matching its "50 CARDS" chip (previously passed `limit: 30`).
+- **AppBlocker unlock threshold** — Unlocking now accurately tracks against actual session card count (`total`) rather than defaulting to stale `setup.limit`.
+
+### Technical
+- Modified: `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/review/QuestGallery.tsx`, `src/app/api/review/mixed/route.ts`, `src/app/api/review/mixed/route.test.ts`, `package.json`, `android/app/build.gradle`
+- Tests: 590 passing (61 files) — lint/typecheck clean
+
 ## [2.2.0] - 2026-09-27
 
 RTK Lesson Folders overhaul — folders become self-contained lessons with images, primitives, multi-selection review, and enhanced search.

@@ -70,8 +70,10 @@ export default function ReviewClient() {
   const [furiganaMode, setFuriganaMode] = useState<FuriganaMode>("always");
 
   // App Blocker Completion Tracking (only successful cards count towards unlock)
+  // Use total cards in session (active + incoming) as the target, falling back to setup.limit.
+  // This is snapshotted at session start via total state, which is set in start().
   const completedCount = passedCardIds.size;
-  useAppBlockerCompletion(completedCount, setup.limit);
+  useAppBlockerCompletion(completedCount, total > 0 ? total : setup.limit);
 
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [appBlockerConfig, setAppBlockerConfig] = useState<import('@/plugins/app-blocker').AppBlockerConfig>({
@@ -242,12 +244,13 @@ export default function ReviewClient() {
   }, [activePool, setup.reviewType, handleGenerateMnemonic]);
 
   useEffect(() => {
-    const endpoint = `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review?studyMode=due&limit=200`;
-    fetch(endpoint)
+    // Always fetch from the mixed endpoint for due count so kanji cards are included.
+    // Daily Quest is a mixed session, so the badge should reflect both vocab + kanji due.
+    fetch("/api/review/mixed?studyMode=due&limit=200")
       .then((r) => r.json())
       .then((d) => setDueCount(d.cards?.length ?? 0))
       .catch(() => setDueCount(0));
-  }, [setup.reviewType]);
+  }, []);
 
   const fetchMoreCards = useCallback(async () => {
     const endpoint = setup.reviewType === "mixed" 
@@ -288,6 +291,11 @@ export default function ReviewClient() {
 
   async function start(custom?: Partial<Setup>) {
     const s = { ...setup, ...custom };
+
+    // Persist the resolved session config into state so that downstream
+    // consumers (fetchMoreCards, grade, useAppBlockerCompletion) all operate
+    // on the actual session parameters rather than the stale initial defaults.
+    setSetup(s);
     
     // For mixed mode, use the dedicated mixed endpoint
     const endpoint = s.reviewType === "mixed" 

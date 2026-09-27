@@ -88,18 +88,39 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
-    // Compose sessions for each type (split limit roughly 50/50)
-    // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
-    const vocabSession = composeSession(allVocab, Math.ceil(limit / 2), ignoreDueDate);
-    const kanjiSession = composeSession(allKanji, Math.ceil(limit / 2), ignoreDueDate);
+    // Split limit 50/50 but allow backfill: if one type has fewer cards, donate
+    // unused slots to the other so the session reaches the requested limit.
+    const halfLimit = Math.ceil(limit / 2);
+    const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate);
+    const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate);
+
+    const vocabActual = vocabSession.session.length;
+    const kanjiActual = kanjiSession.session.length;
+
+    // Backfill: if vocab came up short, ask kanji to fill the gap (and vice-versa)
+    const vocabShortfall = halfLimit - vocabActual;
+    const kanjiShortfall = halfLimit - kanjiActual;
+    let vocabFinal = vocabSession.session;
+    let kanjiFinal = kanjiSession.session;
+
+    if (vocabShortfall > 0 && kanjiShortfall <= 0) {
+      // Kanji has surplus; pull extra from it
+      const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate);
+      kanjiFinal = extraKanji.session;
+    } else if (kanjiShortfall > 0 && vocabShortfall <= 0) {
+      // Vocab has surplus; pull extra from it
+      const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate);
+      vocabFinal = extraVocab.session;
+    }
 
     const vocabMaintenanceIds = new Set(vocabSession.maintenanceCards.map((c) => c.id));
     const kanjiMaintenanceIds = new Set(kanjiSession.maintenanceCards.map((c) => c.id));
 
-    vocabCards = vocabSession.session.map((c) => ({ ...c, _isMaintenance: vocabMaintenanceIds.has(c.id) }));
-    userKanji = kanjiSession.session.map((c) => ({ ...c, _isMaintenance: kanjiMaintenanceIds.has(c.id) }));
+    vocabCards = vocabFinal.map((c) => ({ ...c, _isMaintenance: vocabMaintenanceIds.has(c.id) }));
+    userKanji = kanjiFinal.map((c) => ({ ...c, _isMaintenance: kanjiMaintenanceIds.has(c.id) }));
   } else {
-    // Legacy behavior for struggling/leeches/all modes
+    // Legacy behavior for struggling/leeches modes
+    // Fetch up to `limit` from each type so we can backfill if one pool is sparse.
     const orderBy =
       studyMode === "struggling"
         ? [{ easeFactor: "asc" as const }, { createdAt: "asc" as const }]
@@ -107,7 +128,9 @@ export async function GET(req: Request) {
           ? [{ timesReviewed: "desc" as const }, { createdAt: "asc" as const }]
           : [{ createdAt: "asc" as const }, { nextReview: "asc" as const }];
 
-    vocabCards = await prisma.userFlashcard.findMany({
+    const halfLimit = Math.ceil(limit / 2);
+
+    const vocabRaw = await prisma.userFlashcard.findMany({
       where: vocabWhere,
       include: {
         word: true,
@@ -115,17 +138,24 @@ export async function GET(req: Request) {
         phrase: true,
       },
       orderBy,
-      take: Math.ceil(limit / 2),
+      take: limit, // fetch full limit so backfill is possible
     });
 
-    userKanji = await prisma.userKanji.findMany({
+    const kanjiRaw = await prisma.userKanji.findMany({
       where: kanjiWhere,
       include: {
         kanji: true,
       },
       orderBy,
-      take: Math.ceil(limit / 2),
+      take: limit, // fetch full limit so backfill is possible
     });
+
+    // Backfill: whichever type has surplus fills the gap left by the sparse type
+    const vocabTarget = Math.min(halfLimit + Math.max(0, halfLimit - kanjiRaw.length), vocabRaw.length);
+    const kanjiTarget = Math.min(limit - vocabTarget, kanjiRaw.length);
+
+    vocabCards = vocabRaw.slice(0, vocabTarget);
+    userKanji = kanjiRaw.slice(0, kanjiTarget);
   }
 
   // Transform vocabulary cards
