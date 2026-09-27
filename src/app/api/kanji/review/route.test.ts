@@ -9,6 +9,12 @@ vi.mock("@/lib/prisma", () => ({
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    kanjiGroupEntry: {
+      findMany: vi.fn(),
+    },
+    kanji: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -253,6 +259,67 @@ describe("Kanji Review API - GET", () => {
       heisigKeyword: "day",
       mnemonic: "Picture the sun",
     });
+  });
+
+  it("supports multiple comma-separated groupIds and includes primitives", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
+    vi.mocked(prisma.kanjiGroupEntry.findMany).mockResolvedValueOnce([
+      { kanjiId: "k-1" },
+      { kanjiId: "k-2" },
+      { kanjiId: "k-1" }, // duplicate across folders
+    ] as never);
+
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([
+      {
+        id: "uk-1",
+        userId: "user-123",
+        kanjiId: "k-1",
+        status: "learning",
+        mnemonic: "Story 1",
+        kanji: {
+          id: "k-1",
+          character: "一",
+          meanings: '["one"]',
+          readingsOn: '["イチ"]',
+          readingsKun: '["ひと"]',
+          radicals: '["一"]',
+          heisigNumber: 1,
+          heisigKeyword: "one",
+          primitives: '["floor", "ceiling"]',
+        },
+      } as never,
+    ]);
+
+    vi.mocked(prisma.kanji.findMany).mockResolvedValueOnce([
+      {
+        id: "k-2",
+        character: "二",
+        meanings: '["two"]',
+        readingsOn: '["ニ"]',
+        readingsKun: '["ふた"]',
+        radicals: '["二"]',
+        heisigNumber: 2,
+        heisigKeyword: "two",
+        primitives: null,
+      } as never,
+    ]);
+
+    const req = new Request("http://localhost/api/kanji/review?groupId=grp-1,grp-2");
+    const response = await GET(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.kanjiGroupEntry.findMany).toHaveBeenCalledWith({
+      where: { groupId: { in: ["grp-1", "grp-2"] } },
+      select: { kanjiId: true },
+      orderBy: { order: "asc" },
+    });
+    // Deduplicated 2 cards
+    expect(data.cards).toHaveLength(2);
+    expect(data.cards[0].character).toBe("一");
+    expect(data.cards[0].primitives).toEqual(["floor", "ceiling"]);
+    expect(data.cards[1].character).toBe("二");
+    expect(data.cards[1].primitives).toEqual([]);
   });
 });
 

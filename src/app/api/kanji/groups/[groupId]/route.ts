@@ -43,6 +43,7 @@ export async function GET(
       id: group.id,
       name: group.name,
       description: group.description,
+      images: group.images ? (JSON.parse(group.images) as string[]) : [],
       kind: group.kind,
       lessonNumber: group.lessonNumber,
       entries: group.entries.map((e) => ({
@@ -53,6 +54,7 @@ export async function GET(
         heisigNumber: e.kanji.heisigNumber,
         heisigLesson: e.kanji.heisigLesson,
         heisigKeyword: e.kanji.heisigKeyword,
+        primitives: e.kanji.primitives ? (JSON.parse(e.kanji.primitives) as string[]) : [],
         meanings: JSON.parse(e.kanji.meanings) as string[],
         readingsOn: JSON.parse(e.kanji.readingsOn) as string[],
         readingsKun: JSON.parse(e.kanji.readingsKun) as string[],
@@ -75,7 +77,12 @@ export async function PATCH(
 
   const { groupId } = await params;
 
-  let body: { name?: string; description?: string };
+  let body: {
+    name?: string;
+    description?: string | null;
+    lessonNumber?: number | null;
+    images?: string[] | null;
+  };
   try {
     body = await req.json();
   } catch {
@@ -92,15 +99,37 @@ export async function PATCH(
     return NextResponse.json({ error: "Cannot rename Heisig lesson groups" }, { status: 400 });
   }
 
+  const updateData: {
+    name?: string;
+    description?: string | null;
+    lessonNumber?: number | null;
+    images?: string | null;
+  } = {};
+
+  if (body.name !== undefined && body.name.trim()) {
+    updateData.name = body.name.trim();
+  }
+  if (body.description !== undefined) {
+    updateData.description = body.description?.trim() || null;
+  }
+  if (body.lessonNumber !== undefined) {
+    updateData.lessonNumber = body.lessonNumber ? Number(body.lessonNumber) : null;
+  }
+  if (body.images !== undefined) {
+    updateData.images = body.images ? JSON.stringify(body.images) : null;
+  }
+
   const updated = await prisma.kanjiGroup.update({
     where: { id: groupId },
-    data: {
-      ...(body.name ? { name: body.name.trim() } : {}),
-      ...(body.description !== undefined ? { description: body.description?.trim() ?? null } : {}),
-    },
+    data: updateData,
   });
 
-  return NextResponse.json({ group: updated });
+  return NextResponse.json({
+    group: {
+      ...updated,
+      images: updated.images ? (JSON.parse(updated.images) as string[]) : [],
+    },
+  });
 }
 
 export async function DELETE(

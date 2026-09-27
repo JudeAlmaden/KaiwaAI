@@ -34,6 +34,7 @@ export type Card = {
   heisigKeyword?: string | null;
   heisigLesson?: number | null;
   customMeaning?: string | null;
+  primitives?: string[];
   mnemonic?: string;
   status?: "new" | "learning" | "known";
   _pool?: "active" | "maintenance";
@@ -477,6 +478,25 @@ export default function ReviewCard({
                             >
                               {radical}
                             </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {card.primitives && card.primitives.length > 0 && (
+                      <div className="mt-3 rounded-2xl bg-amber/5 border border-amber/20 px-3 py-2 w-full" onClick={(e) => e.stopPropagation()} data-stop-flip>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-amber font-display mb-1.5">
+                          Primitive Buildup
+                        </p>
+                        <div className="flex flex-wrap justify-center items-center gap-1.5">
+                          {card.primitives.map((prim, idx) => (
+                            <span key={idx} className="flex items-center gap-1.5">
+                              <span className="font-jp text-base font-bold px-2 py-0.5 rounded-lg bg-card border border-border">
+                                {prim}
+                              </span>
+                              {idx < card.primitives!.length - 1 && (
+                                <span className="text-muted text-xs">→</span>
+                              )}
+                            </span>
                           ))}
                         </div>
                       </div>

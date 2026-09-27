@@ -84,6 +84,7 @@ export async function GET(req: Request) {
       heisigNumber: true,
       heisigLesson: true,
       heisigKeyword: true,
+      primitives: true,
     },
   });
 
@@ -136,6 +137,25 @@ export async function GET(req: Request) {
     select: { kanjiId: true, mnemonic: true, status: true, customMeaning: true },
   });
 
+  // Fetch folder / group memberships for this user
+  const userGroupEntries = await prisma.kanjiGroupEntry.findMany({
+    where: {
+      group: { userId: user.id },
+      kanjiId: { in: kanjiWithStats.map((k) => k.id) },
+    },
+    select: {
+      kanjiId: true,
+      group: { select: { id: true, name: true, lessonNumber: true } },
+    },
+  });
+
+  const groupMap = new Map<string, { id: string; name: string; lessonNumber: number | null }[]>();
+  for (const ge of userGroupEntries) {
+    const list = groupMap.get(ge.kanjiId) || [];
+    list.push({ id: ge.group.id, name: ge.group.name, lessonNumber: ge.group.lessonNumber });
+    groupMap.set(ge.kanjiId, list);
+  }
+
   const inReviewsSet = new Set(userKanjiRecords.map((uk) => uk.kanjiId));
   const hasMnemonicMap = new Map(
     userKanjiRecords
@@ -145,13 +165,18 @@ export async function GET(req: Request) {
   const statusMap = new Map(userKanjiRecords.map((uk) => [uk.kanjiId, uk.status]));
   const customMeaningMap = new Map(userKanjiRecords.map((uk) => [uk.kanjiId, uk.customMeaning]));
 
-  const kanjiWithReviewStatus = kanjiWithStats.map((k) => ({
-    ...k,
-    heisigKeyword: customMeaningMap.get(k.id) || k.heisigKeyword || null,
-    inReviews: inReviewsSet.has(k.id),
-    hasMnemonic: hasMnemonicMap.has(k.id),
-    learningStatus: statusMap.get(k.id) ?? null,
-  }));
+  const kanjiWithReviewStatus = kanjiWithStats.map((k) => {
+    const grps = groupMap.get(k.id) || [];
+    return {
+      ...k,
+      heisigKeyword: customMeaningMap.get(k.id) || k.heisigKeyword || null,
+      inReviews: inReviewsSet.has(k.id),
+      hasMnemonic: hasMnemonicMap.has(k.id),
+      learningStatus: statusMap.get(k.id) ?? null,
+      groups: grps,
+      groupIds: grps.map((g) => g.id),
+    };
+  });
 
   // Sort
   if (sortBy === "heisig") {
@@ -177,12 +202,21 @@ export async function GET(req: Request) {
   const paginatedKanji = kanjiWithReviewStatus.slice(offset, offset + limit);
 
   // Parse JSON strings
-  const result = paginatedKanji.map((k) => ({
-    ...k,
-    meanings: JSON.parse(k.meanings) as string[],
-    readingsOn: JSON.parse(k.readingsOn) as string[],
-    readingsKun: JSON.parse(k.readingsKun) as string[],
-  }));
+  const result = paginatedKanji.map((k) => {
+    let prims: string[] = [];
+    try {
+      if (k.primitives) prims = JSON.parse(k.primitives) as string[];
+    } catch {
+      prims = [];
+    }
+    return {
+      ...k,
+      primitives: prims,
+      meanings: JSON.parse(k.meanings) as string[],
+      readingsOn: JSON.parse(k.readingsOn) as string[],
+      readingsKun: JSON.parse(k.readingsKun) as string[],
+    };
+  });
 
   return NextResponse.json({
     kanji: result,
@@ -202,6 +236,7 @@ export async function POST(req: Request) {
     heisigKeyword?: string;
     heisigLesson?: number | string;
     heisigNumber?: number | string;
+    primitives?: string[] | string;
     mnemonic?: string;
     groupId?: string;
   };
@@ -213,7 +248,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { character, keyword, heisigKeyword, heisigLesson, heisigNumber, mnemonic, groupId } = body;
+  const { character, keyword, heisigKeyword, heisigLesson, heisigNumber, primitives, mnemonic, groupId } = body;
 
   if (!character || typeof character !== "string" || !character.trim()) {
     return NextResponse.json({ error: "Character is required" }, { status: 400 });
@@ -223,6 +258,12 @@ export async function POST(req: Request) {
   const kw = (heisigKeyword || keyword || "").trim();
   const lesson = heisigLesson ? Number(heisigLesson) : null;
   const frame = heisigNumber ? Number(heisigNumber) : null;
+  let primsJson: string | null = null;
+  if (Array.isArray(primitives)) {
+    primsJson = JSON.stringify(primitives.map(p => String(p).trim()).filter(Boolean));
+  } else if (typeof primitives === "string" && primitives.trim()) {
+    primsJson = JSON.stringify(primitives.split(/[\s,]+/).map(p => p.trim()).filter(Boolean));
+  }
 
   // Upsert the Kanji record
   let kanji = await prisma.kanji.findUnique({ where: { character: char } });
@@ -238,14 +279,21 @@ export async function POST(req: Request) {
         heisigKeyword: kw || null,
         heisigLesson: lesson,
         heisigNumber: frame,
+        primitives: primsJson,
       },
     });
   } else {
     // update heisig fields if provided
-    const updateData: { heisigKeyword?: string; heisigLesson?: number | null; heisigNumber?: number | null } = {};
+    const updateData: {
+      heisigKeyword?: string;
+      heisigLesson?: number | null;
+      heisigNumber?: number | null;
+      primitives?: string | null;
+    } = {};
     if (kw) updateData.heisigKeyword = kw;
     if (lesson !== null) updateData.heisigLesson = lesson;
     if (frame !== null) updateData.heisigNumber = frame;
+    if (primsJson !== null) updateData.primitives = primsJson;
     if (Object.keys(updateData).length > 0) {
       kanji = await prisma.kanji.update({
         where: { id: kanji.id },

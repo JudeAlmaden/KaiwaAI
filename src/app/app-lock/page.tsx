@@ -299,7 +299,7 @@ export default function StandaloneAppLockPage() {
         fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cardId: card.id, grade, earlyReviewStrategy }),
+          body: JSON.stringify({ cardId: card.id, grade, earlyReviewStrategy, desiredRetention: getLearningConfig().desiredRetention }),
         }).catch(() => {});
       }
 

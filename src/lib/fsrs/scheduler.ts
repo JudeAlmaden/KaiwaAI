@@ -297,7 +297,9 @@ export class FSRSScheduler {
       if (options.daysElapsed < scheduledInterval) {
         // Scale the stability proportionally
         const earlyFactor = options.daysElapsed / scheduledInterval;
-        stability = stability * earlyFactor;
+        // Clamp so a degenerate 0-elapsed review can't scale stability to 0
+        // (S=0 would make S^(-w9) = Infinity and poison the result with NaN).
+        stability = Math.max(stability * earlyFactor, MIN_STABILITY);
       }
     }
     

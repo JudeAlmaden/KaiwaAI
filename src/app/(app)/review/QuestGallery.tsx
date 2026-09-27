@@ -76,9 +76,11 @@ export default function QuestGallery({
   });
 
   // Folders for kanji source picker
-  type Folder = { id: string; name: string; total: number };
+  type Folder = { id: string; name: string; lessonNumber?: number | null; total: number };
   const [folders, setFolders] = useState<Folder[]>([]);
   const [foldersLoaded, setFoldersLoaded] = useState(false);
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
+  const [folderSearch, setFolderSearch] = useState("");
 
   useEffect(() => {
     if (!showKanjiSourceModal || foldersLoaded) return;
@@ -86,9 +88,10 @@ export default function QuestGallery({
       .then((r) => r.json())
       .then((d) => {
         setFolders(
-          (d.groups || []).map((g: { id: string; name: string; entries: unknown[] }) => ({
+          (d.groups || []).map((g: { id: string; name: string; lessonNumber?: number | null; entries: unknown[] }) => ({
             id: g.id,
             name: g.name,
+            lessonNumber: g.lessonNumber ?? null,
             total: g.entries?.length ?? 0,
           }))
         );
@@ -96,6 +99,46 @@ export default function QuestGallery({
       })
       .catch(() => {});
   }, [showKanjiSourceModal, foldersLoaded]);
+
+  // Filtered folders for the picker search
+  const pickerFolders = folderSearch.trim()
+    ? folders.filter((f) => {
+        const q = folderSearch.trim().toLowerCase();
+        const lessonMatch = q.match(/^(?:l|lesson|#)?\s*(\d+)$/i);
+        const qLesson = lessonMatch ? parseInt(lessonMatch[1], 10) : null;
+        if (qLesson !== null && f.lessonNumber === qLesson) return true;
+        return f.name.toLowerCase().includes(q);
+      })
+    : folders;
+
+  const selectedCount = selectedFolderIds.size;
+  const selectedKanjiCount = folders
+    .filter((f) => selectedFolderIds.has(f.id))
+    .reduce((sum, f) => sum + f.total, 0);
+
+  const toggleFolder = (id: string) => {
+    setSelectedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleStartSelected = () => {
+    const ids = [...selectedFolderIds].join(",");
+    onStartQuest({
+      studyMode: "all",
+      reviewType: "kanji",
+      groupId: ids,
+      groupName: `${selectedCount} Folder${selectedCount !== 1 ? "s" : ""}`,
+      limit: 200,
+      activeLimit: 5,
+    });
+    setShowKanjiSourceModal(false);
+    setSelectedFolderIds(new Set());
+    setFolderSearch("");
+  };
 
   const handleStartCustomSession = () => {
     onStartQuest(buildCustomSessionStartParams(customDraft));
@@ -214,99 +257,166 @@ export default function QuestGallery({
       {showKanjiSourceModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowKanjiSourceModal(false)}
+          onClick={() => { setShowKanjiSourceModal(false); setSelectedFolderIds(new Set()); setFolderSearch(""); }}
         >
           <div
-            className="relative w-full max-w-md rounded-3xl border-2 border-border bg-card p-5 sm:p-6 shadow-2xl space-y-4"
+            className="relative flex flex-col w-full max-w-md rounded-3xl border-2 border-border bg-card shadow-2xl max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border/50">
               <div>
                 <h2 className="font-display text-base font-bold text-foreground flex items-center gap-2">
                   <span className="text-lg font-jp">漢</span> Kanji Quest
                 </h2>
-                <p className="text-xs text-muted">Choose which kanji to study</p>
+                <p className="text-xs text-muted">Choose folders to study — select multiple!</p>
               </div>
               <button
-                onClick={() => setShowKanjiSourceModal(false)}
+                onClick={() => { setShowKanjiSourceModal(false); setSelectedFolderIds(new Set()); setFolderSearch(""); }}
                 className="w-8 h-8 rounded-xl bg-muted/15 text-muted hover:text-foreground flex items-center justify-center text-xs font-bold transition"
               >
                 ✕
               </button>
             </div>
 
-            {/* Source options */}
-            <div className="space-y-2">
-              {/* All lesson folders */}
-              <button
-                onClick={() => {
-                  onStartQuest({ studyMode: "all", reviewType: "kanji", groupId: "all", groupName: "All Lesson Folders", limit: 50, activeLimit: 5 });
-                  setShowKanjiSourceModal(false);
-                }}
-                className="w-full flex items-center gap-3 rounded-2xl border-2 border-amber/30 bg-amber/5 px-4 py-3.5 text-left transition hover:border-amber/50 hover:bg-amber/10"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber/15 text-amber">
-                  <Books size={18} weight="bold" />
-                </span>
-                <div>
-                  <p className="text-sm font-extrabold text-foreground">All My Lessons</p>
-                  <p className="text-[11px] text-muted">
-                    {folders.length > 0 ? `${folders.length} folder${folders.length !== 1 ? "s" : ""} · ${folders.reduce((a, f) => a + f.total, 0)} kanji` : "Study all kanji across every folder"}
-                  </p>
-                </div>
-                <ArrowRight size={14} className="ml-auto text-amber shrink-0" />
-              </button>
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+              {/* Quick options */}
+              <div className="space-y-2">
+                {/* All lesson folders */}
+                <button
+                  onClick={() => {
+                    onStartQuest({ studyMode: "all", reviewType: "kanji", groupId: "all", groupName: "All Lesson Folders", limit: 200, activeLimit: 5 });
+                    setShowKanjiSourceModal(false);
+                    setSelectedFolderIds(new Set());
+                    setFolderSearch("");
+                  }}
+                  className="w-full flex items-center gap-3 rounded-2xl border-2 border-amber/30 bg-amber/5 px-4 py-3.5 text-left transition hover:border-amber/50 hover:bg-amber/10"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber/15 text-amber">
+                    <Books size={18} weight="bold" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-extrabold text-foreground">All My Lessons</p>
+                    <p className="text-[11px] text-muted">
+                      {folders.length > 0 ? `${folders.length} folder${folders.length !== 1 ? "s" : ""} · ${folders.reduce((a, f) => a + f.total, 0)} kanji` : "Study all kanji across every folder"}
+                    </p>
+                  </div>
+                  <ArrowRight size={14} className="ml-auto text-amber shrink-0" />
+                </button>
 
-              {/* Specific folder */}
+                {/* SRS Due */}
+                <button
+                  onClick={() => {
+                    onStartQuest({ studyMode: "due", reviewType: "kanji", limit: 50, activeLimit: 5 });
+                    setShowKanjiSourceModal(false);
+                    setSelectedFolderIds(new Set());
+                    setFolderSearch("");
+                  }}
+                  className="w-full flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-3.5 text-left transition hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-ai/10 text-indigo-ai">
+                    <ClockCountdown size={18} weight="bold" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-extrabold text-foreground">SRS Review (Due)</p>
+                    <p className="text-[11px] text-muted">Cards the spaced-repetition system has scheduled for today</p>
+                  </div>
+                  <ArrowRight size={14} className="ml-auto text-muted shrink-0" />
+                </button>
+              </div>
+
+              {/* Specific folder checkboxes */}
               {folders.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted px-1">Pick a folder</p>
-                  <div className="max-h-48 overflow-y-auto space-y-1.5">
-                    {folders.map((folder) => (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Pick Folders</p>
+                    <div className="flex items-center gap-2">
+                      {selectedCount > 0 && (
+                        <button
+                          onClick={() => setSelectedFolderIds(new Set())}
+                          className="text-[10px] font-bold text-muted hover:text-rose-500 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
                       <button
-                        key={folder.id}
-                        onClick={() => {
-                          onStartQuest({ studyMode: "all", reviewType: "kanji", groupId: folder.id, groupName: folder.name, limit: 50, activeLimit: 5 });
-                          setShowKanjiSourceModal(false);
-                        }}
-                        className="w-full flex items-center justify-between rounded-xl border-2 border-border bg-card px-3 py-2.5 text-left text-xs font-bold transition hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
+                        onClick={() => setSelectedFolderIds(new Set(pickerFolders.map((f) => f.id)))}
+                        className="text-[10px] font-bold text-indigo-ai hover:text-indigo-deep transition-colors"
                       >
-                        <span className="flex items-center gap-2">
-                          <FolderOpen size={14} className="text-indigo-ai shrink-0" />
-                          <span className="truncate">{folder.name}</span>
-                        </span>
-                        <span className="text-[10px] font-semibold text-muted shrink-0 ml-2">{folder.total} kanji</span>
+                        {selectedCount === folders.length ? "Deselect All" : "Select All"}
                       </button>
-                    ))}
+                    </div>
+                  </div>
+
+                  {/* Folder search */}
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted">🔍</span>
+                    <input
+                      value={folderSearch}
+                      onChange={(e) => setFolderSearch(e.target.value)}
+                      placeholder="Search folders (e.g. L1, Lesson 3)..."
+                      className="h-9 w-full rounded-xl border border-border bg-bg pl-8 pr-3 text-xs outline-none focus:border-indigo-ai"
+                    />
+                    {folderSearch && (
+                      <button
+                        onClick={() => setFolderSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted hover:text-fg"
+                      >✕</button>
+                    )}
+                  </div>
+
+                  <div className="max-h-52 overflow-y-auto space-y-1">
+                    {pickerFolders.length === 0 ? (
+                      <p className="text-xs text-muted text-center py-3">No matching folders</p>
+                    ) : (
+                      pickerFolders.map((folder) => {
+                        const checked = selectedFolderIds.has(folder.id);
+                        return (
+                          <label
+                            key={folder.id}
+                            className={`flex items-center gap-3 cursor-pointer rounded-xl border-2 px-3 py-2.5 text-left text-xs font-bold transition-all ${
+                              checked
+                                ? "border-indigo-ai/60 bg-indigo-ai/8"
+                                : "border-border bg-card hover:border-indigo-ai/30 hover:bg-indigo-ai/5"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleFolder(folder.id)}
+                              className="sr-only"
+                            />
+                            {/* Custom checkbox */}
+                            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-all ${
+                              checked
+                                ? "border-indigo-ai bg-indigo-ai"
+                                : "border-border bg-bg"
+                            }`}>
+                              {checked && <span className="text-white text-[9px] font-extrabold">✓</span>}
+                            </span>
+                            <span className="flex items-center gap-1.5 flex-1 min-w-0">
+                              <FolderOpen size={12} className="text-indigo-ai shrink-0" />
+                              {folder.lessonNumber && (
+                                <span className="text-[9px] font-extrabold bg-indigo-ai/15 text-indigo-ai px-1 rounded shrink-0">L{folder.lessonNumber}</span>
+                              )}
+                              <span className="truncate">{folder.name}</span>
+                            </span>
+                            <span className="text-[10px] font-semibold text-muted shrink-0">{folder.total} kanji</span>
+                          </label>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}
-
-              {/* SRS Due */}
-              <button
-                onClick={() => {
-                  onStartQuest({ studyMode: "due", reviewType: "kanji", limit: 50, activeLimit: 5 });
-                  setShowKanjiSourceModal(false);
-                }}
-                className="w-full flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-3.5 text-left transition hover:border-indigo-ai/40 hover:bg-indigo-ai/5"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-ai/10 text-indigo-ai">
-                  <ClockCountdown size={18} weight="bold" />
-                </span>
-                <div>
-                  <p className="text-sm font-extrabold text-foreground">SRS Review (Due)</p>
-                  <p className="text-[11px] text-muted">Cards the spaced-repetition system has scheduled for today</p>
-                </div>
-                <ArrowRight size={14} className="ml-auto text-muted shrink-0" />
-              </button>
 
               {folders.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-border bg-bg/50 p-4 text-center space-y-2">
                   <p className="text-xs text-muted">No lesson folders yet.</p>
                   <Link
                     href="/study?tab=kanji"
-                    onClick={() => setShowKanjiSourceModal(false)}
+                    onClick={() => { setShowKanjiSourceModal(false); setSelectedFolderIds(new Set()); }}
                     className="text-xs font-bold text-indigo-ai underline underline-offset-2 hover:opacity-80"
                   >
                     Create your first lesson folder →
@@ -314,6 +424,22 @@ export default function QuestGallery({
                 </div>
               )}
             </div>
+
+            {/* Sticky footer — shows when folders are selected */}
+            {selectedCount > 0 && (
+              <div className="border-t border-border/50 bg-card px-5 py-3">
+                <button
+                  onClick={handleStartSelected}
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-indigo-ai py-3 text-sm font-extrabold text-white shadow-md shadow-indigo-ai/20 hover:bg-indigo-ai/90 transition-all"
+                >
+                  <span>Study Selected</span>
+                  <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">
+                    {selectedCount} Folder{selectedCount !== 1 ? "s" : ""} · {selectedKanjiCount} Kanji
+                  </span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

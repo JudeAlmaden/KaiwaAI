@@ -286,6 +286,7 @@ model Kanji {
   heisigNumber  Int?    // RTK frame number (1–2042)
   heisigLesson  Int?    // RTK lesson/chapter grouping (1–56)
   heisigKeyword String? // RTK primary keyword, e.g. "one"
+  primitives    String? // JSON array of primitive buildup strings: '["一", "十", "古"]'
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -308,9 +309,10 @@ model KanjiGroup {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String   // "Lesson 1", "Lesson 2", "My Custom Set"
   description  String?
+  images       String?  // JSON array of compressed base64 data URLs
   order        Int      @default(0) // Folder display/sorting order
   kind         String   @default("custom") // "heisig_lesson" | "custom"
-  lessonNumber Int?     // For heisig_lesson kind — mirrors Kanji.heisigLesson
+  lessonNumber Int?     // Lesson number — e.g. 1..56
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

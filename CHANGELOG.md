@@ -2,6 +2,46 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.0] - 2026-09-27
+
+RTK Lesson Folders overhaul — folders become self-contained lessons with images, primitives, multi-selection review, and enhanced search.
+
+### Added
+- **Multi-folder Kanji Quest selection** — Kanji Quest source picker now uses checkboxes so you can pick multiple lesson folders at once. A sticky "Study Selected (X Folders · Y Kanji) →" button appears and passes comma-separated `groupId` params to the review API which deduplicates across folders.
+- **Folder lesson number** — `KanjiGroup.lessonNumber` exposed in Create Folder and Edit Folder modals. Lesson N badge shown on folder cards and in the review picker.
+- **Edit Folder modal** — full modal (name, lesson #, description, image gallery) accessible via ✏️ hover button on each folder card.
+- **Reference image upload** — up to 6 RTK book page screenshots per folder; compressed in-browser via canvas (max 1400px, JPEG 80 %) before storing as base64 in Postgres. Thumbnail strip visible on folder cards; click to zoom in lightbox.
+- **Kanji primitive buildup** — `Kanji.primitives` JSON array field (`["一", "十", "古"]`). Entry in Add Kanji modal (space-separated). Edit on Kanji Detail page. Displayed as `一 → 十 → 古` chips on the ReviewCard flip side (JP→EN back, below radicals).
+- **Folder search by lesson number** — queries like `1`, `L1`, `lesson 1`, `#1` match folders by `lessonNumber` in both the Kanji explorer search bar and the Kanji Quest picker modal.
+- **Review picker folder search** — search bar inside the Kanji Quest modal to filter folders by name or lesson number.
+- **Sort pills on folder grid** — sort by Lesson #, Most Kanji, Completion %, or Recently Added.
+- **Image compression utility** (`src/lib/image-compress.ts`) — reusable `compressImageToDataUrl()` using HTML Canvas; enforces 500 KB output cap.
+- **DB columns** — `Kanji.primitives TEXT` and `KanjiGroup.images TEXT` added via `prisma db push`.
+
+### Changed
+- **Folder cards** — show Lesson N badge, image thumbnail strip (up to 3 + overflow count), and ✏️ / ✕ hover buttons replacing the single delete button.
+- **Create Folder modal** — now includes Lesson Number field in a 2-column grid alongside Description.
+- **Kanji Quest picker** — redesigned as a scrollable modal with checkbox list, search, Select All/Clear, and sticky CTA footer.
+- **Review API** (`GET /api/kanji/review`) — `groupId` param now accepts comma-separated IDs; deduplicates kanji across all selected folders. Returns `primitives` on every card object.
+- **Groups API** (`GET /api/kanji/groups`) — returns `lessonNumber`, `images` (parsed array), `imageCount`, `thumbnail`, and `primitives` on entry kanji.
+
+### Removed
+- **RTK Lesson Number input** removed from Add Kanji modal (single entry) — lesson numbering now lives on the folder, not per-kanji.
+
+### Fixed
+- **FSRS stability never grew (review doom loop)** — `applyFsrsReview` fed the stored retrievability (always 1.0 right after the previous review) back into the scheduler, zeroing the growth term `exp(w10·(1−R))−1` and freezing stability. Cards then repeated at the same interval forever, and weak cards could never graduate. Retrievability is now recomputed at review time via the FSRS forgetting curve `R(t,S) = (1 + t/(9S))⁻¹` from the actual time elapsed since the last review (`src/lib/fsrs/apply-review.ts`).
+- **Same weak cards re-served every session** — the session composer's active pool had no recency guard (the maintenance pool had one), so in `studyMode=all` (App Blocker default) the same weakest cards appeared at the front of every consecutive session. Added a 10-minute active-pool cooldown matched to FSRS's ~10-min "Again" relearn step (`src/lib/session-composer.ts`).
+- **Degenerate early review could collapse stability to 0/NaN** — a 0-day-elapsed proportional early review scaled stability to 0, making `S^(−w9)` infinite; now clamped to the minimum stability (`src/lib/fsrs/scheduler.ts`).
+- **Intermittent `P1001` "Can't reach database server"** — the Supabase transaction pooler terminates connections idle for ~5 minutes; stale sockets in the local `pg` pool surfaced as P1001 after sleep/wake or network blips. Pool now evicts idle connections after 60s, times out dead connections in 10s, caps at 10 connections, and enables keepalive (`src/lib/prisma.ts`).
+- **`/review` ignored the user's early-review strategy** — the grade POST omitted `earlyReviewStrategy`, so the scheduler treated every early review (e.g. in-session relearn after "Again", which returns in ~10 minutes) as on-time and granted full stability growth. Now sends the user's configured strategy, matching the Focus Guard review page (`src/app/(app)/review/ReviewClient.tsx`).
+- **FSRS retention setting was dead** — the Settings retention slider (70–98 %) never reached the scheduler: neither `/review` nor the Focus Guard review page sent `desiredRetention` in the grade POST, so all reviews silently used the 90 % default. Both surfaces now pass the user's setting (`src/app/(app)/review/ReviewClient.tsx`, `src/app/app-lock/page.tsx`).
+
+### Technical
+- Modified: `src/app/(app)/review/QuestGallery.tsx`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/kanji/KanjiClient.tsx`, `src/app/(app)/kanji/AddKanjiModal.tsx`, `src/app/(app)/kanji/[character]/KanjiDetailClient.tsx`, `src/app/api/kanji/groups/route.ts`, `src/app/api/kanji/groups/[groupId]/route.ts`, `src/app/api/kanji/review/route.ts`, `prisma/schema.prisma`
+- New: `src/lib/image-compress.ts`
+- New: `src/lib/fsrs/apply-review.test.ts` (doom-loop regression tests)
+- Tests: 589 passing (61 files) — typecheck clean
+
 ## [2.1.1] - 2026-09-26
 
 Furigana display fix for Daily Quest / maintenance-pool cards.

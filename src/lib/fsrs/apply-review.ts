@@ -55,6 +55,23 @@ function hasFsrsState(card: ReviewableCard): boolean {
   );
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Retrievability at review time via the FSRS forgetting curve,
+ * R(t, S) = (1 + t/(9·S))^-1, where t = days since the last review.
+ * Falls back to the scheduled interval when lastReviewedAt is unknown
+ * (i.e. assume the card was reviewed on time, giving R ≈ 0.9).
+ */
+function recallProbability(card: ReviewableCard, stability: number, now: Date): number {
+  const last = card.lastReviewedAt ? new Date(card.lastReviewedAt) : null;
+  const daysElapsed = last
+    ? Math.max(0, (now.getTime() - last.getTime()) / MS_PER_DAY)
+    : Math.max(0, card.interval);
+  const s = Math.max(stability, 0.1);
+  return Math.max(0, Math.min(1, Math.pow(1 + daysElapsed / (9 * s), -1)));
+}
+
 function sm2IntervalFromStability(stability: number, retention: number): number {
   if (retention === 0.9) return Math.max(1, Math.round(stability));
   return Math.max(1, Math.round(stability * (Math.log(retention) / Math.log(0.9))));
@@ -108,7 +125,11 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       state = {
         difficulty: card.difficulty!,
         stability: card.stability!,
-        retrievability: card.retrievability!,
+        // Recompute retrievability from the actual elapsed time. The stored
+        // value is always 1.0 (R right after the previous review); feeding it
+        // back would zero out the growth term (exp(w10*(1-R))-1 = 0) and
+        // freeze stability — cards would repeat at the same interval forever.
+        retrievability: recallProbability(card, card.stability!, now),
       };
     } else if (card.repetitions === 0 && card.timesReviewed === 0) {
       state = scheduler.initializeCard(grade as FSRSGrade);

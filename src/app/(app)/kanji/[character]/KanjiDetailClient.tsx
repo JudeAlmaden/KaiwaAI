@@ -16,6 +16,7 @@ type KanjiDetail = {
   heisigNumber: number | null;
   heisigLesson: number | null;
   heisigKeyword: string | null;
+  primitives?: string[] | null;
   meanings: string[];
   readingsOn: string[];
   readingsKun: string[];
@@ -36,6 +37,7 @@ type Group = {
   id: string;
   name: string;
   type: string;
+  lessonNumber?: number | null;
 };
 
 export default function KanjiDetailClient({ character }: { character: string }) {
@@ -58,9 +60,13 @@ export default function KanjiDetailClient({ character }: { character: string }) 
   // Editing Heisig fields state
   const [isEditingHeisig, setIsEditingHeisig] = useState(false);
   const [heisigKeywordDraft, setHeisigKeywordDraft] = useState("");
-  const [heisigLessonDraft, setHeisigLessonDraft] = useState("");
   const [heisigNumberDraft, setHeisigNumberDraft] = useState("");
   const [savingHeisig, setSavingHeisig] = useState(false);
+
+  // Editing Primitives state
+  const [isEditingPrimitives, setIsEditingPrimitives] = useState(false);
+  const [primitivesDraft, setPrimitivesDraft] = useState("");
+  const [savingPrimitives, setSavingPrimitives] = useState(false);
 
   // Toggling review queue
   const [togglingReview, setTogglingReview] = useState(false);
@@ -86,10 +92,10 @@ export default function KanjiDetailClient({ character }: { character: string }) 
       setGroups(data.groups || []);
       setVocabExamples(data.vocabularyExamples || []);
 
-      // Seed Heisig drafts
+      // Seed Heisig drafts & primitives
       setHeisigKeywordDraft(data.kanji.heisigKeyword || "");
-      setHeisigLessonDraft(data.kanji.heisigLesson ? String(data.kanji.heisigLesson) : "");
       setHeisigNumberDraft(data.kanji.heisigNumber ? String(data.kanji.heisigNumber) : "");
+      setPrimitivesDraft(data.kanji.primitives?.join(" ") || "");
     } catch (err) {
       console.error("Error loading kanji:", err);
       setError(err instanceof Error ? err.message : "Failed to load kanji details");
@@ -143,7 +149,6 @@ export default function KanjiDetailClient({ character }: { character: string }) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           heisigKeyword: heisigKeywordDraft,
-          heisigLesson: heisigLessonDraft ? Number(heisigLessonDraft) : null,
           heisigNumber: heisigNumberDraft ? Number(heisigNumberDraft) : null,
         }),
       });
@@ -153,7 +158,6 @@ export default function KanjiDetailClient({ character }: { character: string }) 
             ? {
                 ...prev,
                 heisigKeyword: heisigKeywordDraft.trim() || null,
-                heisigLesson: heisigLessonDraft ? Number(heisigLessonDraft) : null,
                 heisigNumber: heisigNumberDraft ? Number(heisigNumberDraft) : null,
               }
             : null
@@ -164,6 +168,26 @@ export default function KanjiDetailClient({ character }: { character: string }) 
       console.error("Failed to save Heisig details:", e);
     } finally {
       setSavingHeisig(false);
+    }
+  };
+
+  const handleSavePrimitives = async () => {
+    setSavingPrimitives(true);
+    try {
+      const arr = primitivesDraft.split(/[\s,]+/).map((p) => p.trim()).filter(Boolean);
+      const res = await fetch(`/api/kanji/${encodeURIComponent(character)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ primitives: arr }),
+      });
+      if (res.ok) {
+        setKanji((prev) => (prev ? { ...prev, primitives: arr } : null));
+        setIsEditingPrimitives(false);
+      }
+    } catch (e) {
+      console.error("Failed to save primitives:", e);
+    } finally {
+      setSavingPrimitives(false);
     }
   };
 
@@ -327,11 +351,19 @@ export default function KanjiDetailClient({ character }: { character: string }) 
                       RTK #{kanji.heisigNumber}
                     </span>
                   )}
-                  {kanji.heisigLesson && (
+                  {groups.some((g) => g.lessonNumber !== null && g.lessonNumber !== undefined) ? (
+                    groups.map((g) =>
+                      g.lessonNumber ? (
+                        <span key={g.id} className="rounded-full bg-sky/15 px-2 py-0.5 text-[10px] font-bold text-sky">
+                          Lesson {g.lessonNumber}
+                        </span>
+                      ) : null
+                    )
+                  ) : kanji.heisigLesson ? (
                     <span className="rounded-full bg-sky/15 px-2 py-0.5 text-[10px] font-bold text-sky">
                       Lesson {kanji.heisigLesson}
                     </span>
-                  )}
+                  ) : null}
                   {kanji.jlptLevel && (
                     <span className="rounded-full bg-indigo-ai/15 px-2 py-0.5 text-[10px] font-bold text-indigo-ai">
                       N{kanji.jlptLevel}
@@ -367,50 +399,113 @@ export default function KanjiDetailClient({ character }: { character: string }) 
           {/* Remembering the Kanji (RTK) Details Card */}
           <Section
             title="Remembering the Kanji (RTK)"
-            subtitle="Heisig frame number, lesson, and primary keyword"
+            subtitle="Heisig frame number, keyword, and primitive buildup progression"
           >
             <div className="rounded-3xl border-2 border-border bg-card p-5 shadow-sm space-y-4">
               {!isEditingHeisig ? (
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="grid grid-cols-3 gap-4 flex-1">
-                    <div>
-                      <span className="block text-[11px] font-bold uppercase tracking-wider text-muted">
-                        RTK Keyword
-                      </span>
-                      <span className="text-sm font-bold text-fg">
-                        {kanji.heisigKeyword || "Not set"}
-                      </span>
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="grid grid-cols-2 gap-4 flex-1">
+                      <div>
+                        <span className="block text-[11px] font-bold uppercase tracking-wider text-muted">
+                          RTK Keyword
+                        </span>
+                        <span className="text-base font-extrabold text-fg">
+                          {kanji.heisigKeyword || "Not set"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[11px] font-bold uppercase tracking-wider text-muted">
+                          Frame Number (#)
+                        </span>
+                        <span className="text-base font-extrabold text-amber-500">
+                          {kanji.heisigNumber ? `#${kanji.heisigNumber}` : "Not set"}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="block text-[11px] font-bold uppercase tracking-wider text-muted">
-                        Frame Number (#)
-                      </span>
-                      <span className="text-sm font-bold text-amber-500">
-                        {kanji.heisigNumber ? `#${kanji.heisigNumber}` : "Not set"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[11px] font-bold uppercase tracking-wider text-muted">
-                        Lesson Number
-                      </span>
-                      <span className="text-sm font-bold text-sky">
-                        {kanji.heisigLesson ? `Lesson ${kanji.heisigLesson}` : "Not set"}
-                      </span>
-                    </div>
+
+                    <button
+                      onClick={() => setIsEditingHeisig(true)}
+                      className="rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:text-fg hover:border-fg transition-all"
+                    >
+                      ✏️ Edit RTK Info
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => setIsEditingHeisig(true)}
-                    className="rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:text-fg hover:border-fg transition-all"
-                  >
-                    ✏️ Edit RTK Info
-                  </button>
+                  {/* Primitive Buildup Subsection */}
+                  <div className="mt-4 pt-4 border-t border-border/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-fg">Primitive Buildup</span>
+                        <span className="text-[10px] text-muted">(RTK progression)</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setPrimitivesDraft(kanji.primitives?.join(" ") || "");
+                          setIsEditingPrimitives(true);
+                        }}
+                        className="text-[11px] font-semibold text-indigo-ai hover:underline"
+                      >
+                        {kanji.primitives && kanji.primitives.length > 0 ? "Edit Buildup" : "+ Add Primitives"}
+                      </button>
+                    </div>
+
+                    {!isEditingPrimitives ? (
+                      kanji.primitives && kanji.primitives.length > 0 ? (
+                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                          {kanji.primitives.map((prim, idx) => (
+                            <span key={idx} className="flex items-center gap-2">
+                              <span className="font-jp text-sm px-2.5 py-1 rounded-xl bg-bg border-2 border-border font-bold text-fg shadow-xs">
+                                {prim}
+                              </span>
+                              {idx < kanji.primitives!.length - 1 && (
+                                <span className="text-muted text-xs font-bold">→</span>
+                              )}
+                            </span>
+                          ))}
+                          <span className="text-muted text-xs font-bold">→</span>
+                          <span className="font-jp text-base px-3 py-1 rounded-xl bg-indigo-ai/15 border-2 border-indigo-ai/40 font-bold text-indigo-ai shadow-xs">
+                            {kanji.character}
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted">
+                          No primitive buildup specified yet (e.g. 一 → 十 → 古).
+                        </p>
+                      )
+                    ) : (
+                      <div className="space-y-2 mt-2">
+                        <input
+                          value={primitivesDraft}
+                          onChange={(e) => setPrimitivesDraft(e.target.value)}
+                          placeholder="e.g. 一 十 (space or comma separated)"
+                          className="h-10 w-full rounded-xl border-2 border-border bg-bg px-3 font-jp text-xs outline-none focus:border-indigo-ai"
+                          autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setIsEditingPrimitives(false)}
+                            className="rounded-xl border border-border px-3 py-1 text-xs font-bold text-muted hover:bg-bg"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSavePrimitives}
+                            disabled={savingPrimitives}
+                            className="rounded-xl bg-indigo-ai px-3 py-1 text-xs font-bold text-white hover:bg-indigo-ai/90 disabled:opacity-50"
+                          >
+                            {savingPrimitives ? "Saving..." : "Save Primitives"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className="block text-xs font-bold text-fg mb-1">Keyword</label>
+                      <label className="block text-xs font-bold text-fg mb-1">RTK Keyword</label>
                       <input
                         value={heisigKeywordDraft}
                         onChange={(e) => setHeisigKeywordDraft(e.target.value)}
@@ -419,22 +514,12 @@ export default function KanjiDetailClient({ character }: { character: string }) 
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-fg mb-1">Frame #</label>
+                      <label className="block text-xs font-bold text-fg mb-1">RTK Frame #</label>
                       <input
                         type="number"
                         value={heisigNumberDraft}
                         onChange={(e) => setHeisigNumberDraft(e.target.value)}
                         placeholder="e.g. 12"
-                        className="h-10 w-full rounded-xl border-2 border-border bg-bg px-3 text-xs outline-none focus:border-indigo-ai"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-fg mb-1">Lesson #</label>
-                      <input
-                        type="number"
-                        value={heisigLessonDraft}
-                        onChange={(e) => setHeisigLessonDraft(e.target.value)}
-                        placeholder="e.g. 1"
                         className="h-10 w-full rounded-xl border-2 border-border bg-bg px-3 text-xs outline-none focus:border-indigo-ai"
                       />
                     </div>

@@ -10,6 +10,9 @@ describe("session-composer", () => {
     nextReview: Date;
     createdAt: Date;
     lastReviewedAt?: Date | null;
+    difficulty?: number | null;
+    stability?: number | null;
+    retrievability?: number | null;
   }>) => ({
     id: overrides.id ?? "card-1",
     repetitions: overrides.repetitions ?? 0,
@@ -18,6 +21,9 @@ describe("session-composer", () => {
     nextReview: overrides.nextReview ?? new Date(),
     createdAt: overrides.createdAt ?? new Date(),
     lastReviewedAt: overrides.lastReviewedAt ?? null,
+    difficulty: overrides.difficulty ?? null,
+    stability: overrides.stability ?? null,
+    retrievability: overrides.retrievability ?? null,
   });
 
   it("should compose session with 50% active and 50% maintenance", () => {
@@ -216,6 +222,55 @@ describe("session-composer", () => {
     expect(activeCards.some(c => c.id === "new-2")).toBe(true);
     // Weak old card meets both criteria
     expect(activeCards.some(c => c.id === "weak-old")).toBe(true);
+  });
+
+  it("should exclude active-pool cards reviewed within the last 10 minutes (cooldown)", () => {
+    const past = new Date(Date.now() - 1000 * 60 * 60 * 24);
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
+
+    const cards = [
+      // Weak FSRS card, reviewed 5 min ago — should be excluded by cooldown
+      createCard({
+        id: "cooling-down",
+        repetitions: 2,
+        easeFactor: 2.0,
+        interval: 2,
+        nextReview: past,
+        difficulty: 8,
+        stability: 2,
+        retrievability: 1.0,
+        lastReviewedAt: fiveMinAgo,
+      }),
+      // Same-kind weak card, reviewed 15 min ago — cooldown expired
+      createCard({
+        id: "cooldown-expired",
+        repetitions: 2,
+        easeFactor: 2.0,
+        interval: 2,
+        nextReview: past,
+        difficulty: 8,
+        stability: 2,
+        retrievability: 1.0,
+        lastReviewedAt: fifteenMinAgo,
+      }),
+      // Brand-new card reviewed 5 min ago — also excluded (same guard)
+      createCard({
+        id: "new-cooling",
+        repetitions: 0,
+        nextReview: past,
+        lastReviewedAt: fiveMinAgo,
+      }),
+    ];
+
+    const { activeCards, maintenanceCards } = composeSession(cards, 10);
+
+    expect(activeCards.some(c => c.id === "cooling-down")).toBe(false);
+    expect(activeCards.some(c => c.id === "new-cooling")).toBe(false);
+    expect(activeCards.some(c => c.id === "cooldown-expired")).toBe(true);
+    // The 5-min-ago card is in NEITHER pool: active cooldown (10 min) plus the
+    // maintenance 1-hour recency guard both apply while it cools down.
+    expect(maintenanceCards.some(c => c.id === "cooling-down")).toBe(false);
   });
 
   it("should exclude old weak cards with longer intervals from active pool", () => {

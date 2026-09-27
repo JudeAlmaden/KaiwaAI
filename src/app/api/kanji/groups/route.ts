@@ -21,7 +21,10 @@ export async function GET() {
               heisigNumber: true,
               heisigLesson: true,
               heisigKeyword: true,
+              primitives: true,
               meanings: true,
+              readingsOn: true,
+              readingsKun: true,
               jlptLevel: true,
               strokes: true,
             },
@@ -30,7 +33,7 @@ export async function GET() {
         orderBy: { order: "asc" },
       },
     },
-    orderBy: [{ kind: "asc" }, { lessonNumber: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ kind: "asc" }, { lessonNumber: "asc" }, { order: "asc" }, { createdAt: "asc" }],
   });
 
   // Get user's UserKanji records to compute completion stats and attach custom meanings & mnemonics
@@ -44,11 +47,20 @@ export async function GET() {
     const total = g.entries.length;
     const added = g.entries.filter((e) => userKanjiMap.has(e.kanjiId)).length;
     const known = g.entries.filter((e) => userKanjiMap.get(e.kanjiId)?.status === "known").length;
+    let groupImages: string[] = [];
+    try {
+      if (g.images) groupImages = JSON.parse(g.images) as string[];
+    } catch {
+      groupImages = [];
+    }
 
     return {
       id: g.id,
       name: g.name,
       description: g.description,
+      images: groupImages,
+      imageCount: groupImages.length,
+      thumbnail: groupImages[0] || null,
       kind: g.kind,
       lessonNumber: g.lessonNumber,
       order: g.order,
@@ -59,6 +71,12 @@ export async function GET() {
       completionPct: total > 0 ? Math.round((known / total) * 100) : 0,
       entries: g.entries.map((e) => {
         const uk = userKanjiMap.get(e.kanjiId);
+        let prims: string[] = [];
+        try {
+          if (e.kanji.primitives) prims = JSON.parse(e.kanji.primitives) as string[];
+        } catch {
+          prims = [];
+        }
         return {
           id: e.id,
           order: e.order,
@@ -68,7 +86,10 @@ export async function GET() {
           heisigKeyword: uk?.customMeaning || e.kanji.heisigKeyword || null,
           customMeaning: uk?.customMeaning || null,
           mnemonic: uk?.mnemonic || null,
+          primitives: prims,
           meanings: JSON.parse(e.kanji.meanings) as string[],
+          readingsOn: JSON.parse(e.kanji.readingsOn || "[]") as string[],
+          readingsKun: JSON.parse(e.kanji.readingsKun || "[]") as string[],
           jlptLevel: e.kanji.jlptLevel,
           strokes: e.kanji.strokes,
           isAdded: !!uk,

@@ -16,19 +16,19 @@ type AddKanjiModalProps = {
   onClose: () => void;
   onKanjiAdded: () => void;
   groups: KanjiGroup[];
-  initialLesson?: number | null;
   initialGroupId?: string | null;
   initialCharacter?: string;
   initialKeyword?: string;
   initialFrameNumber?: number | string | null;
+  initialPrimitives?: string[];
   initialMnemonic?: string;
 };
 
 type ParsedRow = {
   character: string;
   keyword: string;
-  lesson: number | null;
   frameNumber: number | null;
+  primitives?: string[];
   mnemonic: string;
 };
 
@@ -46,11 +46,11 @@ export default function AddKanjiModal({
   onClose,
   onKanjiAdded,
   groups,
-  initialLesson = null,
   initialGroupId = null,
   initialCharacter = "",
   initialKeyword = "",
   initialFrameNumber = null,
+  initialPrimitives = [],
   initialMnemonic = "",
 }: AddKanjiModalProps) {
   const [tab, setTab] = useState<"single" | "bulk">("single");
@@ -58,9 +58,11 @@ export default function AddKanjiModal({
   // Single entry form state
   const [character, setCharacter] = useState(initialCharacter);
   const [keyword, setKeyword] = useState(initialKeyword);
-  const [lesson, setLesson] = useState<string>(initialLesson ? String(initialLesson) : "");
   const [frameNumber, setFrameNumber] = useState<string>(
     initialFrameNumber ? String(initialFrameNumber) : ""
+  );
+  const [primitivesInput, setPrimitivesInput] = useState<string>(
+    initialPrimitives?.join(" ") || ""
   );
   const [mnemonic, setMnemonic] = useState(initialMnemonic);
   const [selectedGroupId, setSelectedGroupId] = useState<string>(initialGroupId || "");
@@ -81,8 +83,8 @@ export default function AddKanjiModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCharacter(initialCharacter || "");
     setKeyword(initialKeyword || "");
-    setLesson(initialLesson ? String(initialLesson) : "");
     setFrameNumber(initialFrameNumber ? String(initialFrameNumber) : "");
+    setPrimitivesInput(initialPrimitives?.join(" ") || "");
     setMnemonic(initialMnemonic || "");
     setSelectedGroupId(initialGroupId || "");
     setError(null);
@@ -121,8 +123,8 @@ export default function AddKanjiModal({
         if (data.kanji.heisigNumber) {
           setFrameNumber((prev) => prev || String(data.kanji.heisigNumber));
         }
-        if (data.kanji.heisigLesson) {
-          setLesson((prev) => prev || String(data.kanji.heisigLesson));
+        if (data.kanji.primitives && Array.isArray(data.kanji.primitives)) {
+          setPrimitivesInput((prev) => prev || data.kanji.primitives.join(" "));
         }
         if (data.mnemonic || data.kanji.mnemonic) {
           setMnemonic((prev) => prev || data.mnemonic || data.kanji.mnemonic || "");
@@ -225,7 +227,6 @@ export default function AddKanjiModal({
           parsed.push({
             character: char,
             keyword: kw,
-            lesson: les,
             frameNumber: frame,
             mnemonic: mnem,
           });
@@ -267,6 +268,9 @@ export default function AddKanjiModal({
 
     try {
       const finalGroupId = await resolveGroupId(selectedGroupId, newGroupName);
+      const parsedPrimitives = primitivesInput.trim()
+        ? primitivesInput.split(/[\s,]+/).map((p) => p.trim()).filter(Boolean)
+        : undefined;
 
       const res = await fetch("/api/kanji", {
         method: "POST",
@@ -274,8 +278,8 @@ export default function AddKanjiModal({
         body: JSON.stringify({
           character: character.trim(),
           heisigKeyword: keyword.trim() || undefined,
-          heisigLesson: lesson.trim() ? Number(lesson) : undefined,
           heisigNumber: frameNumber.trim() ? Number(frameNumber) : undefined,
+          primitives: parsedPrimitives,
           mnemonic: mnemonic.trim() || undefined,
           groupId: finalGroupId || undefined,
         }),
@@ -289,11 +293,12 @@ export default function AddKanjiModal({
       onKanjiAdded();
 
       if (addAnother) {
-        // Keep lesson and frame number incrementing if possible for faster entry
+        // Keep frame number incrementing if possible for faster entry
         const nextFrame = frameNumber.trim() ? Number(frameNumber) + 1 : "";
         setCharacter("");
         setKeyword("");
         setMnemonic("");
+        setPrimitivesInput("");
         setFrameNumber(nextFrame ? String(nextFrame) : "");
         setSuccessMsg(`Added "${character}"! Ready for next kanji.`);
       } else {
@@ -327,7 +332,6 @@ export default function AddKanjiModal({
           body: JSON.stringify({
             character: row.character,
             heisigKeyword: row.keyword || undefined,
-            heisigLesson: row.lesson ?? undefined,
             heisigNumber: row.frameNumber ?? undefined,
             mnemonic: row.mnemonic || undefined,
             groupId: finalGroupId || undefined,
@@ -347,67 +351,70 @@ export default function AddKanjiModal({
       setBulkProgress(null);
     }
   };
-
   const modalContent = (
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm animate-fade-in">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-3xl border-2 border-border bg-card shadow-2xl">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md animate-fade-in">
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-3xl border border-border/80 bg-card shadow-2xl shadow-indigo-ai/10 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-border px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-ai/10 text-xl font-bold text-indigo-ai">
+        <div className="flex items-center justify-between border-b border-border/60 px-6 py-5 bg-card">
+          <div className="flex items-center gap-3.5">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-ai/15 to-violet-500/10 border border-indigo-ai/20 text-xl font-bold text-indigo-ai shadow-xs font-jp">
               字
             </span>
             <div>
-              <h2 className="font-display text-lg font-bold">Add Kanji / RTK Material</h2>
-              <p className="text-xs text-muted">Add characters, RTK keywords, lessons, and your own mnemonics</p>
+              <h2 className="font-display text-lg font-bold text-fg">Add Kanji / RTK Material</h2>
+              <p className="text-xs text-muted">Add characters, RTK keywords, primitives, and mnemonics</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-border/40 text-muted transition-colors hover:bg-border hover:text-fg"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-border/40 text-muted transition-all hover:bg-border hover:text-fg"
           >
             ✕
           </button>
         </div>
 
-        {/* Tab switch */}
-        <div className="flex border-b-2 border-border bg-bg/50 px-6 pt-2">
-          <button
-            onClick={() => setTab("single")}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all ${
-              tab === "single"
-                ? "border-indigo-ai text-indigo-ai"
-                : "border-transparent text-muted hover:text-fg"
-            }`}
-          >
-            <span>Single Entry</span>
-          </button>
-          <button
-            onClick={() => setTab("bulk")}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all ${
-              tab === "bulk"
-                ? "border-indigo-ai text-indigo-ai"
-                : "border-transparent text-muted hover:text-fg"
-            }`}
-          >
-            <span>Bulk Paste from PDF / Notes</span>
-            <span className="rounded-full bg-indigo-ai/10 px-2 py-0.5 text-[10px] text-indigo-ai font-bold">
-              Fast
-            </span>
-          </button>
+        {/* Modern Segmented Tab Switch */}
+        <div className="px-6 pt-4 pb-1">
+          <div className="grid grid-cols-2 rounded-2xl bg-border/40 p-1">
+            <button
+              onClick={() => setTab("single")}
+              className={`flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all ${
+                tab === "single"
+                  ? "bg-card text-indigo-ai shadow-xs"
+                  : "text-muted hover:text-fg"
+              }`}
+            >
+              <span>Single Entry</span>
+            </button>
+            <button
+              onClick={() => setTab("bulk")}
+              className={`flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all ${
+                tab === "bulk"
+                  ? "bg-card text-indigo-ai shadow-xs"
+                  : "text-muted hover:text-fg"
+              }`}
+            >
+              <span>Bulk Paste from Notes</span>
+              <span className="rounded-full bg-indigo-ai/10 px-2 py-0.5 text-[9px] text-indigo-ai font-bold">
+                Fast
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Body content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {error && (
-            <div className="rounded-2xl border-2 border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500 font-semibold">
-              ⚠️ {error}
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-500 font-semibold flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{error}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="rounded-2xl border-2 border-mint/30 bg-mint/10 p-3 text-xs text-mint font-semibold">
-              ✨ {successMsg}
+            <div className="rounded-2xl border border-mint/30 bg-mint/10 p-3.5 text-xs text-mint font-semibold flex items-center gap-2">
+              <span>✨</span>
+              <span>{successMsg}</span>
             </div>
           )}
 
@@ -424,7 +431,7 @@ export default function AddKanjiModal({
                     onChange={(e) => setCharacter(e.target.value)}
                     placeholder="e.g. 日"
                     maxLength={4}
-                    className="h-12 w-full rounded-2xl border-2 border-border bg-bg px-4 text-center font-jp text-2xl font-bold outline-none transition-all focus:border-indigo-ai"
+                    className="h-12 w-full rounded-2xl border-2 border-border/80 bg-bg/60 px-4 text-center font-jp text-3xl font-bold outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10"
                     autoFocus
                   />
                   {kanjiDetail && (
@@ -460,26 +467,13 @@ export default function AddKanjiModal({
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
                     placeholder="e.g. sun, day"
-                    className="h-12 w-full rounded-2xl border-2 border-border bg-bg px-4 text-sm outline-none transition-all focus:border-indigo-ai"
+                    className="h-12 w-full rounded-2xl border-2 border-border/80 bg-bg/60 px-4 text-sm font-semibold outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10"
                   />
                 </div>
               </div>
 
-              {/* Lesson & Frame Number */}
+              {/* Frame Number & Primitive Buildup */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold text-fg">
-                    RTK Lesson Number
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={lesson}
-                    onChange={(e) => setLesson(e.target.value)}
-                    placeholder="e.g. 1"
-                    className="h-12 w-full rounded-2xl border-2 border-border bg-bg px-4 text-sm outline-none transition-all focus:border-indigo-ai"
-                  />
-                </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-bold text-fg">
                     RTK Frame Number (#)
@@ -490,7 +484,21 @@ export default function AddKanjiModal({
                     value={frameNumber}
                     onChange={(e) => setFrameNumber(e.target.value)}
                     placeholder="e.g. 12"
-                    className="h-12 w-full rounded-2xl border-2 border-border bg-bg px-4 text-sm outline-none transition-all focus:border-indigo-ai"
+                    className="h-12 w-full rounded-2xl border-2 border-border/80 bg-bg/60 px-4 text-sm outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="text-xs font-bold text-fg">
+                      Primitive Buildup (Optional)
+                    </label>
+                    <span className="text-[10px] text-muted font-medium">e.g. 一 十 古</span>
+                  </div>
+                  <input
+                    value={primitivesInput}
+                    onChange={(e) => setPrimitivesInput(e.target.value)}
+                    placeholder="e.g. 一 十 (space-separated)"
+                    className="h-12 w-full rounded-2xl border-2 border-border/80 bg-bg/60 px-4 font-jp text-sm outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10"
                   />
                 </div>
               </div>
@@ -499,13 +507,13 @@ export default function AddKanjiModal({
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label className="text-xs font-bold text-fg">
-                    Your Mnemonic / Story (from RTK or your own notes)
+                    Your Mnemonic / Story (RTK or personal notes)
                   </label>
                   <button
                     type="button"
                     onClick={handleGenerateMnemonic}
                     disabled={generatingMnemonic || !character.trim()}
-                    className="flex items-center gap-1 rounded-full bg-mint/15 border border-mint/30 px-2.5 py-0.5 text-[11px] font-bold text-mint hover:bg-mint/25 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-full bg-mint/15 border border-mint/30 px-3 py-1 text-[11px] font-bold text-mint hover:bg-mint/25 transition-all disabled:opacity-50"
                   >
                     <span>✨</span>
                     <span>{generatingMnemonic ? "Generating…" : "Generate with AI"}</span>
@@ -516,7 +524,7 @@ export default function AddKanjiModal({
                   onChange={(e) => setMnemonic(e.target.value)}
                   placeholder="Paste or write your mnemonic story here... e.g. A picture of the sun shining bright, with a dividing line through the center representing the horizon."
                   rows={4}
-                  className="w-full rounded-2xl border-2 border-border bg-bg p-4 text-sm outline-none transition-all focus:border-indigo-ai"
+                  className="w-full rounded-2xl border-2 border-border/80 bg-bg/60 p-4 text-sm outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10 leading-relaxed"
                 />
               </div>
 
@@ -531,7 +539,7 @@ export default function AddKanjiModal({
                     setSelectedGroupId(e.target.value);
                     setIsCreatingNewGroup(e.target.value === "new");
                   }}
-                  className="h-12 w-full rounded-2xl border-2 border-border bg-bg px-4 text-sm outline-none transition-all focus:border-indigo-ai"
+                  className="h-12 w-full rounded-2xl border-2 border-border/80 bg-bg/60 px-4 text-sm font-semibold outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10"
                 >
                   <option value="">None (Unassigned)</option>
                   {groups.map((g) => (
@@ -543,12 +551,12 @@ export default function AddKanjiModal({
                 </select>
 
                 {isCreatingNewGroup && (
-                  <div className="mt-2">
+                  <div className="mt-2.5">
                     <input
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
-                      placeholder="Enter new folder name (e.g. Lesson 1, Lesson 2: Strokes)"
-                      className="h-11 w-full rounded-2xl border-2 border-indigo-ai/50 bg-bg px-4 text-sm outline-none focus:border-indigo-ai"
+                      placeholder="Enter new folder name (e.g. Lesson 1: Strokes)"
+                      className="h-11 w-full rounded-2xl border-2 border-indigo-ai/50 bg-bg px-4 text-sm outline-none focus:border-indigo-ai focus:ring-4 focus:ring-indigo-ai/10"
                     />
                   </div>
                 )}
@@ -573,7 +581,7 @@ export default function AddKanjiModal({
                   onChange={(e) => setBulkText(e.target.value)}
                   placeholder={`12\t日\tsun\t1\tThe sun rising over the horizon\n13\t月\tmoon\t1\tThe moon smiling in the night sky`}
                   rows={6}
-                  className="w-full font-mono text-xs rounded-2xl border-2 border-border bg-bg p-4 outline-none transition-all focus:border-indigo-ai"
+                  className="w-full font-mono text-xs rounded-2xl border-2 border-border/80 bg-bg/60 p-4 outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10"
                 />
               </div>
 
@@ -588,7 +596,7 @@ export default function AddKanjiModal({
                     setBulkTargetGroupId(e.target.value);
                     setIsCreatingNewGroup(e.target.value === "new");
                   }}
-                  className="h-11 w-full rounded-2xl border-2 border-border bg-bg px-4 text-sm outline-none transition-all focus:border-indigo-ai"
+                  className="h-12 w-full rounded-2xl border-2 border-border/80 bg-bg/60 px-4 text-sm font-semibold outline-none transition-all focus:border-indigo-ai focus:bg-card focus:ring-4 focus:ring-indigo-ai/10"
                 >
                   <option value="">None (Unassigned)</option>
                   {groups.map((g) => (
@@ -600,12 +608,12 @@ export default function AddKanjiModal({
                 </select>
 
                 {isCreatingNewGroup && (
-                  <div className="mt-2">
+                  <div className="mt-2.5">
                     <input
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
                       placeholder="Enter new folder name (e.g. Lesson 1)"
-                      className="h-11 w-full rounded-2xl border-2 border-indigo-ai/50 bg-bg px-4 text-sm outline-none focus:border-indigo-ai"
+                      className="h-11 w-full rounded-2xl border-2 border-indigo-ai/50 bg-bg px-4 text-sm outline-none focus:border-indigo-ai focus:ring-4 focus:ring-indigo-ai/10"
                     />
                   </div>
                 )}
@@ -613,15 +621,15 @@ export default function AddKanjiModal({
 
               {/* Parsed Preview */}
               {bulkRows.length > 0 && (
-                <div className="rounded-2xl border-2 border-border bg-bg/50 p-3">
-                  <div className="mb-2 flex items-center justify-between text-xs font-bold">
+                <div className="rounded-2xl border border-border/80 bg-bg/50 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold">
                     <span>Detected {bulkRows.length} kanji to import:</span>
                   </div>
-                  <div className="max-h-48 overflow-y-auto space-y-1 text-xs">
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 text-xs">
                     {bulkRows.map((r, i) => (
                       <div
                         key={i}
-                        className="flex items-center gap-2 rounded-lg bg-card p-2 border border-border/50"
+                        className="flex items-center gap-2.5 rounded-xl bg-card p-2.5 border border-border/60 shadow-xs"
                       >
                         <span className="font-jp text-lg font-bold text-indigo-ai w-8 text-center">
                           {r.character}
@@ -629,13 +637,8 @@ export default function AddKanjiModal({
                         <span className="font-semibold text-fg w-24 truncate">
                           {r.keyword || "(no keyword)"}
                         </span>
-                        {r.lesson && (
-                          <span className="rounded bg-sky/10 px-1.5 py-0.5 text-[10px] text-sky font-bold">
-                            L{r.lesson}
-                          </span>
-                        )}
                         {r.frameNumber && (
-                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-500 font-bold">
+                          <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-500 font-bold">
                             #{r.frameNumber}
                           </span>
                         )}
@@ -651,22 +654,22 @@ export default function AddKanjiModal({
           )}
         </div>
 
-        {/* Footer actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-border bg-bg/40 px-6 py-4">
+        {/* Modern Footer Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-bg/50 px-6 py-4">
           <button
             onClick={onClose}
-            className="rounded-full border-2 border-border px-5 py-2.5 text-xs font-bold text-muted hover:bg-card hover:text-fg transition-all"
+            className="rounded-2xl border border-border/80 bg-card px-5 py-2.5 text-xs font-bold text-muted hover:text-fg hover:border-border transition-all"
           >
             Cancel
           </button>
 
           {tab === "single" ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => handleSaveSingle(true)}
                 disabled={saving || !character.trim()}
-                className="rounded-full border-2 border-indigo-ai/50 px-5 py-2.5 text-xs font-bold text-indigo-ai hover:bg-indigo-ai/10 transition-all disabled:opacity-50"
+                className="rounded-2xl border-2 border-indigo-ai/40 bg-indigo-ai/5 px-5 py-2.5 text-xs font-bold text-indigo-ai hover:bg-indigo-ai/10 transition-all disabled:opacity-50"
               >
                 Save & Add Another
               </button>
@@ -674,7 +677,7 @@ export default function AddKanjiModal({
                 type="button"
                 onClick={() => handleSaveSingle(false)}
                 disabled={saving || !character.trim()}
-                className="rounded-full bg-indigo-ai px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-ai/20 transition-all hover:bg-indigo-ai/90 disabled:opacity-50"
+                className="rounded-2xl bg-gradient-to-r from-indigo-ai to-indigo-deep px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-ai/25 hover:shadow-lg hover:shadow-indigo-ai/35 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save Kanji"}
               </button>
@@ -684,7 +687,7 @@ export default function AddKanjiModal({
               type="button"
               onClick={handleBulkImport}
               disabled={bulkImporting || bulkRows.length === 0}
-              className="rounded-full bg-indigo-ai px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-ai/20 transition-all hover:bg-indigo-ai/90 disabled:opacity-50"
+              className="rounded-2xl bg-gradient-to-r from-indigo-ai to-indigo-deep px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-ai/25 hover:shadow-lg hover:shadow-indigo-ai/35 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
             >
               {bulkImporting
                 ? `Importing (${bulkProgress?.current}/${bulkProgress?.total})...`

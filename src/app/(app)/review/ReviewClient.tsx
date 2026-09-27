@@ -373,7 +373,16 @@ export default function ReviewClient() {
         fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cardId: card.id, grade: g }),
+          // Send the user's configured early-review strategy: without it the
+          // scheduler treats every early review (e.g. in-session relearn after
+          // "Again", or study-ahead) as on-time and grants full stability
+          // growth — same class of bug as the retrievability doom loop.
+          body: JSON.stringify({
+            cardId: card.id,
+            grade: g,
+            earlyReviewStrategy: getLearningConfig().earlyReviewStrategy,
+            desiredRetention: getLearningConfig().desiredRetention,
+          }),
         }).catch(() => {});
       }
 

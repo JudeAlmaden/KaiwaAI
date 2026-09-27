@@ -33,12 +33,13 @@ export async function GET(req: Request) {
       });
       kanjiIds = [...new Set(entries.map((e) => e.kanjiId))];
     } else if (groupId) {
+      const groupIds = groupId.split(",").map((id) => id.trim()).filter(Boolean);
       const entries = await prisma.kanjiGroupEntry.findMany({
-        where: { groupId },
+        where: { groupId: { in: groupIds } },
         select: { kanjiId: true },
         orderBy: { order: "asc" },
       });
-      kanjiIds = entries.map((e) => e.kanjiId);
+      kanjiIds = [...new Set(entries.map((e) => e.kanjiId))];
     } else if (heisigLesson) {
       const lessonKanji = await prisma.kanji.findMany({
         where: { heisigLesson: parseInt(heisigLesson) },
@@ -69,34 +70,52 @@ export async function GET(req: Request) {
 
     // Combine and sort by heisig order
     const allKanji = [
-      ...existingUK.map((uk) => ({
-        id: uk.id,
-        kanjiId: uk.kanjiId,
-        character: uk.kanji.character,
-        meanings: JSON.parse(uk.kanji.meanings) as string[],
-        readingsOn: JSON.parse(uk.kanji.readingsOn) as string[],
-        readingsKun: JSON.parse(uk.kanji.readingsKun) as string[],
-        radicals: JSON.parse(uk.kanji.radicals) as string[],
-        heisigNumber: uk.kanji.heisigNumber,
-        heisigKeyword: uk.kanji.heisigKeyword,
-        mnemonic: uk.mnemonic,
-        status: uk.status,
-        _pool: "active" as const,
-      })),
-      ...missingKanji.map((k) => ({
-        id: `preview-${k.id}`, // preview-only, not a real UserKanji ID
-        kanjiId: k.id,
-        character: k.character,
-        meanings: JSON.parse(k.meanings) as string[],
-        readingsOn: JSON.parse(k.readingsOn) as string[],
-        readingsKun: JSON.parse(k.readingsKun) as string[],
-        radicals: JSON.parse(k.radicals) as string[],
-        heisigNumber: k.heisigNumber,
-        heisigKeyword: k.heisigKeyword,
-        mnemonic: null,
-        status: "new" as const,
-        _pool: "active" as const,
-      })),
+      ...existingUK.map((uk) => {
+        let prims: string[] = [];
+        try {
+          if (uk.kanji.primitives) prims = JSON.parse(uk.kanji.primitives) as string[];
+        } catch {
+          prims = [];
+        }
+        return {
+          id: uk.id,
+          kanjiId: uk.kanjiId,
+          character: uk.kanji.character,
+          meanings: JSON.parse(uk.kanji.meanings) as string[],
+          readingsOn: JSON.parse(uk.kanji.readingsOn) as string[],
+          readingsKun: JSON.parse(uk.kanji.readingsKun) as string[],
+          radicals: JSON.parse(uk.kanji.radicals) as string[],
+          heisigNumber: uk.kanji.heisigNumber,
+          heisigKeyword: uk.kanji.heisigKeyword,
+          primitives: prims,
+          mnemonic: uk.mnemonic,
+          status: uk.status,
+          _pool: "active" as const,
+        };
+      }),
+      ...missingKanji.map((k) => {
+        let prims: string[] = [];
+        try {
+          if (k.primitives) prims = JSON.parse(k.primitives) as string[];
+        } catch {
+          prims = [];
+        }
+        return {
+          id: `preview-${k.id}`, // preview-only, not a real UserKanji ID
+          kanjiId: k.id,
+          character: k.character,
+          meanings: JSON.parse(k.meanings) as string[],
+          readingsOn: JSON.parse(k.readingsOn) as string[],
+          readingsKun: JSON.parse(k.readingsKun) as string[],
+          radicals: JSON.parse(k.radicals) as string[],
+          heisigNumber: k.heisigNumber,
+          heisigKeyword: k.heisigKeyword,
+          primitives: prims,
+          mnemonic: null,
+          status: "new" as const,
+          _pool: "active" as const,
+        };
+      }),
     ];
 
     // Sort by Heisig frame order (nulls last)
@@ -191,6 +210,12 @@ export async function GET(req: Request) {
     try { readingsKun = JSON.parse(uk.kanji.readingsKun); } catch { readingsKun = []; }
     let radicals: string[];
     try { radicals = JSON.parse(uk.kanji.radicals); } catch { radicals = []; }
+    let primitives: string[] = [];
+    try {
+      if (uk.kanji.primitives) primitives = JSON.parse(uk.kanji.primitives) as string[];
+    } catch {
+      primitives = [];
+    }
 
     // customMeaning (user's personal Heisig RTK keyword) is prepended; deduplicate if already in shared list
     const displayMeanings = uk.customMeaning
@@ -209,6 +234,7 @@ export async function GET(req: Request) {
       heisigLesson: uk.kanji.heisigLesson ?? null,
       heisigKeyword: uk.kanji.heisigKeyword ?? null,
       customMeaning: uk.customMeaning ?? null,
+      primitives,
       mnemonic: uk.mnemonic ?? null,
       status: uk.status,
       _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance

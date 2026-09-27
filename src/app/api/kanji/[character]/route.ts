@@ -59,7 +59,7 @@ export async function GET(
     }
 
     // Get groups containing this kanji
-    let userGroups: { id: string; name: string; kind: string; type: string }[] = [];
+    let userGroups: { id: string; name: string; kind: string; type: string; lessonNumber: number | null }[] = [];
     try {
       const groupEntries = await prisma.kanjiGroupEntry.findMany({
         where: {
@@ -67,7 +67,7 @@ export async function GET(
           group: { userId: user.id },
         },
         include: {
-          group: { select: { id: true, name: true, kind: true } },
+          group: { select: { id: true, name: true, kind: true, lessonNumber: true } },
         },
       });
       userGroups = groupEntries.map((ge) => ({
@@ -75,6 +75,7 @@ export async function GET(
         name: ge.group.name,
         kind: ge.group.kind,
         type: ge.group.kind,
+        lessonNumber: ge.group.lessonNumber,
       }));
     } catch (e) {
       console.error("[Kanji API] Group entries error:", e);
@@ -103,6 +104,13 @@ export async function GET(
       throw new Error(`Failed to parse kanji data: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
     }
 
+    let parsedPrimitives: string[] = [];
+    try {
+      if (kanji.primitives) parsedPrimitives = JSON.parse(kanji.primitives) as string[];
+    } catch {
+      parsedPrimitives = [];
+    }
+
     const effectiveKeyword = userKanji?.customMeaning || kanji.heisigKeyword || null;
 
     return NextResponse.json({
@@ -116,6 +124,7 @@ export async function GET(
         heisigNumber: kanji.heisigNumber,
         heisigLesson: kanji.heisigLesson,
         heisigKeyword: kanji.heisigKeyword,
+        primitives: parsedPrimitives,
         customMeaning: userKanji?.customMeaning || null,
         effectiveKeyword,
         ...parsedData,
@@ -181,7 +190,7 @@ export async function GET(
   }
 }
 
-// PATCH: Update Heisig metadata (keyword, lesson, number) and/or personal mnemonic
+// PATCH: Update Heisig metadata (keyword, lesson, number), primitives, and/or personal mnemonic
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ character: string }> }
@@ -198,12 +207,20 @@ export async function PATCH(
   if (!kanji) return NextResponse.json({ error: "Kanji not found" }, { status: 404 });
 
   const body = await req.json();
-  const { heisigKeyword, heisigLesson, heisigNumber, mnemonic } = body;
+  const { heisigKeyword, heisigLesson, heisigNumber, mnemonic, primitives } = body;
 
-  const kanjiUpdates: { heisigKeyword?: string | null; heisigLesson?: number | null; heisigNumber?: number | null } = {};
+  const kanjiUpdates: {
+    heisigKeyword?: string | null;
+    heisigLesson?: number | null;
+    heisigNumber?: number | null;
+    primitives?: string | null;
+  } = {};
   if (heisigKeyword !== undefined) kanjiUpdates.heisigKeyword = heisigKeyword?.trim() || null;
   if (heisigLesson !== undefined) kanjiUpdates.heisigLesson = heisigLesson !== null && heisigLesson !== "" ? Number(heisigLesson) : null;
   if (heisigNumber !== undefined) kanjiUpdates.heisigNumber = heisigNumber !== null && heisigNumber !== "" ? Number(heisigNumber) : null;
+  if (primitives !== undefined) {
+    kanjiUpdates.primitives = Array.isArray(primitives) ? JSON.stringify(primitives) : null;
+  }
 
   if (Object.keys(kanjiUpdates).length > 0) {
     await prisma.kanji.update({
@@ -232,6 +249,59 @@ export async function PATCH(
         update: { mnemonic: trimmed },
       });
     }
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+// DELETE: Remove a kanji from user's study list (UserKanji + group entries)
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ character: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { character } = await params;
+  const decodedChar = decodeURIComponent(character);
+
+  const kanji = await prisma.kanji.findUnique({
+    where: { character: decodedChar },
+  });
+
+  if (!kanji) {
+    return NextResponse.json({ error: "Kanji not found" }, { status: 404 });
+  }
+
+  await prisma.userKanji.deleteMany({
+    where: {
+      userId: user.id,
+      kanjiId: kanji.id,
+    },
+  });
+
+  await prisma.kanjiGroupEntry.deleteMany({
+    where: {
+      kanjiId: kanji.id,
+      group: { userId: user.id },
+    },
+  });
+
+  await prisma.kanjiMnemonic.deleteMany({
+    where: {
+      userId: user.id,
+      kanjiId: kanji.id,
+    },
+  });
+
+  try {
+    const userKanjiCount = await prisma.userKanji.count({ where: { kanjiId: kanji.id } });
+    const groupCount = await prisma.kanjiGroupEntry.count({ where: { kanjiId: kanji.id } });
+    if (userKanjiCount === 0 && groupCount === 0) {
+      await prisma.kanji.delete({ where: { id: kanji.id } });
+    }
+  } catch {
+    // Ignore if referenced elsewhere
   }
 
   return NextResponse.json({ success: true });

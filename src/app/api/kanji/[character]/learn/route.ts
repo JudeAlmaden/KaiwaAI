@@ -177,6 +177,78 @@ export async function POST(
   }
 }
 
+// PATCH: Update review status (mark known, reset)
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ character: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { character } = await params;
+  const decodedChar = decodeURIComponent(character);
+
+  const kanji = await prisma.kanji.findUnique({
+    where: { character: decodedChar },
+  });
+
+  if (!kanji) {
+    return NextResponse.json({ error: "Kanji not found" }, { status: 404 });
+  }
+
+  const userKanji = await prisma.userKanji.findUnique({
+    where: {
+      userId_kanjiId: { userId: user.id, kanjiId: kanji.id },
+    },
+  });
+
+  if (!userKanji) {
+    return NextResponse.json({ error: "Kanji not in study queue" }, { status: 404 });
+  }
+
+  const body = await req.json();
+  const { action, mnemonic, customMeaning } = body;
+
+  if (action === "markKnown") {
+    await prisma.userKanji.update({
+      where: { id: userKanji.id },
+      data: {
+        status: "known",
+        repetitions: Math.max(userKanji.repetitions, 3),
+        interval: Math.max(userKanji.interval, 30),
+      },
+    });
+    return NextResponse.json({ ok: true, status: "known" });
+  }
+
+  if (action === "reset") {
+    await prisma.userKanji.update({
+      where: { id: userKanji.id },
+      data: {
+        status: "new",
+        repetitions: 0,
+        interval: 0,
+        easeFactor: 2.5,
+        nextReview: new Date(),
+      },
+    });
+    return NextResponse.json({ ok: true, status: "new" });
+  }
+
+  const updateData: { mnemonic?: string | null; customMeaning?: string | null } = {};
+  if (mnemonic !== undefined) updateData.mnemonic = mnemonic?.trim() || null;
+  if (customMeaning !== undefined) updateData.customMeaning = customMeaning?.trim() || null;
+
+  if (Object.keys(updateData).length > 0) {
+    await prisma.userKanji.update({
+      where: { id: userKanji.id },
+      data: updateData,
+    });
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
 // DELETE: Remove a kanji from user's review queue
 export async function DELETE(
   _req: Request,
@@ -186,10 +258,11 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { character } = await params;
+  const decodedChar = decodeURIComponent(character);
 
   // Find the kanji
   const kanji = await prisma.kanji.findUnique({
-    where: { character },
+    where: { character: decodedChar },
   });
 
   if (!kanji) {
@@ -211,6 +284,25 @@ export async function DELETE(
       group: { userId: user.id },
     },
   });
+
+  // Also remove user mnemonic if any
+  await prisma.kanjiMnemonic.deleteMany({
+    where: {
+      userId: user.id,
+      kanjiId: kanji.id,
+    },
+  });
+
+  // If this was a custom-created kanji and has no other users, clean up the kanji row
+  try {
+    const userKanjiCount = await prisma.userKanji.count({ where: { kanjiId: kanji.id } });
+    const groupCount = await prisma.kanjiGroupEntry.count({ where: { kanjiId: kanji.id } });
+    if (userKanjiCount === 0 && groupCount === 0) {
+      await prisma.kanji.delete({ where: { id: kanji.id } });
+    }
+  } catch {
+    // Ignore if foreign key constraints prevent deletion (e.g. system seeded kanji)
+  }
 
   return NextResponse.json({ ok: true });
 }

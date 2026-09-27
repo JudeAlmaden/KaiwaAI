@@ -48,6 +48,12 @@ export function composeSession<T extends Card>(
 ): SessionComposition<T> {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  // Active-pool cooldown: FSRS "Again" cards return after ~10 minutes, so any
+  // shorter cooldown would let a card appear twice in one sitting. 10 minutes
+  // lets failed cards cycle back for relearning while preventing the same weak
+  // cards from dominating every consecutive session.
+  const ACTIVE_COOLDOWN_MS = 10 * 60 * 1000;
+  const activeCooldownAgo = new Date(now.getTime() - ACTIVE_COOLDOWN_MS);
 
   const ratio = Math.max(0.1, Math.min(1.0, typeof learningRatio === "number" && !isNaN(learningRatio) ? learningRatio : 0.5));
   // Calculate pool sizes based on learningRatio (target, not a hard cap)
@@ -79,8 +85,10 @@ export function composeSession<T extends Card>(
       isWeakAndShort = card.easeFactor < 2.2 && card.interval < 3;
     }
     const isActive = isNew || isWeakAndShort;
+    const wasJustReviewed =
+      card.lastReviewedAt != null && card.lastReviewedAt >= activeCooldownAgo;
 
-    if (isActive) {
+    if (isActive && !wasJustReviewed) {
       activePool.push(card);
     } else {
       // Maintenance pool: check due date unless ignoreDueDate=true
