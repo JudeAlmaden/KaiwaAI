@@ -2,6 +2,19 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.2] - 2026-10-05
+
+Cleanup pass: removed dead prop and import surfaced during UI consistency audit.
+
+### Fixed
+- **Unused `onToggleMonitoring` prop** — removed from `QuestGallery` props interface, component destructure, and `ReviewClient` callsite. Monitoring toggle lives exclusively in the Focus Guard settings page; it was never wired up inside the review gallery after the `InterceptionRulesModal` was moved there.
+- **Stale handler removed** — `handleToggleMonitoring` async function in `ReviewClient` deleted alongside the prop removal.
+- **Unused `vi` import** — removed from `app-blocker-trigger.test.ts` (was imported but never called in any mock).
+
+### Technical
+- Modified: `src/app/(app)/review/QuestGallery.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/lib/app-blocker-trigger.test.ts`
+- Tests: 594 passing (62 files) — lint/typecheck clean
+
 ## [2.2.1] - 2026-09-28
 
 Fixes across all review session types: state persistence in ReviewClient, mixed endpoint backfill, accurate mixed due counts, and UI card limit alignments.

@@ -40,6 +40,7 @@ type Setup = {
   heisigLesson?: number;
   groupId?: string;
   groupName?: string;
+  learningRatio?: number;
 };
 
 export default function ReviewClient() {
@@ -82,9 +83,10 @@ export default function ReviewClient() {
     unlockDurationMinutes: 15,
     reviewType: 'vocabulary',
     direction: 'jp-to-en',
-    studyMode: 'due',
+    studyMode: 'all',
     practice: false,
     noDueAction: 'autoOpen',
+    learningRatio: 0.5,
   });
 
   useEffect(() => {
@@ -92,20 +94,7 @@ export default function ReviewClient() {
     AppBlocker.getAppBlockerConfig().then((cfg) => setAppBlockerConfig(cfg)).catch(() => {});
   }, []);
 
-  const handleToggleMonitoring = async () => {
-    try {
-      if (isMonitoring) {
-        await AppBlocker.stopMonitoring();
-        setIsMonitoring(false);
-      } else {
-        await AppBlocker.setAppBlockerConfig(appBlockerConfig);
-        await AppBlocker.startMonitoring();
-        setIsMonitoring(true);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+
 
   const handleUpdateAppBlockerConfig = async (update: Partial<import('@/plugins/app-blocker').AppBlockerConfig>) => {
     const next = { ...appBlockerConfig, ...update };
@@ -150,21 +139,42 @@ export default function ReviewClient() {
       }
 
       if ((isAutostart || isConfigured) && phase === "setup") {
-        if (countParam) {
-          const reqCount = parseInt(countParam) || 10;
-          setSetup(prev => ({ ...prev, limit: reqCount }));
-          start({ studyMode: "all", limit: reqCount });
-        } else {
-          AppBlocker.getFlashcardRequirement()
-            .then(res => {
-              const reqCount = res.count || 10;
-              setSetup(prev => ({ ...prev, limit: reqCount }));
-              start({ studyMode: "all", limit: reqCount });
-            })
-            .catch(() => {
-              start({ studyMode: "all", limit: 10 });
-            });
-        }
+        const urlStudyMode = params.get("studyMode") as StudyMode | null;
+        const urlReviewType = params.get("reviewType") as ReviewType | null;
+        const urlDirection = params.get("direction") as CardDirection | null;
+        const urlLearningRatio = params.get("learningRatio");
+
+        AppBlocker.getAppBlockerConfig()
+          .then((cfg) => {
+            const reqCount = countParam ? parseInt(countParam, 10) || 10 : (cfg?.count || 10);
+            const resolvedMode = urlStudyMode ?? (cfg?.studyMode as StudyMode) ?? "all";
+            const resolvedType = urlReviewType ?? (cfg?.reviewType as ReviewType) ?? "vocabulary";
+            const resolvedDir = urlDirection ?? (cfg?.direction as CardDirection) ?? "jp-to-en";
+            const resolvedRatio =
+              urlLearningRatio !== null && !isNaN(parseFloat(urlLearningRatio))
+                ? parseFloat(urlLearningRatio)
+                : (cfg?.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.5);
+
+            const sessionParams: Partial<Setup> = {
+              studyMode: resolvedMode,
+              reviewType: resolvedType,
+              direction: resolvedDir,
+              practice: cfg?.practice ?? false,
+              limit: reqCount,
+              learningRatio: resolvedRatio,
+            };
+            setSetup((prev) => ({ ...prev, ...sessionParams }));
+            start(sessionParams);
+          })
+          .catch(() => {
+            const reqCount = countParam ? parseInt(countParam, 10) || 10 : 10;
+            const sessionParams: Partial<Setup> = {
+              studyMode: urlStudyMode ?? "all",
+              limit: reqCount,
+            };
+            setSetup((prev) => ({ ...prev, ...sessionParams }));
+            start(sessionParams);
+          });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -258,9 +268,11 @@ export default function ReviewClient() {
       : `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
       
     const resolvedStudyMode = setup.studyMode === "new" || setup.studyMode === "custom" ? "all" : setup.studyMode;
+    const learningRatio = setup.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.5;
     const params = new URLSearchParams({ 
       studyMode: resolvedStudyMode, 
-      limit: "100"
+      limit: "100",
+      learningRatio: String(learningRatio)
     });
     if (setup.studyMode === "new") params.set("status", "new");
     if (setup.practice) params.set("practice", "true");
@@ -303,9 +315,11 @@ export default function ReviewClient() {
       : `/api/${s.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
       
     const resolvedStudyMode = s.studyMode === "new" || s.studyMode === "custom" ? "all" : s.studyMode;
+    const learningRatio = s.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.5;
     const params = new URLSearchParams({ 
       studyMode: resolvedStudyMode, 
-      limit: String(s.limit) 
+      limit: String(s.limit),
+      learningRatio: String(learningRatio)
     });
     if (s.studyMode === "new") params.set("status", "new");
     if (s.practice) params.set("practice", "true");
@@ -521,7 +535,6 @@ export default function ReviewClient() {
           isAndroid={true}
           appBlockerConfig={appBlockerConfig}
           onStartQuest={start}
-          onToggleMonitoring={handleToggleMonitoring}
           onUpdateAppBlockerConfig={handleUpdateAppBlockerConfig}
         />
       </div>

@@ -5,14 +5,41 @@ import { ShieldCheck } from '@phosphor-icons/react';
 type AppBlockerCardProps = {
   isMonitoring: boolean;
   requirementCount: number;
+  studyMode?: string;
+  learningRatio?: number;
+  reviewType?: string;
   onClick: () => void;
 };
 
 export default function AppBlockerCard({
   isMonitoring,
   requirementCount,
+  studyMode = 'all',
+  learningRatio = 0.5,
+  reviewType = 'vocabulary',
   onClick,
 }: AppBlockerCardProps) {
+  const focusLabel =
+    Math.abs(learningRatio - 1.0) < 0.05
+      ? 'All New'
+      : Math.abs(learningRatio - 0.7) < 0.05
+      ? '70/30'
+      : '50/50';
+
+  const poolLabel =
+    studyMode === 'due'
+      ? 'Due'
+      : studyMode === 'recent'
+      ? 'Recent'
+      : studyMode === 'struggling'
+      ? 'Struggling'
+      : studyMode === 'leeches'
+      ? 'Leeches'
+      : 'All Cards';
+
+  const typeLabel =
+    reviewType === 'kanji' ? 'Kanji' : reviewType === 'mixed' ? 'Mixed' : 'Vocab';
+
   return (
     <button
       onClick={onClick}
@@ -46,9 +73,22 @@ export default function AppBlockerCard({
         <h3 className="font-display text-lg md:text-xl font-extrabold text-foreground group-hover:text-indigo-ai transition-colors mb-1">
           Focus Guard
         </h3>
-        <p className="text-xs md:text-sm text-muted leading-relaxed">
+        <p className="text-xs md:text-sm text-muted leading-relaxed mb-3">
           Require {requirementCount} cards before unlocking blocked apps.
         </p>
+
+        {/* Config Summary Pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="px-2 py-0.5 rounded-lg bg-indigo-ai/10 text-indigo-ai border border-indigo-ai/20 text-[10px] font-extrabold">
+            {poolLabel}
+          </span>
+          <span className="px-2 py-0.5 rounded-lg bg-card border border-border text-foreground text-[10px] font-extrabold">
+            {focusLabel}
+          </span>
+          <span className="px-2 py-0.5 rounded-lg bg-card border border-border text-muted text-[10px] font-extrabold">
+            {typeLabel}
+          </span>
+        </div>
       </div>
 
       <div className="relative z-10 mt-3 pt-2 border-t border-border/60 flex items-center justify-between text-[11px] font-bold text-indigo-ai">

@@ -183,5 +183,15 @@ describe("/api/review/mixed GET", () => {
     expect(res.status).toBe(200);
     expect(json.cards).toHaveLength(0);
   });
+
+  it("accepts and processes learningRatio query parameter", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
+
+    const req = new Request("http://localhost/api/review/mixed?studyMode=all&limit=10&learningRatio=1.0");
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+  });
 });
 

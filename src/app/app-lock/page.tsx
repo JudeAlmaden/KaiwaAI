@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { AppBlocker } from '@/plugins/app-blocker';
-import type { BlockerStudyMode, AppBlockerConfig, BlockerFuriganaMode } from '@/plugins/app-blocker/definitions';
+import type { BlockerStudyMode, AppBlockerConfig, BlockerFuriganaMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
 import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
 import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from '@/lib/fallback-cards';
 import Kai from '@/app/Kai';
@@ -174,6 +174,8 @@ export default function StandaloneAppLockPage() {
         const practiceEnabled: boolean =
           urlPractice !== null ? urlPractice === '1' || urlPractice === 'true' : (savedConfig?.practice ?? false);
         const direction: Direction = urlDirection ?? (savedConfig?.direction as Direction | undefined | null) ?? 'jp-to-en';
+        const urlNoDueAction = params.get('noDueAction') as BlockerNoDueAction | null;
+        const noDueAction: BlockerNoDueAction = urlNoDueAction ?? savedConfig?.noDueAction ?? 'autoOpen';
         const urlEarlyStrategy = params.get('earlyReviewStrategy') as 'practice' | 'proportional' | null;
         const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? 'practice';
 
@@ -215,8 +217,15 @@ export default function StandaloneAppLockPage() {
           }
         }
 
-        const pulledCards = await fetchCards(reviewType, studyMode, resolvedLearningRatio);
+        let pulledCards = await fetchCards(reviewType, studyMode, resolvedLearningRatio);
         if (cancelled) return;
+
+        // If nothing was returned for this studyMode (e.g. studyMode === 'due' and 0 cards due),
+        // check noDueAction. If 'studyAny', fall back to 'all' cards before giving up.
+        if (!('offline' in pulledCards) && pulledCards.length === 0 && studyMode !== 'all' && noDueAction === 'studyAny') {
+          pulledCards = await fetchCards(reviewType, 'all', resolvedLearningRatio);
+          if (cancelled) return;
+        }
 
         // Offline or unvalidated network error — auto-unlock and pass through immediately
         if ('offline' in pulledCards && pulledCards.offline) {

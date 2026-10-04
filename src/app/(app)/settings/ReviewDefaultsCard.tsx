@@ -36,14 +36,21 @@ export default function ReviewDefaultsCard() {
   function patch(updates: Partial<LearningConfig>) {
     const next = setLearningConfig(updates);
     setConfig(next);
-    // Furigana is the single source of truth here — mirror it into the
-    // AppBlocker config so the Focus Guard interceptor (Android
-    // SharedPreferences) picks it up without rebuilding the app.
+
+    // Sync review defaults to AppBlocker so Focus Guard inherits them
+    const appBlockerUpdates: Record<string, unknown> = {};
     if (updates.defaultFuriganaMode !== undefined) {
-      AppBlocker.setAppBlockerConfig({
-        furiganaMode: updates.defaultFuriganaMode,
-        showFurigana: updates.defaultFuriganaMode !== "never",
-      }).catch(() => {});
+      appBlockerUpdates.furiganaMode = updates.defaultFuriganaMode;
+      appBlockerUpdates.showFurigana = updates.defaultFuriganaMode !== "never";
+    }
+    if (updates.defaultDirection !== undefined) {
+      appBlockerUpdates.direction = updates.defaultDirection;
+    }
+    if (updates.defaultLearningRatio !== undefined) {
+      appBlockerUpdates.learningRatio = updates.defaultLearningRatio;
+    }
+    if (Object.keys(appBlockerUpdates).length > 0) {
+      AppBlocker.setAppBlockerConfig(appBlockerUpdates).catch(() => {});
     }
   }
 
@@ -57,8 +64,7 @@ export default function ReviewDefaultsCard() {
     <Surface>
       <h2 className="font-display text-lg font-bold">Review defaults</h2>
       <p className="mt-1 text-sm text-muted">
-        Used when you start a session from the review page. Focus Guard can inherit
-        these with &quot;Use my review defaults.&quot;
+        Default settings for review sessions and Focus Guard app blocker.
       </p>
 
       <div className="mt-5">

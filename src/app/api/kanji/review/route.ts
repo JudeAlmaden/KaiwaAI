@@ -17,6 +17,8 @@ export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const studyMode = sp.get("studyMode") ?? "due";
   const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
+  const rawRatio = sp.get("learningRatio");
+  const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
   const heisigLesson = sp.get("heisigLesson"); // lesson-based mode
   const groupId = sp.get("groupId"); // group-based mode
 
@@ -176,9 +178,9 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
-    // Compose session: 50% active, 50% maintenance
+    // Compose session based on learningRatio
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
-    const { session, maintenanceCards } = composeSession(allKanji, limit, ignoreDueDate);
+    const { session, maintenanceCards } = composeSession(allKanji, limit, ignoreDueDate, learningRatio);
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     userKanji = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
   } else {

@@ -11,6 +11,8 @@ export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const studyMode = sp.get("studyMode") ?? "due";
   const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
+  const rawRatio = sp.get("learningRatio");
+  const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
 
   // Build where clauses for both vocab and kanji
   const vocabWhere: {
@@ -91,8 +93,8 @@ export async function GET(req: Request) {
     // Split limit 50/50 but allow backfill: if one type has fewer cards, donate
     // unused slots to the other so the session reaches the requested limit.
     const halfLimit = Math.ceil(limit / 2);
-    const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate);
-    const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate);
+    const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio);
+    const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate, learningRatio);
 
     const vocabActual = vocabSession.session.length;
     const kanjiActual = kanjiSession.session.length;
@@ -105,11 +107,11 @@ export async function GET(req: Request) {
 
     if (vocabShortfall > 0 && kanjiShortfall <= 0) {
       // Kanji has surplus; pull extra from it
-      const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate);
+      const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate, learningRatio);
       kanjiFinal = extraKanji.session;
     } else if (kanjiShortfall > 0 && vocabShortfall <= 0) {
       // Vocab has surplus; pull extra from it
-      const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate);
+      const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate, learningRatio);
       vocabFinal = extraVocab.session;
     }
 
