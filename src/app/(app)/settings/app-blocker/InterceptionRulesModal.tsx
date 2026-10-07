@@ -280,33 +280,35 @@ export default function InterceptionRulesModal({
                 </div>
               </div>
 
-              {/* Focus (learning ratio) */}
-              <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-foreground shrink-0">Focus</span>
-                  <span className="text-[9px] text-muted">New vs review mix</span>
+              {/* Focus (learning ratio) — only meaningful when pool is 'all' */}
+              {studyMode === 'all' && (
+                <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-foreground shrink-0">Focus</span>
+                    <span className="text-[9px] text-muted">New vs review mix</span>
+                  </div>
+                  <div className="flex gap-1">
+                    {[
+                      { ratio: 0.5, label: '50/50' },
+                      { ratio: 0.7, label: '70/30' },
+                      { ratio: 1.0, label: 'All New' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.ratio}
+                        type="button"
+                        onClick={() => onUpdateAppBlockerConfig({ learningRatio: opt.ratio })}
+                        className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                          Math.abs((learningRatio ?? 0.5) - opt.ratio) < 0.05
+                            ? 'bg-indigo-ai text-white'
+                            : 'text-muted hover:text-foreground'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {[
-                    { ratio: 0.5, label: '50/50' },
-                    { ratio: 0.7, label: '70/30' },
-                    { ratio: 1.0, label: 'All New' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.ratio}
-                      type="button"
-                      onClick={() => onUpdateAppBlockerConfig({ learningRatio: opt.ratio })}
-                      className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                        Math.abs((learningRatio ?? 0.5) - opt.ratio) < 0.05
-                          ? 'bg-indigo-ai text-white'
-                          : 'text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
           </div>
 

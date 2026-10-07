@@ -43,3 +43,38 @@ export function dayLabel(dayKey: string, todayKey: string): string {
     day: "numeric",
   });
 }
+
+/** Returns the UTC Date corresponding to midnight (start of day) for a dayKey in the given timezone. */
+export function startOfDayInTimezone(dayKey: string, timeZone: string = "UTC"): Date {
+  try {
+    const [year, month, day] = dayKey.split("-").map(Number);
+    const targetUtc = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      hourCycle: "h23",
+    });
+    const parts = formatter.formatToParts(targetUtc);
+    const getPart = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+    const tzYear = getPart("year");
+    const tzMonth = getPart("month");
+    const tzDay = getPart("day");
+    const tzHour = getPart("hour");
+    const tzMinute = getPart("minute");
+    const tzSecond = getPart("second");
+
+    const asUtcInstant = Date.UTC(tzYear, tzMonth - 1, tzDay, tzHour, tzMinute, tzSecond);
+    const offsetMs = asUtcInstant - targetUtc.getTime();
+
+    return new Date(targetUtc.getTime() - offsetMs);
+  } catch {
+    return new Date(`${dayKey}T00:00:00Z`);
+  }
+}
+

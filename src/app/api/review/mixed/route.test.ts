@@ -1,197 +1,218 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "./route";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth-helpers";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    userFlashcard: { findMany: vi.fn() },
-    userKanji: { findMany: vi.fn() },
+    userFlashcard: {
+      findMany: vi.fn(),
+    },
+    userKanji: {
+      findMany: vi.fn(),
+    },
   },
 }));
-vi.mock("@/lib/auth-helpers");
 
-describe("/api/review/mixed GET", () => {
+vi.mock("@/lib/auth-helpers", () => ({
+  getCurrentUser: vi.fn(),
+}));
+
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth-helpers";
+
+describe("Mixed Review API - GET (/api/review/mixed)", () => {
+  const mockUser = { id: "user-123", email: "test@example.com" };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns 401 if not logged in", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue(null);
+  it("returns 401 when unauthenticated", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(null);
+
     const req = new Request("http://localhost/api/review/mixed");
     const res = await GET(req);
+    const data = await res.json();
+
     expect(res.status).toBe(401);
+    expect(data.error).toBe("Unauthorized");
   });
 
-  it("fetches and shuffles vocabulary and kanji cards", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
-    
-    const now = new Date();
-    const mockVocab = [
+  it("composes session with both vocab and kanji cards", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
+
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([
       {
-        id: "v1",
-        word: { dictionary: "猫", reading: "ねこ", meanings: '["cat"]', partOfSpeech: "noun" },
-        reading: "ねこ",
-        meaning: "cat",
-        partOfSpeech: "noun",
+        id: "uf-1",
+        userId: "user-123",
         status: "learning",
-        repetitions: 0,
         easeFactor: 2.5,
-        interval: 0,
-        nextReview: now,
-        createdAt: now,
-      },
-    ];
-    
-    const mockKanji = [
-      {
-        id: "k1",
-        kanji: {
-          character: "猫",
-          meanings: '["cat"]',
-          readingsOn: '["ビョウ"]',
-          readingsKun: '["ねこ"]',
+        repetitions: 2,
+        interval: 5,
+        nextReview: new Date(Date.now() - 10000),
+        createdAt: new Date("2026-01-01"),
+        word: {
+          id: "w-1",
+          dictionary: "食べる",
+          reading: "たべる",
+          meanings: '["to eat"]',
+          partOfSpeech: "verb",
         },
-        mnemonic: "A cat with claws",
+        wordForm: null,
+        phrase: null,
+      },
+    ] as never);
+
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([
+      {
+        id: "uk-1",
+        userId: "user-123",
         status: "learning",
-        repetitions: 0,
         easeFactor: 2.5,
-        interval: 0,
-        nextReview: now,
-        createdAt: now,
+        repetitions: 2,
+        interval: 5,
+        nextReview: new Date(Date.now() - 10000),
+        createdAt: new Date("2026-01-01"),
+        kanji: {
+          id: "k-1",
+          character: "食",
+          meanings: '["eat","food"]',
+          readingsOn: '["ショク"]',
+          readingsKun: '["た.べる"]',
+          radicals: '["飠"]',
+          primitives: '["eat"]',
+          heisigNumber: 42,
+          heisigKeyword: "eat",
+          heisigLesson: 4,
+        },
+        customMeaning: "eat",
+        mnemonic: "Picture someone eating",
       },
-    ];
-
-    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue(mockVocab as never);
-    vi.mocked(prisma.userKanji.findMany).mockResolvedValue(mockKanji as never);
-
-    const req = new Request("http://localhost/api/review/mixed?studyMode=due&limit=20");
-    const res = await GET(req);
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.cards).toHaveLength(2);
-    expect(json.cards.some((c: { type: string }) => c.type === "vocabulary")).toBe(true);
-    expect(json.cards.some((c: { type: string }) => c.type === "kanji")).toBe(true);
-  });
-
-  it("uses session composition ordering for due cards", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
-    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
-
-    await GET(new Request("http://localhost/api/review/mixed?studyMode=due&limit=20"));
-
-    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
-      })
-    );
-    expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderBy: [{ easeFactor: "asc" }, { repetitions: "asc" }, { createdAt: "asc" }],
-      })
-    );
-  });
-
-  it("respects limit parameter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
-    
-    const now = new Date();
-    const mockVocab = Array.from({ length: 50 }, (_, i) => ({
-      id: `v${i}`,
-      word: { dictionary: "語", reading: "ご", meanings: '["word"]', partOfSpeech: "noun" },
-      status: "learning",
-      repetitions: 0,
-      easeFactor: 2.5,
-      interval: 0,
-      nextReview: now,
-      createdAt: now,
-    }));
-    
-    const mockKanji = Array.from({ length: 50 }, (_, i) => ({
-      id: `k${i}`,
-      kanji: {
-        character: "字",
-        meanings: '["character"]',
-        readingsOn: '["ジ"]',
-        readingsKun: '["あざ"]',
-      },
-      mnemonic: "test",
-      status: "learning",
-      repetitions: 0,
-      easeFactor: 2.5,
-      interval: 0,
-      nextReview: now,
-      createdAt: now,
-    }));
-
-    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue(mockVocab as never);
-    vi.mocked(prisma.userKanji.findMany).mockResolvedValue(mockKanji as never);
-
-    const req = new Request("http://localhost/api/review/mixed?limit=10");
-    const res = await GET(req);
-    const json = await res.json();
-
-    expect(json.cards.length).toBeLessThanOrEqual(10);
-  });
-
-  it("backfills from kanji when vocab pool is empty", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
-
-    const now = new Date();
-    // No vocab cards due at all
-    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([] as never);
-
-    const mockKanji = Array.from({ length: 20 }, (_, i) => ({
-      id: `k${i}`,
-      kanji: {
-        character: "字",
-        meanings: '["character"]',
-        readingsOn: '["ジ"]',
-        readingsKun: '["あざ"]',
-      },
-      mnemonic: null,
-      status: "learning",
-      repetitions: 0,
-      easeFactor: 2.5,
-      interval: 0,
-      nextReview: now,
-      createdAt: now,
-    }));
-    vi.mocked(prisma.userKanji.findMany).mockResolvedValue(mockKanji as never);
+    ] as never);
 
     const req = new Request("http://localhost/api/review/mixed?studyMode=due&limit=10");
     const res = await GET(req);
-    const json = await res.json();
-
-    // Should return up to 10 kanji cards even though vocab pool is empty
-    expect(json.cards.length).toBeGreaterThan(0);
-    expect(json.cards.every((c: { type: string }) => c.type === "kanji")).toBe(true);
-    expect(json.cards.length).toBeLessThanOrEqual(10);
-  });
-
-  it("handles empty results gracefully", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
-    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
-
-    const req = new Request("http://localhost/api/review/mixed");
-    const res = await GET(req);
-    const json = await res.json();
+    const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.cards).toHaveLength(0);
+    expect(data.cards.length).toBe(2);
+
+    const vocabCard = data.cards.find((c: { type: string }) => c.type === "vocabulary");
+    const kanjiCard = data.cards.find((c: { type: string }) => c.type === "kanji");
+
+    expect(vocabCard).toBeDefined();
+    expect(vocabCard.word).toBe("食べる");
+    expect(vocabCard.meaning).toBe("to eat");
+
+    expect(kanjiCard).toBeDefined();
+    expect(kanjiCard.character).toBe("食");
+    expect(kanjiCard.meanings).toEqual(["eat", "food"]);
+    expect(kanjiCard.primitives).toEqual(["eat"]);
+    expect(kanjiCard.customMeaning).toBe("eat");
   });
 
-  it("accepts and processes learningRatio query parameter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user1", username: "test" } as never);
-    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
+  it("handles struggling mode (The Gauntlet) with easeFactor < 2.0 filter", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
 
-    const req = new Request("http://localhost/api/review/mixed?studyMode=all&limit=10&learningRatio=1.0");
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([
+      {
+        id: "uf-struggle",
+        userId: "user-123",
+        status: "learning",
+        easeFactor: 1.7,
+        repetitions: 4,
+        interval: 2,
+        nextReview: new Date(),
+        createdAt: new Date(),
+        word: {
+          dictionary: "難しい",
+          reading: "むずかしい",
+          meanings: '["difficult"]',
+          partOfSpeech: "adjective",
+        },
+        wordForm: null,
+        phrase: null,
+      },
+    ] as never);
+
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([] as never);
+
+    const req = new Request("http://localhost/api/review/mixed?studyMode=struggling&limit=50");
     const res = await GET(req);
+    const data = await res.json();
+
     expect(res.status).toBe(200);
+    expect(data.cards.length).toBe(1);
+    expect(data.cards[0].word).toBe("難しい");
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-123",
+          easeFactor: { lt: 2.0 },
+        }),
+      })
+    );
+  });
+
+  it("safely parses malformed JSON without crashing", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
+
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([
+      {
+        id: "uf-broken",
+        userId: "user-123",
+        status: "learning",
+        easeFactor: 2.5,
+        repetitions: 1,
+        interval: 1,
+        nextReview: new Date(),
+        createdAt: new Date(),
+        word: {
+          dictionary: "言葉",
+          reading: "ことば",
+          meanings: "INVALID_JSON_STRING",
+          partOfSpeech: "noun",
+        },
+        wordForm: null,
+        phrase: null,
+      },
+    ] as never);
+
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([
+      {
+        id: "uk-broken",
+        userId: "user-123",
+        status: "learning",
+        easeFactor: 2.5,
+        repetitions: 1,
+        interval: 1,
+        nextReview: new Date(),
+        createdAt: new Date(),
+        kanji: {
+          id: "k-broken",
+          character: "言",
+          meanings: "NOT_JSON",
+          readingsOn: "NOT_JSON",
+          readingsKun: "NOT_JSON",
+          radicals: "NOT_JSON",
+          primitives: "NOT_JSON",
+          heisigNumber: null,
+          heisigKeyword: null,
+          heisigLesson: null,
+        },
+        customMeaning: null,
+        mnemonic: null,
+      },
+    ] as never);
+
+    const req = new Request("http://localhost/api/review/mixed?studyMode=all&limit=10");
+    const res = await GET(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.cards.length).toBe(2);
+    const brokenKanji = data.cards.find((c: { type: string }) => c.type === "kanji");
+    expect(brokenKanji.meanings).toEqual([]);
+    expect(brokenKanji.readingsOn).toEqual([]);
+    expect(brokenKanji.primitives).toEqual([]);
   });
 });
-

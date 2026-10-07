@@ -23,11 +23,7 @@ const FURIGANA: { id: FuriganaMode; label: string }[] = [
   { id: "never", label: "Off" },
 ];
 
-const LEARNING_MIX: { ratio: number; label: string }[] = [
-  { ratio: 0.5, label: "50 / 50" },
-  { ratio: 0.7, label: "70 / 30 new" },
-  { ratio: 1, label: "All new focus" },
-];
+
 
 export default function ReviewDefaultsCard() {
   const [config, setConfig] = useState<LearningConfig>(() => getLearningConfig());
@@ -46,9 +42,7 @@ export default function ReviewDefaultsCard() {
     if (updates.defaultDirection !== undefined) {
       appBlockerUpdates.direction = updates.defaultDirection;
     }
-    if (updates.defaultLearningRatio !== undefined) {
-      appBlockerUpdates.learningRatio = updates.defaultLearningRatio;
-    }
+
     if (Object.keys(appBlockerUpdates).length > 0) {
       AppBlocker.setAppBlockerConfig(appBlockerUpdates).catch(() => {});
     }
@@ -114,23 +108,7 @@ export default function ReviewDefaultsCard() {
         </p>
       </div>
 
-      <div className="mt-5">
-        <p className="text-sm font-bold">New vs review mix</p>
-        <p className="mb-2 text-xs text-muted">
-          Share of &quot;active learning&quot; cards vs maintenance in mixed sessions.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {LEARNING_MIX.map((m) => (
-            <Chip
-              key={m.ratio}
-              active={config.defaultLearningRatio === m.ratio}
-              onClick={() => patch({ defaultLearningRatio: m.ratio })}
-            >
-              {m.label}
-            </Chip>
-          ))}
-        </div>
-      </div>
+
 
       <div className="mt-5 flex items-start justify-between gap-4 border-t-2 border-border pt-4">
         <div>

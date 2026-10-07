@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { dayKeyFor, previousDayKey } from "@/lib/day";
+import { dayKeyFor, previousDayKey, startOfDayInTimezone } from "@/lib/day";
 import { currentStreak } from "@/lib/streak";
 import type { User } from "@/generated/prisma/client";
 
@@ -66,7 +66,13 @@ export const getDashboardStatsForUser = cache(async (user: User): Promise<Dashbo
       prisma.userFlashcard.count({
         where: { userId: user.id, nextReview: { lte: now } },
       }),
-      prisma.message.count({ where: { senderUserId: user.id, senderKind: "user" } }),
+      prisma.message.count({
+        where: {
+          senderUserId: user.id,
+          senderKind: "user",
+          createdAt: { gte: startOfDayInTimezone(todayKey, user.timezone) },
+        },
+      }),
       prisma.userKanji.count({ where: { userId: user.id, status: "known" } }),
       prisma.userKanji.count({ where: { userId: user.id, status: "learning" } }),
       prisma.userKanji.count({ where: { userId: user.id, status: "new" } }),

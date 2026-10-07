@@ -20,9 +20,9 @@ interface SessionComposition<T extends Card> {
 /**
  * Composes a review session from active (focused learning) and maintenance (retention) pools.
  * 
- * Active pool: 50% of session
- *   - Priority: All new cards (repetitions === 0) first
- *   - Then: Weak cards (easeFactor < 2.2 AND interval < 3)
+ * Active pool: 50% of session (or learningRatio)
+ *   - Priority: New cards (repetitions === 0) first
+ *   - Then: Weak cards (easeFactor < 2.2 AND interval < 3, or high difficulty & low stability)
  *   - Sorted deterministically: easeFactor → repetitions → createdAt (all asc)
  * 
  * Maintenance pool: 50% of session

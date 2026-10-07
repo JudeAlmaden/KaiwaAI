@@ -44,7 +44,8 @@ type Setup = {
 };
 
 export default function ReviewClient() {
-  const [phase, setPhase] = useState<"setup" | "session" | "done" | "empty">("setup");
+  const [phase, setPhase] = useState<"setup" | "session" | "done" | "empty" | "error">("setup");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [setup, setSetup] = useState<Setup>({ 
     reviewType: "vocabulary",
     studyMode: "due", 
@@ -253,14 +254,16 @@ export default function ReviewClient() {
     setShowHint(true);
   }, [activePool, setup.reviewType, handleGenerateMnemonic]);
 
-  useEffect(() => {
-    // Always fetch from the mixed endpoint for due count so kanji cards are included.
-    // Daily Quest is a mixed session, so the badge should reflect both vocab + kanji due.
+  const refreshDueCount = useCallback(() => {
     fetch("/api/review/mixed?studyMode=due&limit=200")
       .then((r) => r.json())
       .then((d) => setDueCount(d.cards?.length ?? 0))
       .catch(() => setDueCount(0));
   }, []);
+
+  useEffect(() => {
+    refreshDueCount();
+  }, [refreshDueCount]);
 
   const fetchMoreCards = useCallback(async () => {
     const endpoint = setup.reviewType === "mixed" 
@@ -345,6 +348,12 @@ export default function ReviewClient() {
     if (isNetworkError && typeof navigator !== "undefined" && !navigator.onLine) {
       const fallbackSource = s.reviewType === "kanji" ? FALLBACK_OFFLINE_KANJI_CARDS : FALLBACK_OFFLINE_CARDS;
       cards = fallbackSource.slice(0, Math.min(s.limit, fallbackSource.length));
+    }
+
+    if (isNetworkError && cards.length === 0) {
+      setErrorMessage("Unable to load review cards. Please check your network connection or try again.");
+      setPhase("error");
+      return;
     }
 
     // If deck is legitimately empty, show clear empty state instead of fake cards or blank screen
@@ -544,14 +553,39 @@ export default function ReviewClient() {
   // ── EMPTY ───────────────────────────────────────────────────────────────
   if (phase === "empty") {
     const isKanji = setup.reviewType === "kanji";
-    const isVocab = setup.reviewType === "vocabulary";
+    const isDue = setup.studyMode === "due";
+    const isStruggling = setup.studyMode === "struggling" || setup.studyMode === "leeches";
+
+    const emptyTitle = isKanji
+      ? "No Kanji to Study Yet"
+      : isDue
+      ? "All Caught Up! 🎉"
+      : isStruggling
+      ? "Gauntlet Cleared! 🔥"
+      : "No Flashcards Found";
+
+    const emptySubtitle = isKanji
+      ? "No kanji in study list"
+      : isDue
+      ? "No cards due for review"
+      : isStruggling
+      ? "No difficult cards found"
+      : "No cards match this criteria";
+
+    const emptyDescription = isKanji
+      ? "You haven't added any kanji to your study list yet. Create a lesson folder, import from your Heisig RTK notes, or browse your folders to start studying!"
+      : isDue
+      ? "You have reviewed all flashcards currently due. Great work! You can study ahead with all cards or chat with Kai to learn new words."
+      : isStruggling
+      ? "You don't have any cards currently marked as struggling or leeches. Keep reviewing to maintain your mastery!"
+      : "No flashcards match this review criteria. Chat with Kai or save new vocabulary to build your review deck.";
 
     return (
       <div className="flex flex-1 flex-col relative overflow-hidden">
         <PageHeader 
           title="Review" 
           jp="復習" 
-          subtitle={isKanji ? "No kanji in study list" : "No cards due for review"} 
+          subtitle={emptySubtitle} 
         />
         
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center z-10 max-w-md mx-auto">
@@ -559,24 +593,20 @@ export default function ReviewClient() {
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-amber/15 border-2 border-amber/30 text-4xl font-bold font-jp text-amber shadow-lg shadow-amber/10 mb-5 animate-pulse">
               漢
             </div>
+          ) : isStruggling ? (
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-sakura/15 border-2 border-sakura/30 text-3xl mb-5">
+              🔥
+            </div>
           ) : (
             <Kai size={80} className="mb-4" />
           )}
 
           <h2 className="font-display text-2xl font-extrabold text-foreground">
-            {isKanji
-              ? "No Kanji to Study Yet"
-              : isVocab && setup.studyMode === "due"
-              ? "All Caught Up! 🎉"
-              : "No Flashcards Found"}
+            {emptyTitle}
           </h2>
 
           <p className="mt-3 text-sm text-muted leading-relaxed">
-            {isKanji
-              ? "You haven't added any kanji to your study list yet. Create a lesson folder, import from your Heisig RTK notes, or browse your folders to start studying!"
-              : isVocab && setup.studyMode === "due"
-              ? "You have reviewed all vocabulary flashcards currently due. Great work! You can study ahead with all cards or chat with Kai to learn new words."
-              : "No flashcards match this review criteria. Chat with Kai or save new vocabulary to build your review deck."}
+            {emptyDescription}
           </p>
 
           <div className="mt-8 flex flex-col gap-3 w-full">
@@ -589,7 +619,7 @@ export default function ReviewClient() {
               </Link>
             ) : (
               <>
-                {setup.studyMode === "due" && (
+                {(isDue || isStruggling) && (
                   <button
                     onClick={() => start({ ...setup, studyMode: "all" })}
                     className="w-full inline-flex h-12 items-center justify-center rounded-2xl bg-indigo-ai border-b-4 border-indigo-deep px-6 text-sm font-bold text-white shadow-sm hover:brightness-105 transition active:translate-y-[2px]"
@@ -607,7 +637,56 @@ export default function ReviewClient() {
             )}
 
             <button
-              onClick={() => setPhase("setup")}
+              onClick={() => {
+                refreshDueCount();
+                setPhase("setup");
+              }}
+              className="w-full inline-flex h-12 items-center justify-center rounded-2xl border border-border bg-card/40 px-6 text-sm font-bold text-muted transition hover:text-foreground"
+            >
+              ← Back to Quest Gallery
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ERROR ───────────────────────────────────────────────────────────────
+  if (phase === "error") {
+    return (
+      <div className="flex flex-1 flex-col relative overflow-hidden">
+        <PageHeader 
+          title="Review" 
+          jp="復習" 
+          subtitle="Connection issue" 
+        />
+        
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center z-10 max-w-md mx-auto">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-rose-500/15 border-2 border-rose-500/30 text-3xl mb-5">
+            ⚠️
+          </div>
+
+          <h2 className="font-display text-2xl font-extrabold text-foreground">
+            Something Went Wrong
+          </h2>
+
+          <p className="mt-3 text-sm text-muted leading-relaxed">
+            {errorMessage || "Unable to load review cards. Please check your network connection or try again."}
+          </p>
+
+          <div className="mt-8 flex flex-col gap-3 w-full">
+            <button
+              onClick={() => start()}
+              className="w-full inline-flex h-12 items-center justify-center rounded-2xl bg-indigo-ai border-b-4 border-indigo-deep px-6 text-sm font-bold text-white shadow-sm hover:brightness-105 transition active:translate-y-[2px]"
+            >
+              🔄 Try Again
+            </button>
+
+            <button
+              onClick={() => {
+                refreshDueCount();
+                setPhase("setup");
+              }}
               className="w-full inline-flex h-12 items-center justify-center rounded-2xl border border-border bg-card/40 px-6 text-sm font-bold text-muted transition hover:text-foreground"
             >
               ← Back to Quest Gallery
@@ -708,7 +787,14 @@ export default function ReviewClient() {
                 🚀 Launch App
               </button>
             )}
-            <PopButton onClick={() => setPhase("setup")} size="md" className="flex-1">
+            <PopButton
+              onClick={() => {
+                refreshDueCount();
+                setPhase("setup");
+              }}
+              size="md"
+              className="flex-1"
+            >
               New session
             </PopButton>
             <Link
@@ -773,6 +859,7 @@ export default function ReviewClient() {
               if (tally.again + tally.good > 0) {
                 setPhase("done");
               } else {
+                refreshDueCount();
                 setPhase("setup");
               }
             }}

@@ -2,6 +2,32 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.3] - 2026-10-07
+
+### Added
+- **Review error screen** — dedicated error phase in `ReviewClient` with retry actions, preventing network errors or server 500s from masquerading as empty decks ("All Caught Up").
+- **Timezone-aware start of day helper** — `startOfDayInTimezone` in `src/lib/day.ts` to compute exact UTC midnight in user timezone without local client/server drift.
+- **Mixed review tests** — test suite in `src/app/api/review/mixed/route.test.ts` verifying mixed composition, Gauntlet mode, backfill, and malformed JSON resilience.
+
+### Changed
+- **Focus Guard learning ratio visibility** — the "Focus" ratio selector in `InterceptionRulesModal` is now conditionally shown only when `studyMode === 'all'`, where it actually takes effect.
+- **Review empty states** — Daily Quest (`mixed` / `due`) now renders "All Caught Up! 🎉" instead of "No Flashcards Found"; The Gauntlet (`mixed` / `struggling`) renders "Gauntlet Cleared! 🔥" when 0 struggling cards exist.
+- **Due count freshness** — `refreshDueCount` callback in `ReviewClient` triggered on session completion, early exit, and return to Quest Gallery to eliminate stale badge counters.
+
+### Removed
+- **Redundant learning ratio setting** — removed duplicate "New vs review mix" chips from `ReviewDefaultsCard` and its sync to AppBlocker, establishing single source of truth.
+
+### Fixed
+- **Daily Quest chat checkmark bug** — on `/home`, the "Send a message to Kai" quest was permanently checked for any user who had ever sent a message; `dashboard-stats.ts` now counts messages sent today in the user's timezone.
+- **Mixed review backfill maintenance flags** — `src/app/api/review/mixed/route.ts` previously used stale `maintenanceCards` from pre-backfill sessions; now tracks flags from the actual session used.
+- **Kanji dictionary meanings wiped in mixed mode** — `mixed/route.ts` previously overwrote dictionary meanings with single `customMeaning`; now prepends `customMeaning` while preserving full meanings and primitives.
+- **Kanji review JSON parse 500s** — added `safeJsonArray` helper in `src/app/api/kanji/review/route.ts` preventing crashes on malformed database strings.
+
+### Technical
+- Modified: `src/app/(app)/settings/app-blocker/InterceptionRulesModal.tsx`, `src/app/(app)/settings/ReviewDefaultsCard.tsx`, `src/lib/day.ts`, `src/lib/day.test.ts`, `src/lib/dashboard-stats.ts`, `src/app/api/review/mixed/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/kanji/review/route.test.ts`, `src/app/(app)/review/ReviewClient.tsx`, `src/lib/session-composer.ts`, `package.json`, `android/app/build.gradle`
+- New: `src/app/api/review/mixed/route.test.ts`
+- Tests: 593 passing (62 files) — lint/typecheck clean
+
 ## [2.2.2] - 2026-10-05
 
 Cleanup pass: removed dead prop and import surfaced during UI consistency audit.

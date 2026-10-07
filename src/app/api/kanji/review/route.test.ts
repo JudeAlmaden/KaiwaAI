@@ -321,6 +321,46 @@ describe("Kanji Review API - GET", () => {
     expect(data.cards[1].character).toBe("二");
     expect(data.cards[1].primitives).toEqual([]);
   });
+
+  it("safely handles malformed JSON fields in kanji without throwing 500", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
+    vi.mocked(prisma.kanjiGroupEntry.findMany).mockResolvedValueOnce([
+      { kanjiId: "k-broken" },
+    ] as never);
+
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([
+      {
+        id: "uk-broken",
+        userId: "user-123",
+        kanjiId: "k-broken",
+        status: "learning",
+        mnemonic: null,
+        kanji: {
+          id: "k-broken",
+          character: "木",
+          meanings: "INVALID_JSON{",
+          readingsOn: "INVALID_JSON{",
+          readingsKun: "INVALID_JSON{",
+          radicals: "INVALID_JSON{",
+          heisigNumber: 3,
+          heisigKeyword: "tree",
+          primitives: "INVALID_JSON{",
+        },
+      } as never,
+    ]);
+
+    const req = new Request("http://localhost/api/kanji/review?groupId=grp-1");
+    const response = await GET(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.cards).toHaveLength(1);
+    expect(data.cards[0].meanings).toEqual([]);
+    expect(data.cards[0].readingsOn).toEqual([]);
+    expect(data.cards[0].readingsKun).toEqual([]);
+    expect(data.cards[0].radicals).toEqual([]);
+    expect(data.cards[0].primitives).toEqual([]);
+  });
 });
 
 describe("Kanji Review API - POST", () => {

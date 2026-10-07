@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayKeyFor, monthKeyOf, previousDayKey, dayLabel } from "./day";
+import { dayKeyFor, monthKeyOf, previousDayKey, dayLabel, startOfDayInTimezone } from "./day";
 
 describe("day helpers", () => {
   it("formats a dayKey as YYYY-MM-DD in the given timezone", () => {
@@ -35,5 +35,19 @@ describe("day helpers", () => {
     expect(label).not.toBe("Today");
     expect(label).not.toBe("Yesterday");
     expect(label.length).toBeGreaterThan(0);
+  });
+
+  it("calculates startOfDayInTimezone correctly", () => {
+    const utcMidnight = startOfDayInTimezone("2026-06-27", "UTC");
+    expect(utcMidnight.toISOString()).toBe("2026-06-27T00:00:00.000Z");
+
+    const tokyoMidnight = startOfDayInTimezone("2026-06-27", "Asia/Tokyo");
+    // Tokyo is UTC+9, so midnight in Tokyo is 15:00 UTC on the previous day
+    expect(tokyoMidnight.toISOString()).toBe("2026-06-26T15:00:00.000Z");
+    expect(dayKeyFor(tokyoMidnight, "Asia/Tokyo")).toBe("2026-06-27");
+
+    // Falls back safely for invalid timezone
+    const fallback = startOfDayInTimezone("2026-06-27", "Invalid/Tz");
+    expect(fallback.toISOString()).toBe("2026-06-27T00:00:00.000Z");
   });
 });

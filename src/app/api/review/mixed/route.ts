@@ -3,6 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { composeSession } from "@/lib/session-composer";
 
+function safeJsonArray(val: string | null | undefined): string[] {
+  if (!val) return [];
+  try {
+    const parsed = JSON.parse(val);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 // Fetch mixed cards (vocabulary + kanji) for review
 export async function GET(req: Request) {
   const user = await getCurrentUser();
@@ -104,19 +114,23 @@ export async function GET(req: Request) {
     const kanjiShortfall = halfLimit - kanjiActual;
     let vocabFinal = vocabSession.session;
     let kanjiFinal = kanjiSession.session;
+    let vocabMaintenanceCards = vocabSession.maintenanceCards;
+    let kanjiMaintenanceCards = kanjiSession.maintenanceCards;
 
     if (vocabShortfall > 0 && kanjiShortfall <= 0) {
       // Kanji has surplus; pull extra from it
       const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate, learningRatio);
       kanjiFinal = extraKanji.session;
+      kanjiMaintenanceCards = extraKanji.maintenanceCards;
     } else if (kanjiShortfall > 0 && vocabShortfall <= 0) {
       // Vocab has surplus; pull extra from it
       const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate, learningRatio);
       vocabFinal = extraVocab.session;
+      vocabMaintenanceCards = extraVocab.maintenanceCards;
     }
 
-    const vocabMaintenanceIds = new Set(vocabSession.maintenanceCards.map((c) => c.id));
-    const kanjiMaintenanceIds = new Set(kanjiSession.maintenanceCards.map((c) => c.id));
+    const vocabMaintenanceIds = new Set(vocabMaintenanceCards.map((c) => c.id));
+    const kanjiMaintenanceIds = new Set(kanjiMaintenanceCards.map((c) => c.id));
 
     vocabCards = vocabFinal.map((c) => ({ ...c, _isMaintenance: vocabMaintenanceIds.has(c.id) }));
     userKanji = kanjiFinal.map((c) => ({ ...c, _isMaintenance: kanjiMaintenanceIds.has(c.id) }));
@@ -209,33 +223,15 @@ export async function GET(req: Request) {
 
   // Transform kanji cards
   const kanjiTransformed = userKanji.map((uk) => {
-    let meanings: string[] = [];
-    try {
-      meanings = uk.customMeaning ? [uk.customMeaning] : (uk.kanji.meanings ? JSON.parse(uk.kanji.meanings) : []);
-    } catch {
-      meanings = [];
-    }
+    const rawMeanings = safeJsonArray(uk.kanji.meanings);
+    const meanings = uk.customMeaning
+      ? [uk.customMeaning, ...rawMeanings.filter((m) => m !== uk.customMeaning)]
+      : rawMeanings;
 
-    let readingsOn: string[] = [];
-    try {
-      readingsOn = uk.kanji.readingsOn ? JSON.parse(uk.kanji.readingsOn) : [];
-    } catch {
-      readingsOn = [];
-    }
-
-    let readingsKun: string[] = [];
-    try {
-      readingsKun = uk.kanji.readingsKun ? JSON.parse(uk.kanji.readingsKun) : [];
-    } catch {
-      readingsKun = [];
-    }
-
-    let radicals: string[] = [];
-    try {
-      radicals = uk.kanji.radicals ? JSON.parse(uk.kanji.radicals) : [];
-    } catch {
-      radicals = [];
-    }
+    const readingsOn = safeJsonArray(uk.kanji.readingsOn);
+    const readingsKun = safeJsonArray(uk.kanji.readingsKun);
+    const radicals = safeJsonArray(uk.kanji.radicals);
+    const primitives = safeJsonArray(uk.kanji.primitives);
 
     return {
       id: uk.id,
@@ -245,6 +241,7 @@ export async function GET(req: Request) {
       readingsOn,
       readingsKun,
       radicals,
+      primitives,
       heisigNumber: uk.kanji.heisigNumber,
       heisigKeyword: uk.kanji.heisigKeyword,
       heisigLesson: uk.kanji.heisigLesson,
