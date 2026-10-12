@@ -201,6 +201,11 @@ export class MigrationConverter {
     const now = new Date();
     const daysElapsed = this.daysBetween(lastReviewedAt, now);
 
+    // If review just occurred (sub-second elapsed time), retrievability is 1.0
+    if (daysElapsed <= 0 || daysElapsed < 1 / 86400) {
+      return 1.0;
+    }
+
     // Requirement 4.3: FSRS forgetting curve
     // R(t, S) = (1 + t/(9*S))^(-1)
     const retrievability = Math.pow(1 + daysElapsed / (9 * stability), -1);

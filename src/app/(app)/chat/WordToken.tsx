@@ -231,8 +231,19 @@ function SubWordChip({
             {token.reading !== token.surface && (
               <div className="text-xs text-muted">{token.reading}</div>
             )}
-            <div className="mt-0.5 text-xs text-muted italic">{token.romaji}</div>
-            <div className="mt-1 text-sm font-semibold text-indigo-ai">{token.meaning}</div>
+            {token.romaji &&
+              token.romaji !== token.surface &&
+              token.romaji !== token.reading &&
+              !/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(token.romaji) && (
+                <div className="mt-0.5 text-xs text-muted italic">{token.romaji}</div>
+            )}
+            {token.meaning &&
+              token.meaning !== "[" &&
+              token.meaning !== "]" &&
+              token.meaning !== "[]" &&
+              token.meaning !== token.surface && (
+                <div className="mt-1 text-sm font-semibold text-indigo-ai">{token.meaning}</div>
+            )}
             <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted">{token.pos}</div>
             <div className="mt-2">
               <WordTokenBody token={token} savedWords={savedWords} onSaved={onSaved} compact />
@@ -639,8 +650,23 @@ export default function WordToken({
                 Using: {truncateText(token.surface, 20)} → Base form: {truncateText(token.dictForm, 20)}
               </div>
             )}
-            <div className="text-xs text-muted mt-0.5 truncate" title={token.romaji}>{truncateText(token.romaji ?? "", 40)}</div>
-            <div className="mt-1.5 text-sm font-semibold text-indigo-ai break-words" title={token.meaning}>{truncateText(token.meaning, 120)}</div>
+            {token.romaji &&
+              token.romaji !== token.surface &&
+              token.romaji !== token.reading &&
+              !/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(token.romaji) && (
+                <div className="text-xs text-muted mt-0.5 truncate" title={token.romaji}>
+                  {truncateText(token.romaji, 40)}
+                </div>
+            )}
+            {token.meaning &&
+              token.meaning !== "[" &&
+              token.meaning !== "]" &&
+              token.meaning !== "[]" &&
+              token.meaning !== token.surface && (
+                <div className="mt-1.5 text-sm font-semibold text-indigo-ai break-words" title={token.meaning}>
+                  {truncateText(token.meaning, 120)}
+                </div>
+            )}
             <div className="mt-0.5 text-[10px] uppercase tracking-widest text-muted truncate" title={token.pos}>
               {truncateText(token.pos, 40)}
             </div>
@@ -1022,12 +1048,19 @@ export function SelectionLookupPopup({
         {/* 2. AI Lookup Result */}
         {!loading && aiResult && !dictLookup && (
           <div className="mt-3 space-y-2">
-            {aiResult.romaji && (
-              <div className="text-xs text-muted italic truncate" title={aiResult.romaji}>{truncateText(aiResult.romaji, 48)}</div>
+            {aiResult.romaji &&
+              aiResult.romaji !== text &&
+              !/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(aiResult.romaji) && (
+                <div className="text-xs text-muted italic truncate" title={aiResult.romaji}>{truncateText(aiResult.romaji, 48)}</div>
             )}
-            <div className="text-sm font-bold text-indigo-ai leading-relaxed break-words" title={aiResult.meaning}>
-              {truncateText(aiResult.meaning, 240)}
-            </div>
+            {aiResult.meaning &&
+              aiResult.meaning !== "[" &&
+              aiResult.meaning !== "]" &&
+              aiResult.meaning !== "[]" && (
+                <div className="text-sm font-bold text-indigo-ai leading-relaxed break-words" title={aiResult.meaning}>
+                  {truncateText(aiResult.meaning, 240)}
+                </div>
+            )}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="rounded bg-indigo-ai/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-ai truncate max-w-[60%]" title={aiResult.pos}>
                 {truncateText(aiResult.pos, 24)}

@@ -52,5 +52,13 @@ export function repairSplitTokenSurfaces(tokens: CachedToken[]): CachedToken[] {
     repaired.splice(i, end - i + 1, { ...source, surface: combined });
   }
 
+  // Clean any corrupted bracket meanings (e.g. from historical DB JSON string indexing bugs)
+  for (let k = 0; k < repaired.length; k++) {
+    const m = repaired[k]?.meaning?.trim();
+    if (m === "[" || m === "]" || m === "[]") {
+      repaired[k] = { ...repaired[k]!, meaning: "" };
+    }
+  }
+
   return repaired;
 }

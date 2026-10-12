@@ -270,9 +270,11 @@ export default function SelectionLookupPopup({
 
           {!loading && (dictLookup || aiResult) && (
             <div className="mt-2 space-y-2">
-              <div className="text-sm font-semibold text-indigo-ai">
-                {truncateText(meaning, 240)}
-              </div>
+              {meaning && meaning !== "[" && meaning !== "]" && meaning !== "[]" && (
+                <div className="text-sm font-semibold text-indigo-ai">
+                  {truncateText(meaning, 240)}
+                </div>
+              )}
               {aiResult && !dictLookup && (
                 <span className="rounded bg-sakura/10 px-1.5 py-0.5 text-[10px] font-bold text-sakura">
                   AI Translate

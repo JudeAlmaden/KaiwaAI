@@ -18,11 +18,11 @@ export default function LandingNav({ isLoggedIn }: LandingNavProps) {
       </Link>
 
       <nav className="hidden items-center gap-7 text-xs font-semibold text-muted lg:flex 2xl:text-[13px]">
-        <a href="#how" className="transition-colors hover:text-indigo-ai">How it works</a>
         <a href="#features" className="transition-colors hover:text-indigo-ai">Features</a>
         <a href="#demo" className="transition-colors hover:text-indigo-ai">Interactive Demo</a>
-        <a href="#levels" className="transition-colors hover:text-indigo-ai">JLPT N5–N1</a>
-        <a href="#pricing" className="transition-colors hover:text-indigo-ai">Pricing</a>
+        <a href="#quests" className="transition-colors hover:text-indigo-ai">Roleplay Quests</a>
+        <a href="#study" className="transition-colors hover:text-indigo-ai">FSRS Study</a>
+        <a href="#how" className="transition-colors hover:text-indigo-ai">How It Works</a>
       </nav>
 
       <div className="flex items-center gap-3 text-xs font-bold 2xl:text-[13px]">

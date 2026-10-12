@@ -42,3 +42,43 @@ export function enrichmentKey(token: {
 }): string {
   return (token.dictForm || token.surface || "").trim();
 }
+
+/** Safely extracts and cleans the first meaning from a JSON-encoded meanings string */
+export function extractGloss(raw?: string): string {
+  if (!raw) return "";
+  let first = "";
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "string") {
+      first = parsed[0].trim();
+    } else if (typeof parsed === "string") {
+      first = parsed.trim();
+    }
+  } catch {
+    if (!raw.startsWith("[")) {
+      first = raw.trim();
+    }
+  }
+
+  if (!first || first === "[" || first === "]") return "";
+
+  // If the definition contains example sentences (common in JMdict where Japanese text is mixed in),
+  // extract only the English gloss portions before any Japanese sentence.
+  const parts = first.split(";").map((p) => p.trim()).filter(Boolean);
+  const englishParts: string[] = [];
+  for (const part of parts) {
+    if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(part)) {
+      break; // Stop at the first Japanese example sentence
+    }
+    englishParts.push(part);
+  }
+  return englishParts.length > 0 ? englishParts.join("; ") : first;
+}
+
+export function cleanTokenMeaning(m?: string): string {
+  if (!m) return "";
+  const trimmed = m.trim();
+  if (trimmed === "[" || trimmed === "]" || trimmed === "[]") return "";
+  if (/^[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\s]+$/.test(trimmed)) return "";
+  return trimmed;
+}

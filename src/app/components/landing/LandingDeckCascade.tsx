@@ -85,7 +85,7 @@ export default function LandingDeckCascade() {
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-mint/10 text-mint">
                 <Lightning size={18} weight="fill" />
               </div>
-              <span>Adaptive SuperMemo-2 Spaced Repetition (SRS)</span>
+              <span>Adaptive FSRS v4 Spaced Repetition (SRS)</span>
             </div>
             <div className="flex items-center gap-3 text-foreground">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-ai/10 text-indigo-ai">
