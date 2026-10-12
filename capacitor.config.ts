@@ -9,6 +9,9 @@ const config: CapacitorConfig = {
   webDir: 'out',
   ...(devUrl ? { server: { url: devUrl, cleartext: !isHttps } } : {}),
   plugins: {
+    CapacitorCookies: {
+      enabled: true
+    },
     AppBlocker: {
       enabled: true
     },

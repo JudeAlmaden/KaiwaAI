@@ -23,6 +23,7 @@ type Direction = 'jp-to-en' | 'en-to-jp' | 'mixed';
 export default function StandaloneAppLockPage() {
   const router = useRouter();
   const finishingRef = useRef(false);
+  const isGradingRef = useRef(false);
   const [blockedPackage, setBlockedPackage] = useState<string | null>(null);
   const [requiredCount, setRequiredCount] = useState(10);
   const [cards, setCards] = useState<Card[]>([]);
@@ -35,7 +36,9 @@ export default function StandaloneAppLockPage() {
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [failedCardIds, setFailedCardIds] = useState<Set<string>>(new Set());
   const [practice, setPractice] = useState(false);
-  const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>('practice');
+  const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>(
+    () => getLearningConfig().earlyReviewStrategy
+  );
   const [furiganaMode, setFuriganaMode] = useState<BlockerFuriganaMode>('always');
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
@@ -177,7 +180,7 @@ export default function StandaloneAppLockPage() {
         const urlNoDueAction = params.get('noDueAction') as BlockerNoDueAction | null;
         const noDueAction: BlockerNoDueAction = urlNoDueAction ?? savedConfig?.noDueAction ?? 'autoOpen';
         const urlEarlyStrategy = params.get('earlyReviewStrategy') as 'practice' | 'proportional' | null;
-        const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? 'practice';
+        const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? getLearningConfig().earlyReviewStrategy;
 
         const urlFuriganaMode = params.get('furiganaMode') as BlockerFuriganaMode | null;
         const urlShowFurigana = params.get('showFurigana');
@@ -295,62 +298,90 @@ export default function StandaloneAppLockPage() {
   }, [initResult, router]);
 
   const handleGrade = useCallback(
-    (grade: number) => {
+    async (grade: number) => {
+      if (isGradingRef.current) return;
       const card = cards[currentIndex];
       if (!card) return;
 
       const isFirstAttempt = !gradedIds.has(card.id);
       if (!isFirstAttempt && (grade === 2 || grade === 3)) return;
 
-      if (isFirstAttempt && !practice) {
-        const cardType = card.type || 'vocabulary';
-        const endpoint = cardType === 'kanji' ? '/api/kanji/review' : '/api/flashcards/review';
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cardId: card.id, grade, earlyReviewStrategy, desiredRetention: getLearningConfig().desiredRetention }),
-        }).catch(() => {});
-      }
+      isGradingRef.current = true;
 
-      if (isFirstAttempt) {
-        setGradedIds((prev) => {
-          const next = new Set(prev);
-          next.add(card.id);
-          return next;
-        });
-      }
+      try {
+        if (isFirstAttempt && !practice) {
+          const cardType = card.type || 'vocabulary';
+          const endpoint = cardType === 'kanji' ? '/api/kanji/review' : '/api/flashcards/review';
+          try {
+            await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                cardId: card.id,
+                grade,
+                earlyReviewStrategy,
+                desiredRetention: getLearningConfig().desiredRetention,
+              }),
+            });
+          } catch (err) {
+            console.error('[app-lock] Failed to persist review grade:', err);
+          }
+        }
 
-      setFlipped(false);
-      setCardEpoch((e) => e + 1);
+        if (isFirstAttempt) {
+          setGradedIds((prev) => {
+            const next = new Set(prev);
+            next.add(card.id);
+            return next;
+          });
+        }
 
-      if (grade > 0) {
-        // PASSED: increment completedCount and remove from session deck
-        const newCompleted = completedCount + 1;
-        setCompletedCount(newCompleted);
+        setFlipped(false);
+        setCardEpoch((e) => e + 1);
 
-        const nextCards = [...cards];
-        nextCards.splice(currentIndex, 1);
+        if (grade > 0) {
+          // PASSED: increment completedCount and remove from session deck
+          const newCompleted = completedCount + 1;
+          setCompletedCount(newCompleted);
 
-        if (newCompleted >= requiredCount || nextCards.length === 0) {
-          finishUnlock(blockedPackage);
+          const nextCards = [...cards];
+          nextCards.splice(currentIndex, 1);
+
+          if (newCompleted >= requiredCount || nextCards.length === 0) {
+            await finishUnlock(blockedPackage);
+          } else {
+            setCards(nextCards);
+            setCurrentIndex((prev) => (nextCards.length > 0 ? prev % nextCards.length : 0));
+          }
         } else {
+          // FAILED ("Again"):
+          // Do NOT increment completedCount!
+          // Track as failed card so Good & Easy are disabled when it returns
+          setFailedCardIds((prev) => new Set(prev).add(card.id));
+          // Re-insert the card randomly towards the back (minimum 2 positions ahead if available)
+          const nextCards = [...cards];
+          const [failedCard] = nextCards.splice(currentIndex, 1);
+          const remainingAhead = nextCards.length - currentIndex;
+          let targetIndex: number;
+          if (remainingAhead <= 0) {
+            targetIndex = nextCards.length;
+          } else if (remainingAhead === 1) {
+            targetIndex = currentIndex + 1;
+          } else {
+            // Pick a random index between (currentIndex + 2) and the end of the deck
+            const minIndex = currentIndex + 2;
+            const maxIndex = nextCards.length;
+            targetIndex = minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
+          }
+          nextCards.splice(targetIndex, 0, failedCard);
+
           setCards(nextCards);
           setCurrentIndex((prev) => (nextCards.length > 0 ? prev % nextCards.length : 0));
         }
-      } else {
-        // FAILED ("Again"):
-        // Do NOT increment completedCount!
-        // Track as failed card so Good & Easy are disabled when it returns
-        setFailedCardIds((prev) => new Set(prev).add(card.id));
-        // Re-insert the card 2 positions ahead so it returns later in the same session.
-        const nextCards = [...cards];
-        const [failedCard] = nextCards.splice(currentIndex, 1);
-        const insertOffset = 2; // will show 2 other cards first if available
-        const targetIndex = Math.min(currentIndex + insertOffset, nextCards.length);
-        nextCards.splice(targetIndex, 0, failedCard);
-
-        setCards(nextCards);
-        setCurrentIndex((prev) => (nextCards.length > 0 ? prev % nextCards.length : 0));
+      } finally {
+        setTimeout(() => {
+          isGradingRef.current = false;
+        }, 150);
       }
     },
     [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, earlyReviewStrategy, finishUnlock]

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
 const COOKIE_NAME = "kaiwa_session";
-const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 function getSecretKey() {
   const secret = process.env.SESSION_SECRET;
@@ -29,7 +29,7 @@ export async function createSession(payload: SessionPayload) {
   
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: false, // Allow HTTP for mobile app
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax", // Lax works for same-site
     path: "/",
     maxAge: MAX_AGE,

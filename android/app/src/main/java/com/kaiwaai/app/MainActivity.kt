@@ -31,6 +31,16 @@ class MainActivity : BridgeActivity() {
         handleRouteIntent(intent)
     }
 
+    override fun onPause() {
+        super.onPause()
+        CookieManager.getInstance().flush()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        CookieManager.getInstance().flush()
+    }
+
     private fun handleRouteIntent(intent: Intent?) {
         val route = intent?.getStringExtra("route") ?: return
 

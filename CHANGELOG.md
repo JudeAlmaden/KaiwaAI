@@ -2,6 +2,26 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.4] - 2026-10-12
+
+### Added
+- **Android WebView cookie flush on lifecycle** — explicit `CookieManager.getInstance().flush()` calls on `onPause()` and `onStop()` in `MainActivity.kt` to persist session cookies to SQLite immediately, preventing session loss when the Android package installer kills the process during APK updates.
+- **Native Capacitor cookie bridge** — enabled `CapacitorCookies` in `capacitor.config.ts` for native Android persistent storage support.
+
+### Changed
+- **Extended session cookie lifespan** — increased session cookie `MAX_AGE` from 7 days to 30 days in `src/lib/session.ts` for long-lived mobile sessions.
+- **Production cookie security** — configured session cookies with `secure: process.env.NODE_ENV === "production"` to satisfy modern Chromium/WebView SSL persistence standards.
+- **Focus Guard early review strategy alignment** — defaulted `app-lock` early review strategy resolution to `getLearningConfig().earlyReviewStrategy` instead of hardcoding `'practice'`.
+
+### Fixed
+- **Focus Guard rapid card repetition on failure** — failed cards ("Again" / grade 0) are now re-inserted randomly towards the back (minimum 2 cards ahead if available) rather than deterministically 2 cards ahead.
+- **Focus Guard final card drop on unlock** — `handleGrade` in `src/app/app-lock/page.tsx` now awaits the review persistence POST request before `finishUnlock()` navigates away, eliminating the race condition where the 10th card's grade was canceled by page teardown.
+- **Focus Guard grading input debouncing** — added a synchronous `isGradingRef` guard in `app-lock` to drop duplicate events from rapid double-taps or keypresses during deck transitions.
+
+### Technical
+- Modified: `src/app/app-lock/page.tsx`, `android/app/src/main/java/com/kaiwaai/app/MainActivity.kt`, `capacitor.config.ts`, `src/lib/session.ts`, `package.json`, `android/app/build.gradle`
+- Tests: 593 passing (62 files) — lint/typecheck clean
+
 ## [2.2.3] - 2026-10-07
 
 ### Added
