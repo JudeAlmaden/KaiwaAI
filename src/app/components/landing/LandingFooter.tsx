@@ -31,7 +31,7 @@ export default function LandingFooter() {
         会話
       </span>
 
-      <div className="relative mx-auto max-w-6xl px-6 pt-16 pb-12 sm:px-10 sm:pt-20">
+      <div className="relative mx-auto w-full max-w-7xl px-4 pt-16 pb-12 sm:px-7 sm:pt-20 2xl:max-w-[1500px]">
         <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
           {/* Brand Col (spans 2 on lg) */}
           <div className="sm:col-span-2 lg:col-span-2 space-y-4">
@@ -64,13 +64,13 @@ export default function LandingFooter() {
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/chat"
+                <a
+                  href="#quests"
                   className="inline-flex items-center gap-2 text-muted hover:text-amber transition-colors font-semibold"
                 >
                   <Compass size={16} weight="duotone" />
                   <span>Roleplay Quests</span>
-                </Link>
+                </a>
               </li>
               <li>
                 <Link
@@ -96,7 +96,7 @@ export default function LandingFooter() {
                   className="inline-flex items-center gap-2 text-muted hover:text-sakura transition-colors font-semibold"
                 >
                   <Sparkle size={16} weight="duotone" />
-                  <span>SRS Flashcards</span>
+                  <span>FSRS Flashcards</span>
                 </Link>
               </li>
             </ul>
@@ -132,15 +132,15 @@ export default function LandingFooter() {
                   className="inline-flex items-center gap-2 text-muted hover:text-indigo-ai transition-colors font-semibold"
                 >
                   <Key size={16} weight="duotone" />
-                  <span>API Key Config</span>
+                  <span>API Key Config (BYOK)</span>
                 </Link>
               </li>
               <li>
                 <a
-                  href="#privacy"
+                  href="#demo"
                   className="inline-flex items-center gap-2 text-muted hover:text-indigo-ai transition-colors font-semibold"
                 >
-                  <span>100% Client Privacy</span>
+                  <span>Interactive Live Canvas</span>
                 </a>
               </li>
               <li>
@@ -187,10 +187,10 @@ export default function LandingFooter() {
               </li>
               <li>
                 <a
-                  href="#privacy"
+                  href="#study"
                   className="text-muted hover:text-foreground transition-colors font-semibold"
                 >
-                  <span>Security &amp; Keys</span>
+                  <span>FSRS Review System</span>
                 </a>
               </li>
             </ul>
@@ -206,12 +206,16 @@ export default function LandingFooter() {
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
-            <a href="#privacy" className="hover:text-foreground transition-colors">
-              Privacy Guarantee
+            <a href="#features" className="hover:text-foreground transition-colors">
+              Features
             </a>
             <span>·</span>
-            <a href="#features" className="hover:text-foreground transition-colors">
-              Interactive Features
+            <a href="#demo" className="hover:text-foreground transition-colors">
+              Live Demo
+            </a>
+            <span>·</span>
+            <a href="#quests" className="hover:text-foreground transition-colors">
+              Roleplay Quests
             </a>
             <span>·</span>
             <a href="#how" className="hover:text-foreground transition-colors">
@@ -219,7 +223,7 @@ export default function LandingFooter() {
             </a>
             <span>·</span>
             <Link href="/settings" className="hover:text-foreground transition-colors">
-              Settings &amp; BYOK
+              BYOK Settings
             </Link>
           </div>
         </div>

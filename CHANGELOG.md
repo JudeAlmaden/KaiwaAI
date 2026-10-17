@@ -2,7 +2,7 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
-## [2.2.5] - 2026-10-17
+## [2.2.6] - 2026-10-17
 
 ### Added
 - **Rolling context summarization** — wired up background rolling conversation summarization via `summarizeConversation()` in `GroupChatClient.tsx`, saving compressed context to `/api/groups/[id]/summary` so personas retain infinite chat memory across sessions without exceeding token limits.
@@ -24,6 +24,23 @@ All notable changes to KaiwaAI are documented in this file.
 ### Technical
 - Modified: `package.json`, `android/app/build.gradle`, `CHANGELOG.md`, `src/lib/gemini.ts`, `src/app/api/chat/context/route.ts`, `src/app/(app)/groups/[id]/GroupChatClient.tsx`, `src/app/app-lock/page.tsx`, `src/plugins/app-blocker/web.ts`, `android/app/src/main/java/com/kaiwaai/app/FlashcardBlockActivity.kt`
 - Tests: 593 passing (62 files) — lint/typecheck clean
+
+## [2.2.5] - 2026-10-13
+
+### Changed
+- **Landing page layout & grid alignment** — adjusted `LandingFooter` container width from `max-w-6xl` to `max-w-7xl px-4 sm:px-7 2xl:max-w-[1500px]`, bringing footer margins into exact alignment with `LandingNav`, `LandingHero`, and the main page content grid.
+- **Landing navigation links** — replaced dead links (`#levels`, `#pricing`, `#privacy`) in `LandingNav` and `LandingFooter` with actual interactive sections and functional routes (`#features`, `#demo`, `#quests`, `#study`, `#how`, `/settings`).
+- **Landing copy modernization** — updated legacy "SuperMemo-2" reference in `LandingDeckCascade.tsx` to "Adaptive FSRS v4 Spaced Repetition (SRS)".
+
+### Fixed
+- **Stray `[` in chat word tokens and popups** — fixed string-indexing bug in `enrichTokensFromDb` (`w.meanings[0]` / `p.meanings[0]`) where querying JSON string columns in Prisma returned character `[` instead of the definition array; added safe JSON gloss parsing (`extractGloss`) and token meaning sanitization (`cleanTokenMeaning`).
+- **Defensive UI bracket sanitization** — filtered stray bracket strings (`"["`, `"]"`, `"[]"`) and duplicate Japanese romaji labels in `WordToken.tsx`, `SubWordChip`, and `SelectionLookupPopup.tsx` so historical chat messages render cleanly without lone brackets.
+- **Token repair payload cleaning** — updated `repairSplitTokenSurfaces` to scrub corrupted bracket meanings during client-side token hydration.
+- **FSRS converter sub-second test race condition** — clamped sub-second elapsed review times in `converter.ts` to prevent microsecond floating-point test assertions from failing `toBe(1.0)`.
+
+### Technical
+- Modified: `src/lib/dictionary-enrich.ts`, `src/lib/dictionary-enrich-db.ts`, `src/lib/token-repair.ts`, `src/app/(app)/chat/WordToken.tsx`, `src/app/(app)/chat/SelectionLookupPopup.tsx`, `src/lib/fsrs/converter.ts`, `src/app/page.tsx`, `src/app/components/landing/LandingNav.tsx`, `src/app/components/landing/LandingFooter.tsx`, `src/app/components/landing/LandingDeckCascade.tsx`, `package.json`, `android/app/build.gradle`
+- Tests: 599 passing (62 files) — lint/typecheck clean
 
 ## [2.2.4] - 2026-10-12
 

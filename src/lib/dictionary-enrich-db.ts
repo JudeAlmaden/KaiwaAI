@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import {
   enrichmentKey,
+  extractGloss,
+  cleanTokenMeaning,
   type EnrichmentHit,
 } from "@/lib/dictionary-enrich";
 
@@ -24,7 +26,7 @@ export async function enrichTokensFromDb(
       surface: t.surface ?? "",
       dictForm: enrichmentKey(t),
       reading: t.reading ?? "",
-      meaning: t.meaning ?? "",
+      meaning: cleanTokenMeaning(t.meaning),
       pos: t.pos ?? "other",
     }));
   }
@@ -44,23 +46,25 @@ export async function enrichTokensFromDb(
     const key = enrichmentKey(t);
     const w = byDict.get(key);
     if (w) {
+      const dbMeaning = extractGloss(w.meanings);
       return {
         found: true as const,
         surface: t.surface ?? w.dictionary,
         dictForm: w.dictionary,
         reading: w.reading,
-        meaning: w.meanings[0] ?? t.meaning ?? "",
+        meaning: dbMeaning || cleanTokenMeaning(t.meaning),
         pos: w.partOfSpeech || t.pos || "other",
       };
     }
     const p = byPhrase.get(key);
     if (p) {
+      const dbMeaning = extractGloss(p.meanings);
       return {
         found: true as const,
         surface: t.surface ?? p.text,
         dictForm: p.text,
         reading: p.reading,
-        meaning: p.meanings[0] ?? t.meaning ?? "",
+        meaning: dbMeaning || cleanTokenMeaning(t.meaning),
         pos: p.partOfSpeech || t.pos || "phrase",
       };
     }
@@ -69,7 +73,7 @@ export async function enrichTokensFromDb(
       surface: t.surface ?? key,
       dictForm: key,
       reading: t.reading ?? key,
-      meaning: t.meaning ?? key,
+      meaning: cleanTokenMeaning(t.meaning) || key,
       pos: t.pos ?? "other",
     };
   });

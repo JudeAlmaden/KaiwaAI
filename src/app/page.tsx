@@ -30,13 +30,19 @@ export default async function Home() {
 
       <LandingVocabBuilder />
 
-      <LandingInteractiveCanvas />
+      <div id="demo">
+        <LandingInteractiveCanvas />
+      </div>
 
       <LandingLookupExperience />
 
-      <LandingQuestRPG />
+      <div id="quests">
+        <LandingQuestRPG />
+      </div>
 
-      <LandingDeckCascade />
+      <div id="study">
+        <LandingDeckCascade />
+      </div>
 
       <div id="how">
         <LandingHowItWorks />

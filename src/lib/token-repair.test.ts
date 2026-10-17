@@ -25,4 +25,16 @@ describe("repairSplitTokenSurfaces", () => {
 
     expect(result.map((item) => item.surface)).toEqual(["猫", "は"]);
   });
+
+  it("clears corrupted bracket meanings from historical token payloads", () => {
+    const result = repairSplitTokenSurfaces([
+      { ...token("値段"), meaning: "[" },
+      { ...token("本"), meaning: "]" },
+      { ...token("猫"), meaning: "cat" },
+    ]);
+
+    expect(result[0]?.meaning).toBe("");
+    expect(result[1]?.meaning).toBe("");
+    expect(result[2]?.meaning).toBe("cat");
+  });
 });

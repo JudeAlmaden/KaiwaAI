@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { applyEnrichments, enrichmentKey } from "./dictionary-enrich";
+import {
+  applyEnrichments,
+  enrichmentKey,
+  extractGloss,
+  cleanTokenMeaning,
+} from "./dictionary-enrich";
 
 describe("enrichmentKey", () => {
   it("prefers dictForm over surface for conjugated verbs", () => {
@@ -73,5 +78,41 @@ describe("applyEnrichments", () => {
       },
     ];
     expect(applyEnrichments(tokens, [])).toEqual(tokens);
+  });
+});
+
+describe("extractGloss", () => {
+  it("extracts clean meaning from a JSON array string without returning '['", () => {
+    const raw = JSON.stringify([
+      "price; cost; このラジオの値段はいくらですか。; What is the price of this radio?",
+    ]);
+    expect(extractGloss(raw)).toBe("price; cost");
+  });
+
+  it("handles plain multi-entry JSON array", () => {
+    const raw = JSON.stringify(["Victory", "Win"]);
+    expect(extractGloss(raw)).toBe("Victory");
+  });
+
+  it("never returns raw brackets for empty or bracket-like strings", () => {
+    expect(extractGloss("")).toBe("");
+    expect(extractGloss("[]")).toBe("");
+    expect(extractGloss(JSON.stringify(["["]))).toBe("");
+    expect(extractGloss("[")).toBe("");
+    expect(extractGloss("]")).toBe("");
+  });
+
+  it("preserves plain string definition when not JSON", () => {
+    expect(extractGloss("to drink")).toBe("to drink");
+  });
+});
+
+describe("cleanTokenMeaning", () => {
+  it("removes stray brackets and fallback Japanese runs", () => {
+    expect(cleanTokenMeaning("[")).toBe("");
+    expect(cleanTokenMeaning("]")).toBe("");
+    expect(cleanTokenMeaning("[]")).toBe("");
+    expect(cleanTokenMeaning("値段")).toBe("");
+    expect(cleanTokenMeaning("price")).toBe("price");
   });
 });
