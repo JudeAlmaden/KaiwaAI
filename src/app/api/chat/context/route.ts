@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 
   const now = new Date();
 
-  const [reinforceCards, knownCount, memories, chatRow, recent] =
+  const [reinforceCards, knownCount, memories, chatRow, lastUserMsg, recentCorrectionsRows] =
     await Promise.all([
       prisma.userFlashcard.findMany({
         where: {
@@ -62,11 +62,22 @@ export async function GET(req: Request) {
           })
         : Promise.resolve(null),
       chatId
-        ? prisma.message.findMany({
-            where: { chatId },
+        ? prisma.message.findFirst({
+            where: { chatId, senderKind: "user" },
             orderBy: { createdAt: "desc" },
-            take: 6,
-            select: { senderKind: true, content: true, senderUserId: true, createdAt: true },
+            select: { createdAt: true },
+          })
+        : Promise.resolve(null),
+      chatId
+        ? prisma.message.findMany({
+            where: {
+              chatId,
+              senderUserId: user.id,
+              userCorrection: { not: null },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 3,
+            select: { userCorrection: true },
           })
         : Promise.resolve([]),
     ]);
@@ -83,12 +94,30 @@ export async function GET(req: Request) {
   }
 
   let hoursSinceUserReply: number | undefined;
-  const lastUser = recent.find((m) => m.senderKind === "user");
-  if (lastUser) {
+  if (lastUserMsg) {
     hoursSinceUserReply =
-      (now.getTime() - new Date(lastUser.createdAt).getTime()) / 3.6e6;
+      (now.getTime() - new Date(lastUserMsg.createdAt).getTime()) / 3.6e6;
   } else if (chatId) {
     hoursSinceUserReply = Infinity;
+  }
+
+  const recentCorrections: string[] = [];
+  for (const row of recentCorrectionsRows) {
+    if (!row.userCorrection) continue;
+    try {
+      const parsed = JSON.parse(row.userCorrection) as {
+        explanation?: string;
+        corrected?: string;
+      };
+      if (parsed.explanation) {
+        const text = parsed.corrected
+          ? `${parsed.explanation} (better: "${parsed.corrected}")`
+          : parsed.explanation;
+        recentCorrections.push(text);
+      }
+    } catch {
+      // ignore invalid json
+    }
   }
 
   const mood: Mood | undefined = chatRow && isMood(chatRow.mood) ? chatRow.mood : undefined;
@@ -99,16 +128,12 @@ export async function GET(req: Request) {
     knownCount,
     reinforce: reinforceCards.map((c) => c.phrase?.text || c.word?.dictionary || ""),
     memories: memories.map((m) => m.content),
-    recentTurns: recent
-      .slice()
-      .reverse()
-      .map((m) => ({
-        role: m.senderKind === "user" ? "user" : "kai",
-        content: m.content,
-      })),
+    recentTurns: [],
     mood: mood ?? "neutral",
     moodScore: chatRow?.moodScore ?? 0,
     hoursSinceUserReply,
     summary: chatRow?.summary ?? null,
+    summaryUpToId: chatRow?.summaryUpToId ?? null,
+    recentCorrections,
   });
 }

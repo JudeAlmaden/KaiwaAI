@@ -4,9 +4,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { charLength, MAX_MESSAGE_CHARS } from "@/lib/types";
-import { chatWithPersona, proactiveKaiMessage, type PromptContext } from "@/lib/gemini";
-import { hasAnyKey } from "@/lib/api-keys";
+import {
+  chatWithPersona,
+  proactiveKaiMessage,
+  summarizeConversation,
+  type PromptContext,
+} from "@/lib/gemini";
 import { getAutoMemory } from "@/lib/model-config";
 import { getProactiveChat, PROACTIVE } from "@/lib/proactive-config";
 import { checkJapaneseGrammar, hasJapanese } from "@/lib/grammar-check";
@@ -134,6 +137,9 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const busyRef = useRef(false);
   const messagesRef = useRef<GMsg[]>([]);
   const pollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const summaryUpToIdRef = useRef<string | null>(null);
+  const currentSummaryRef = useRef<string | null>(null);
+  const summarizingRef = useRef(false);
 
   function scrollToBottom(behavior: ScrollBehavior = "smooth") {
     endRef.current?.scrollIntoView({ behavior });
@@ -204,6 +210,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       .then((d) => {
         if (!d) return;
         setGroup(d.group);
+        if (d.group?.summaryUpToId) summaryUpToIdRef.current = d.group.summaryUpToId;
+        if (d.group?.summary) currentSummaryRef.current = d.group.summary;
         if (isMood(d.group?.mood)) setChatMood(d.group.mood);
         const msgs: GMsg[] = d.messages ?? [];
         setMessages(msgs);
@@ -321,8 +329,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       busyRef.current = true;
       try {
         const ctx = await buildCtx(persona.id);
-        // Only send last 12 messages for context
-        const history = messagesRef.current.slice(-12).map((m) => ({
+        // Only send last 20 messages for context
+        const history = messagesRef.current.slice(-20).map((m) => ({
           role: (m.senderKind === "persona" ? "model" : "user") as
             | "user"
             | "model",
@@ -343,7 +351,9 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         const d = await res.json().catch(() => ({}));
         if (res.ok && d.message) {
           stickToBottomProactive();
-          setMessages((m) => [...m, d.message]);
+          const next = [...messagesRef.current, d.message];
+          setMessages(next);
+          void maybeSummarizeOlderMessages(next);
           consecutiveAi.current += 1;
           maybeScheduleFollowup();
         }
@@ -400,6 +410,69 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const len = charLength(input);
   const over = len > MAX_MESSAGE_CHARS;
 
+  // Background rolling summarization for messages outside the sliding context window.
+  const maybeSummarizeOlderMessages = useCallback(
+    async (currentMessages: GMsg[]) => {
+      if (summarizingRef.current || !hasAnyKey() || group?.kind !== "persona") return;
+
+      const persistable = currentMessages.filter((m) => !m.id.startsWith("tmp-"));
+      const SLIDING_WINDOW = 20;
+      if (persistable.length <= SLIDING_WINDOW) return;
+
+      const olderMessages = persistable.slice(0, persistable.length - SLIDING_WINDOW);
+      if (olderMessages.length === 0) return;
+
+      const cutoffMsg = olderMessages[olderMessages.length - 1];
+      if (summaryUpToIdRef.current === cutoffMsg.id) return;
+
+      const lastSummarizedIdx = summaryUpToIdRef.current
+        ? olderMessages.findIndex((m) => m.id === summaryUpToIdRef.current)
+        : -1;
+
+      const unsummarizedCount =
+        lastSummarizedIdx >= 0
+          ? olderMessages.length - (lastSummarizedIdx + 1)
+          : olderMessages.length;
+
+      // Only summarize if at least 6 older turns have accumulated
+      if (unsummarizedCount < 6) return;
+
+      const turnsToSummarize = (
+        lastSummarizedIdx >= 0
+          ? olderMessages.slice(lastSummarizedIdx + 1)
+          : olderMessages
+      ).map((m) => ({
+        role: (m.senderKind === "persona" ? "kai" : "user") as "kai" | "user",
+        content: m.content,
+      }));
+
+      summarizingRef.current = true;
+      try {
+        const updatedSummary = await summarizeConversation(
+          turnsToSummarize,
+          currentSummaryRef.current
+        );
+        if (updatedSummary) {
+          currentSummaryRef.current = updatedSummary;
+          summaryUpToIdRef.current = cutoffMsg.id;
+          await fetch(`/api/groups/${groupId}/summary`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              summary: updatedSummary,
+              summaryUpToId: cutoffMsg.id,
+            }),
+          });
+        }
+      } catch {
+        // Summarization is best-effort background maintenance
+      } finally {
+        summarizingRef.current = false;
+      }
+    },
+    [groupId, group?.kind]
+  );
+
   // Build a PromptContext for client-side persona generation, pulling the
   // persona's own memory from the server (scoped per persona).
   async function buildCtx(personaId: string): Promise<PromptContext> {
@@ -410,6 +483,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       if (res.ok) {
         const data = (await res.json()) as PromptContext & { mood?: string };
         if (isMood(data.mood)) setChatMood(data.mood);
+        if (data.summary) currentSummaryRef.current = data.summary;
+        if (data.summaryUpToId) summaryUpToIdRef.current = data.summaryUpToId;
         return { ...data, mood: data.mood ?? chatMood };
       }
     } catch {}
@@ -421,6 +496,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       memories: [],
       recentTurns: [],
       mood: chatMood,
+      summary: currentSummaryRef.current,
+      summaryUpToId: summaryUpToIdRef.current,
     };
   }
 
@@ -499,8 +576,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
 
       try {
         const ctx = await buildCtx(persona!.id);
-        // Only send last 12 messages for context (not the entire conversation)
-        const history = messages.slice(-12).map((m) => ({
+        // Only send last 20 messages for context (not the entire conversation)
+        const history = messages.slice(-20).map((m) => ({
           role: (m.senderKind === "persona" ? "model" : "user") as
             | "user"
             | "model",
@@ -557,10 +634,14 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         if (!res.ok) {
           setError(d.error ?? "Couldn't send.");
         } else {
-          setMessages((m) => [
-            ...m.filter((x) => x.id !== optimistic.id),
-            ...(d.messages ?? []),
-          ]);
+          setMessages((m) => {
+            const next = [
+              ...m.filter((x) => x.id !== optimistic.id),
+              ...(d.messages ?? []),
+            ];
+            void maybeSummarizeOlderMessages(next);
+            return next;
+          });
           // Surface durable facts the persona noticed, scoped to this persona.
           const sugg = kai.memorySuggestions ?? [];
           if (sugg.length > 0) {

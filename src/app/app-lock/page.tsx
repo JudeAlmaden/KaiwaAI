@@ -25,10 +25,37 @@ export default function StandaloneAppLockPage() {
   const finishingRef = useRef(false);
   const isGradingRef = useRef(false);
   const [blockedPackage, setBlockedPackage] = useState<string | null>(null);
-  const [requiredCount, setRequiredCount] = useState(10);
+  const [requiredCount, setRequiredCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const countParam = new URLSearchParams(window.location.search).get('count');
+      if (countParam) {
+        const parsed = parseInt(countParam, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+      try {
+        const raw = localStorage.getItem('kaiwa_app_blocker_config');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.count === 'number' && parsed.count > 0) return parsed.count;
+        }
+      } catch {}
+    }
+    return 10;
+  });
   const [cards, setCards] = useState<Card[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('kaiwa_app_lock_completed');
+        if (saved) {
+          const n = parseInt(saved, 10);
+          if (!isNaN(n) && n >= 0) return n;
+        }
+      } catch {}
+    }
+    return 0;
+  });
   const [flipped, setFlipped] = useState(false);
   const [cardEpoch, setCardEpoch] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -48,6 +75,9 @@ export default function StandaloneAppLockPage() {
   const finishUnlock = useCallback(async (pkg: string | null) => {
     if (finishingRef.current) return;
     finishingRef.current = true;
+    try {
+      sessionStorage.removeItem('kaiwa_app_lock_completed');
+    } catch {}
 
     // Skip native unlock call on web — it would throw
     if (!isWeb) {
@@ -169,7 +199,18 @@ export default function StandaloneAppLockPage() {
           savedConfig = null;
         }
 
-        const targetCount = countParam ? parseInt(countParam, 10) || 10 : (savedConfig?.count ?? 10);
+        let localConfigCount: number | null = null;
+        try {
+          const raw = localStorage.getItem('kaiwa_app_blocker_config');
+          if (raw) {
+            const p = JSON.parse(raw);
+            if (typeof p.count === 'number' && p.count > 0) localConfigCount = p.count;
+          }
+        } catch {}
+
+        const targetCount = countParam
+          ? parseInt(countParam, 10) || 10
+          : (savedConfig?.count ?? localConfigCount ?? 10);
         setRequiredCount(targetCount);
 
         const reviewType: AppBlockerConfig['reviewType'] = urlReviewType ?? savedConfig?.reviewType ?? 'vocabulary';
@@ -298,7 +339,7 @@ export default function StandaloneAppLockPage() {
   }, [initResult, router]);
 
   const handleGrade = useCallback(
-    async (grade: number) => {
+    (grade: number) => {
       if (isGradingRef.current) return;
       const card = cards[currentIndex];
       if (!card) return;
@@ -309,23 +350,22 @@ export default function StandaloneAppLockPage() {
       isGradingRef.current = true;
 
       try {
+        // Enforce async: persist review grade in the background without blocking the UI
         if (isFirstAttempt && !practice) {
           const cardType = card.type || 'vocabulary';
           const endpoint = cardType === 'kanji' ? '/api/kanji/review' : '/api/flashcards/review';
-          try {
-            await fetch(endpoint, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                cardId: card.id,
-                grade,
-                earlyReviewStrategy,
-                desiredRetention: getLearningConfig().desiredRetention,
-              }),
-            });
-          } catch (err) {
+          fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              cardId: card.id,
+              grade,
+              earlyReviewStrategy,
+              desiredRetention: getLearningConfig().desiredRetention,
+            }),
+          }).catch((err) => {
             console.error('[app-lock] Failed to persist review grade:', err);
-          }
+          });
         }
 
         if (isFirstAttempt) {
@@ -343,12 +383,15 @@ export default function StandaloneAppLockPage() {
           // PASSED: increment completedCount and remove from session deck
           const newCompleted = completedCount + 1;
           setCompletedCount(newCompleted);
+          try {
+            sessionStorage.setItem('kaiwa_app_lock_completed', String(newCompleted));
+          } catch {}
 
           const nextCards = [...cards];
           nextCards.splice(currentIndex, 1);
 
           if (newCompleted >= requiredCount || nextCards.length === 0) {
-            await finishUnlock(blockedPackage);
+            void finishUnlock(blockedPackage);
           } else {
             setCards(nextCards);
             setCurrentIndex((prev) => (nextCards.length > 0 ? prev % nextCards.length : 0));
@@ -381,7 +424,7 @@ export default function StandaloneAppLockPage() {
       } finally {
         setTimeout(() => {
           isGradingRef.current = false;
-        }, 150);
+        }, 100);
       }
     },
     [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, earlyReviewStrategy, finishUnlock]
@@ -396,20 +439,22 @@ export default function StandaloneAppLockPage() {
       if (e.code === 'Space') {
         e.preventDefault();
         setFlipped((f) => !f);
-      } else if (e.key === '1') {
-        handleGrade(0);
-      } else if (e.key === '2') {
-        handleGrade(1);
-      } else if (e.key === '3') {
-        if (!isCardFailed) handleGrade(2);
-      } else if (e.key === '4') {
-        if (!isCardFailed) handleGrade(3);
+      } else if (flipped) {
+        if (e.key === '1') {
+          handleGrade(0);
+        } else if (e.key === '2') {
+          handleGrade(1);
+        } else if (e.key === '3') {
+          if (!isCardFailed) handleGrade(2);
+        } else if (e.key === '4') {
+          if (!isCardFailed) handleGrade(3);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleGrade, isCardFailed]);
+  }, [handleGrade, isCardFailed, flipped]);
 
   if (loading || initResult?.kind === 'redirect-home' || initResult?.kind === 'auto-unlocked') {
     return (
@@ -474,7 +519,7 @@ export default function StandaloneAppLockPage() {
             </span>
           )}
           <div className="px-3.5 py-1.5 rounded-full bg-indigo-ai/10 text-indigo-ai font-display text-xs font-extrabold border border-indigo-ai/20">
-            {completedCount} / {requiredCount} Cards
+            {Math.max(0, requiredCount - completedCount)} Left · {completedCount} / {requiredCount}
           </div>
         </div>
       </header>

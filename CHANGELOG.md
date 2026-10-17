@@ -2,6 +2,29 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.5] - 2026-10-17
+
+### Added
+- **Rolling context summarization** — wired up background rolling conversation summarization via `summarizeConversation()` in `GroupChatClient.tsx`, saving compressed context to `/api/groups/[id]/summary` so personas retain infinite chat memory across sessions without exceeding token limits.
+- **Dynamic grammar reinforcement in prompt context** — `/api/chat/context` now extracts the user's latest 3 Japanese grammar corrections (`userCorrection`), injecting them into Kai's system prompt to naturally reinforce weak grammar points in conversation.
+- **Session-level app lock progress resilience** — tracked `completedCount` in `sessionStorage` (`kaiwa_app_lock_completed`) in `app-lock`, preventing mid-session progress from resetting back to 0 on screen locks or app switches.
+
+### Changed
+- **Expanded sliding chat context window** — increased active message window in `GroupChatClient.tsx` from 12 to 20 messages for both user responses and proactive messages, giving models deeper immediate context.
+- **Enforced async non-blocking app lock grading** — removed synchronous `await fetch(...)` in `app-lock/page.tsx` during card grading; persistence now dispatches asynchronously in the background so card flips and transitions occur with zero UI latency.
+- **Clear remaining card display in Focus Guard** — updated the app lock status badge to explicitly show `{remaining} Left · {completed} / {required}` (e.g. `4 Left · 1 / 5`), eliminating counter confusion.
+- **Keyboard shortcut safety** — number keys (<kbd>1</kbd>–<kbd>4</kbd>) in `app-lock` now require `flipped === true`, preventing accidental grading before the card answer is revealed.
+
+### Fixed
+- **App blocker web config reset** — added `localStorage` persistence to `AppBlockerWeb` (`kaiwa_app_blocker_config`) so custom flashcard requirement counts are remembered across page navigations rather than resetting to the default 10.
+- **App lock client card count fallback** — initialized `requiredCount` from URL query parameters, `localStorage`, and `savedConfig` rather than hardcoding initial state to 10.
+- **Android trampoline count parameter** — updated `FlashcardBlockActivity.kt` to read `flashcard_requirement` from `SharedPreferences` when constructing the fallback route, ensuring `count=$targetCount` is always passed.
+- **Redundant database query in chat context** — removed the unused 6-message fetch in `/api/chat/context/route.ts` that was discarded by the client, replacing it with an efficient user message lookup.
+
+### Technical
+- Modified: `package.json`, `android/app/build.gradle`, `CHANGELOG.md`, `src/lib/gemini.ts`, `src/app/api/chat/context/route.ts`, `src/app/(app)/groups/[id]/GroupChatClient.tsx`, `src/app/app-lock/page.tsx`, `src/plugins/app-blocker/web.ts`, `android/app/src/main/java/com/kaiwaai/app/FlashcardBlockActivity.kt`
+- Tests: 593 passing (62 files) — lint/typecheck clean
+
 ## [2.2.4] - 2026-10-12
 
 ### Added

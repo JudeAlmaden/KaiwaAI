@@ -1,21 +1,43 @@
 import { WebPlugin } from '@capacitor/core';
 import type { AppBlockerPlugin, AppInfo, AppBlockerConfig } from './definitions';
 
+const STORAGE_KEY = 'kaiwa_app_blocker_config';
+
+const DEFAULT_CONFIG: AppBlockerConfig = {
+  count: 10,
+  blockChance: 100,
+  unlockDurationMinutes: 15,
+  reviewType: 'vocabulary',
+  direction: 'jp-to-en',
+  studyMode: 'all',
+  practice: false,
+  noDueAction: 'autoOpen',
+  earlyReviewStrategy: 'practice',
+  showFurigana: true,
+  furiganaMode: 'always',
+  learningRatio: 0.5,
+};
+
+function loadPersistedConfig(): AppBlockerConfig {
+  if (typeof window === 'undefined') return { ...DEFAULT_CONFIG };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+  } catch {
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+function persistConfig(config: AppBlockerConfig) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  } catch {}
+}
+
 export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
-  private config: AppBlockerConfig = {
-    count: 10,
-    blockChance: 100,
-    unlockDurationMinutes: 15,
-    reviewType: 'vocabulary',
-    direction: 'jp-to-en',
-    studyMode: 'all',
-    practice: false,
-    noDueAction: 'autoOpen',
-    earlyReviewStrategy: 'practice',
-    showFurigana: true,
-    furiganaMode: 'always',
-    learningRatio: 0.5,
-  };
+  private config: AppBlockerConfig = loadPersistedConfig();
 
   async startMonitoring(): Promise<void> {
     console.log('App blocking not supported on web');
@@ -46,19 +68,23 @@ export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
   }
 
   async setFlashcardRequirement(options: { count: number }): Promise<void> {
-    this.config.count = options.count;
+    this.config = { ...this.config, count: options.count };
+    persistConfig(this.config);
   }
 
   async getFlashcardRequirement(): Promise<{ count: number }> {
+    this.config = loadPersistedConfig();
     return { count: this.config.count };
   }
 
   async getAppBlockerConfig(): Promise<AppBlockerConfig> {
+    this.config = loadPersistedConfig();
     return { ...this.config };
   }
 
   async setAppBlockerConfig(config: Partial<AppBlockerConfig>): Promise<void> {
     this.config = { ...this.config, ...config };
+    persistConfig(this.config);
   }
 
   async markFlashcardsCompleted(): Promise<void> {

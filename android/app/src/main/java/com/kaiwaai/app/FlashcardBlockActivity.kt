@@ -10,8 +10,10 @@ class FlashcardBlockActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         val blockedPackage = intent.getStringExtra("blocked_package")
+        val prefs = getSharedPreferences("AppBlocker", MODE_PRIVATE)
+        val targetCount = prefs.getInt("flashcard_requirement", 10)
         val preferredRoute = intent.getStringExtra("route")
-            ?: "/app-lock?autostart=true&mode=app-blocker&blocked_package=$blockedPackage"
+            ?: "/app-lock?autostart=true&mode=app-blocker&count=$targetCount&blocked_package=$blockedPackage"
 
         // Bring MainActivity (KaiwaAI) to the foreground open to the review page,
         // passing through any extra flags/config that the caller supplied.

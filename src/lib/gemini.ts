@@ -24,6 +24,8 @@ export type PromptContext = {
   mood?: Mood;
   hoursSinceUserReply?: number;
   summary?: string | null;
+  summaryUpToId?: string | null;
+  recentCorrections?: string[];
 };
 
 function systemPrompt(ctx: PromptContext, persona?: string): string {
@@ -38,6 +40,10 @@ function systemPrompt(ctx: PromptContext, persona?: string): string {
   const summaryBlock = ctx.summary
     ? `\n\n======================== PREVIOUSLY ========================\nPreviously, you two talked about: ${ctx.summary}`
     : "";
+  const correctionsBlock =
+    ctx.recentCorrections && ctx.recentCorrections.length > 0
+      ? `\n\n======================== RECENT MISTAKES TO REINFORCE ========================\nThe user recently stumbled on these Japanese grammar/usage points in conversation:\n${ctx.recentCorrections.map((c) => `- ${c}`).join("\n")}\nNaturally provide gentle opportunities to practice or reinforce these specific patterns without being overly critical.`
+      : "";
   const moodBlock = ctx.mood
     ? moodToneLine(ctx.mood, ctx.hoursSinceUserReply)
     : "";
@@ -49,7 +55,7 @@ function systemPrompt(ctx: PromptContext, persona?: string): string {
   return `${identity}
 
 Help the user enjoy learning Japanese through natural, friendly chat. Always react to what they said, keep it encouraging, and end most replies with a short follow-up question. Never give dead-end replies.
-${moodBlock}${summaryBlock}
+${moodBlock}${summaryBlock}${correctionsBlock}
 
 ======================== HOW YOU SPEAK ========================
 Speak with MORE Japanese (70%) and less English (30%): Japanese is now the main language with some English mixed in. You should use full Japanese sentences with occasional English words or short phrases for clarity.
@@ -688,7 +694,8 @@ Output: "fun, enjoyable"`;
 
 /** Summarize a stretch of conversation into a few sentences Kai can remember. */
 export async function summarizeConversation(
-  turns: { role: "kai" | "user"; content: string }[]
+  turns: { role: "kai" | "user" | "model"; content: string }[],
+  existingSummary?: string | null
 ): Promise<string> {
   if (!hasAnyKey()) throw new Error("NO_API_KEY");
   const keys = keysForRequest();
@@ -698,9 +705,13 @@ export async function summarizeConversation(
     .map((t) => `${t.role === "user" ? "User" : "Kai"}: ${t.content}`)
     .join("\n");
 
+  const prevHint = existingSummary
+    ? `Existing summary of earlier conversation:\n"${existingSummary}"\n\nNew conversation turns to integrate into the updated summary:\n`
+    : "";
+
   const prompt = `Summarize this Japanese-learning conversation in 2-4 short sentences.
-Capture what the user talked about, any facts they shared about themselves, and what
-they practiced. Write it as a concise recap (plain text, English).\n\n${transcript}`;
+${existingSummary ? "Integrate the new turns into an updated, concise summary of the entire ongoing conversation." : "Capture what the user talked about, any facts they shared about themselves, and what they practiced."}
+Write it as a concise recap (plain text, English).\n\n${prevHint}${transcript}`;
 
   const requestBody = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
