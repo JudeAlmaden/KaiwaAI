@@ -45,7 +45,8 @@ import {
   isMood,
   type Mood,
 } from "@/lib/mood";
-import type { MemorySuggestion } from "@/lib/types";
+import { MAX_MESSAGE_CHARS, charLength, type MemorySuggestion } from "@/lib/types";
+import { hasAnyKey } from "@/lib/api-keys";
 
 type GMsg = {
   id: string;

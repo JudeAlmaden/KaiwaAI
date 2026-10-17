@@ -2,7 +2,19 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.7] - 2026-10-17
+
+### Fixed
+- **Vercel build failure** — `GroupChatClient.tsx` was calling `hasAnyKey()`, `charLength()`, and `MAX_MESSAGE_CHARS` without importing them, causing a fatal TypeScript type error (`Cannot find name 'hasAnyKey'`) that blocked the Vercel deployment. Added the two missing import lines.
+
+### Technical
+- Modified: `src/app/(app)/groups/[id]/GroupChatClient.tsx`
+- New: —
+- Deleted: —
+- Tests: lint/typecheck clean (`tsc --noEmit` exits 0)
+
 ## [2.2.6] - 2026-10-17
+
 
 ### Added
 - **Rolling context summarization** — wired up background rolling conversation summarization via `summarizeConversation()` in `GroupChatClient.tsx`, saving compressed context to `/api/groups/[id]/summary` so personas retain infinite chat memory across sessions without exceeding token limits.
