@@ -13,7 +13,7 @@ export function Chip({
 }: { active?: boolean } & ComponentProps<"button">) {
   return (
     <button
-      className={`whitespace-nowrap rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-colors ${
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-colors ${
         active
           ? "border-indigo-ai bg-indigo-ai text-white"
           : "border-border text-muted hover:border-indigo-ai hover:text-indigo-ai"

@@ -63,12 +63,13 @@ export default function ReviewDefaultsCard() {
 
       <div className="mt-5">
         <p className="text-sm font-bold">Direction</p>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {DIRECTIONS.map((d) => (
             <Chip
               key={d.id}
               active={config.defaultDirection === d.id}
               onClick={() => patch({ defaultDirection: d.id })}
+              className="w-full justify-center"
             >
               {d.label}
             </Chip>
@@ -81,7 +82,7 @@ export default function ReviewDefaultsCard() {
         <p className="mb-2 text-xs text-muted">
           Reading hints on flashcards — applies to every review session and Focus Guard.
         </p>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {FURIGANA.map((f) => (
             <Chip
               key={f.id}
@@ -94,6 +95,7 @@ export default function ReviewDefaultsCard() {
                     : "Always show reading hints"
               }
               onClick={() => patch({ defaultFuriganaMode: f.id })}
+              className="w-full justify-center"
             >
               {f.label}
             </Chip>

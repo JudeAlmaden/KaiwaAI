@@ -16,6 +16,9 @@ All notable changes to KaiwaAI are documented in this file.
 - **`BottomTabs` marked with `data-bottom-tabs`** — added data attribute to the mobile nav wrapper to enable CSS-based hiding via parent context.
 - **Settings tab icons** — replaced emoji icons in the Settings tab bar (User, AI Settings, Learning, Mobile) with Phosphor icon components for a consistent, theme-aware look.
 - **Early review strategy pills** — switched from `flex-wrap` to a strict `grid grid-cols-2` layout so the two strategy pills always split exactly 50/50 regardless of text length.
+- **Direction & Furigana pills** — switched to `grid grid-cols-3` so all three options always fill the row equally in the Review Defaults card.
+- **Reply length cap pills** — switched to `grid grid-cols-4` so all four token options fill the row equally in the Model card.
+- **`Chip` component** — now renders as `inline-flex items-center justify-center` so label text is always perfectly centred inside a grid cell.
 
 ### Technical
 - Modified: `src/app/globals.css`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/AppNav.tsx`

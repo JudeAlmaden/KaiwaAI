@@ -55,9 +55,9 @@ export default function ModelCard() {
           Max output tokens. Lower = faster and cheaper; higher allows longer
           replies.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {OUTPUT_TOKEN_OPTIONS.map((n) => (
-            <Chip key={n} active={tokens === n} onClick={() => chooseTokens(n)}>
+            <Chip key={n} active={tokens === n} onClick={() => chooseTokens(n)} className="w-full justify-center">
               {n}
             </Chip>
           ))}
