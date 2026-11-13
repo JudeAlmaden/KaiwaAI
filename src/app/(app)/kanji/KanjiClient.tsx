@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import AddKanjiModal from "./AddKanjiModal";
+import KanjiCoverageGrid from "./KanjiCoverageGrid";
 import { compressImageToDataUrl } from "@/lib/image-compress";
 import { speakJa, canSpeak } from "@/lib/speak";
 
@@ -61,7 +62,7 @@ export type KanjiCard = {
   groups?: { id: string; name: string; lessonNumber?: number | null }[];
 };
 
-type ViewMode = "folders" | "all";
+type ViewMode = "folders" | "all" | "coverage";
 type FilterMode = "All" | "Learning" | "Known";
 
 // Inline token parser for markdown: **bold**, *italic*, `code`, [label](url)
@@ -796,10 +797,24 @@ export default function KanjiClient() {
               >
                 All My Kanji ({allKanji.length})
               </button>
+              <button
+                onClick={() => {
+                  setViewMode("coverage");
+                  setSelectedFolderId(null);
+                }}
+                className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                  viewMode === "coverage"
+                    ? "bg-card text-fg shadow-2xs"
+                    : "text-muted hover:text-fg"
+                }`}
+              >
+                Coverage
+              </button>
             </div>
           )}
 
-          {/* Search Field */}
+          {/* Search Field — the coverage wall has nothing to filter */}
+          {viewMode !== "coverage" && (
           <div className="relative flex-1 max-w-xs min-w-[200px]">
             <input
               value={search}
@@ -822,6 +837,7 @@ export default function KanjiClient() {
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
 
@@ -1085,6 +1101,11 @@ export default function KanjiClient() {
                 </div>
               )}
             </div>
+          ) : viewMode === "coverage" ? (
+            /* ══════════════════════════════════════════════════
+               VIEW: JLPT COVERAGE WALL
+               ══════════════════════════════════════════════════ */
+            <KanjiCoverageGrid />
           ) : viewMode === "all" ? (
             /* ══════════════════════════════════════════════════
                VIEW: ALL MY KANJI (CLEAN FLASHCARDS)
