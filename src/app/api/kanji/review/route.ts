@@ -250,6 +250,9 @@ export async function GET(req: Request) {
       primitives,
       mnemonic: uk.mnemonic ?? null,
       status: uk.status,
+      timesReviewed: uk.timesReviewed,
+      interval: uk.interval,
+      repetitions: uk.repetitions,
       _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance
         ? ("maintenance" as const)
         : ("active" as const),

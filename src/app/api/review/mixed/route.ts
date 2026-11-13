@@ -242,6 +242,10 @@ export async function GET(req: Request) {
       partOfSpeech,
       sourceContext: parseCardSource(card.sourceContext),
       status: card.status,
+      // Counters that drive the leech badge on the card.
+      timesReviewed: card.timesReviewed,
+      interval: card.interval,
+      repetitions: card.repetitions,
       _pool: (card as typeof card & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
     };
   });
@@ -273,6 +277,9 @@ export async function GET(req: Request) {
       customMeaning: uk.customMeaning,
       mnemonic: uk.mnemonic,
       status: uk.status,
+      timesReviewed: uk.timesReviewed,
+      interval: uk.interval,
+      repetitions: uk.repetitions,
       _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
     };
   });
