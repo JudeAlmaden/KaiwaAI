@@ -6,6 +6,7 @@ import { lookupWordBySurface } from "@/lib/conjugation-generator";
 import { FlashcardStatus } from "@/generated/prisma/client";
 import { sanitizeString } from "@/lib/sanitize";
 import { flashcardLimiter } from "@/lib/rate-limiter";
+import { buildCardSourceContext, serializeCardSource } from "@/lib/review/card-source";
 
 export async function GET(req: Request) {
   const user = await getCurrentUser();
@@ -111,6 +112,42 @@ export async function GET(req: Request) {
 }
 
 
+/**
+ * Turn the chat message a card was saved from into denormalized source fields.
+ * Foreign or unknown message ids are silently dropped — remembering context is
+ * a bonus and must never fail the save itself.
+ */
+async function resolveCardSource(userId: string, messageId?: string) {
+  if (!messageId || messageId.length > 50) return null;
+
+  const message = await prisma.message.findFirst({
+    where: {
+      id: messageId,
+      chat: { members: { some: { userId, kind: "user" } } },
+    },
+    select: { id: true, chatId: true, content: true, createdAt: true },
+  });
+  if (!message) return null;
+
+  const priorUserMessage = await prisma.message.findFirst({
+    where: {
+      chatId: message.chatId,
+      senderUserId: userId,
+      createdAt: { lt: message.createdAt },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { content: true },
+  });
+
+  return {
+    sourceChatId: message.chatId,
+    sourceMessageId: message.id,
+    sourceContext: serializeCardSource(
+      buildCardSourceContext(message.content, priorUserMessage?.content ?? null)
+    ),
+  };
+}
+
 // Add a word/form to user's flashcards using the new dictionary system.
 // Accepts either:
 // 1. token + dictForm → lookup in Word table
@@ -159,6 +196,8 @@ export async function POST(req: Request) {
     };
   }
 
+  const source = await resolveCardSource(user.id, body.sourceMessageId);
+
   let wordId: number | null = null;
   let wordFormId: string | null = null;
 
@@ -183,7 +222,12 @@ export async function POST(req: Request) {
     });
     if (!baseCard) {
       await prisma.userFlashcard.create({
-        data: { userId: user.id, wordId: body.wordId, status: FlashcardStatus.learning },
+        data: {
+          userId: user.id,
+          wordId: body.wordId,
+          status: FlashcardStatus.learning,
+          ...(source ?? {}),
+        },
       });
     }
 
@@ -239,6 +283,7 @@ export async function POST(req: Request) {
             userId: user.id,
             wordId: body.wordId!,
             status: FlashcardStatus.learning,
+            ...(source ?? {}),
           },
         });
       }
@@ -250,6 +295,7 @@ export async function POST(req: Request) {
         wordId: body.wordId!,
         wordFormId: form.id,
         status: FlashcardStatus.learning,
+        ...(source ?? {}),
       })),
       skipDuplicates: true,
     });
@@ -382,11 +428,18 @@ export async function POST(req: Request) {
         wordId,
         wordFormId,
         status: FlashcardStatus.learning,
+        ...(source ?? {}),
       },
       include: {
         word: true,
         wordForm: true,
       },
+    });
+  } else if (source && !card.sourceContext) {
+    // Backfill context for a card saved before this feature existed.
+    card = await prisma.userFlashcard.update({
+      where: { id: card.id },
+      data: source,
     });
   }
 

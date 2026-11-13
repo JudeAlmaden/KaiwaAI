@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { composeSession } from "@/lib/session-composer";
+import { parseCardSource } from "@/lib/review/card-source";
 
 function safeJsonArray(val: string | null | undefined): string[] {
   if (!val) return [];
@@ -239,6 +240,7 @@ export async function GET(req: Request) {
       romaji: reading, // We don't store romaji separately anymore
       meaning,
       partOfSpeech,
+      sourceContext: parseCardSource(card.sourceContext),
       status: card.status,
       _pool: (card as typeof card & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
     };

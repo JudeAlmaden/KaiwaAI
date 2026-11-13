@@ -4,12 +4,14 @@ const userFlashcardFindUnique = vi.fn();
 const userFlashcardFindFirst = vi.fn();
 const userFlashcardCreate = vi.fn();
 const userFlashcardCreateMany = vi.fn();
+const userFlashcardUpdate = vi.fn();
 const wordFindUnique = vi.fn();
 const wordCreate = vi.fn();
 const wordAggregate = vi.fn();
 const wordFormFindFirst = vi.fn();
 const wordFormCreate = vi.fn();
 const messageFindUnique = vi.fn();
+const messageFindFirst = vi.fn();
 const getCurrentUser = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
@@ -19,6 +21,7 @@ vi.mock("@/lib/prisma", () => ({
       findFirst: (...a: unknown[]) => userFlashcardFindFirst(...a),
       create: (...a: unknown[]) => userFlashcardCreate(...a),
       createMany: (...a: unknown[]) => userFlashcardCreateMany(...a),
+      update: (...a: unknown[]) => userFlashcardUpdate(...a),
     },
     word: {
       findUnique: (...a: unknown[]) => wordFindUnique(...a),
@@ -31,6 +34,7 @@ vi.mock("@/lib/prisma", () => ({
     },
     message: {
       findUnique: (...a: unknown[]) => messageFindUnique(...a),
+      findFirst: (...a: unknown[]) => messageFindFirst(...a),
     },
     kanji: {
       findMany: vi.fn(() => []),
@@ -79,12 +83,14 @@ describe("POST /api/flashcards", () => {
     userFlashcardFindFirst.mockReset();
     userFlashcardCreate.mockReset();
     userFlashcardCreateMany.mockReset();
+    userFlashcardUpdate.mockReset();
     wordFindUnique.mockReset();
     wordCreate.mockReset();
     wordAggregate.mockReset();
     wordFormFindFirst.mockReset();
     wordFormCreate.mockReset();
     messageFindUnique.mockReset();
+    messageFindFirst.mockReset();
     getCurrentUser.mockReset();
     getCurrentUser.mockResolvedValue({ id: "u1" });
     userFlashcardFindUnique.mockResolvedValue(null);
@@ -123,16 +129,36 @@ describe("POST /api/flashcards", () => {
     expect(wordCreate).toHaveBeenCalled();
   });
 
-  it("drops a sourceMessageId that isn't a real Message (group-chat ids)", async () => {
-    messageFindUnique.mockResolvedValue(null);
+  it("drops a sourceMessageId the user cannot see (group-chat ids, foreign chats)", async () => {
+    messageFindFirst.mockResolvedValue(null);
     const res = await POST(req({ token, sourceMessageId: "groupmsg-123" }));
     expect(res.status).toBe(200);
+
+    const data = userFlashcardCreate.mock.calls[0][0].data;
+    expect(data.sourceContext).toBeUndefined();
+    expect(data.sourceMessageId).toBeUndefined();
   });
 
-  it("keeps a sourceMessageId that points at a real Message", async () => {
-    messageFindUnique.mockResolvedValue({ id: "msg-1" });
+  it("stores the chat exchange the word was first saved from", async () => {
+    messageFindFirst
+      .mockResolvedValueOnce({
+        id: "msg-1",
+        chatId: "chat-1",
+        content: "心配しないで。",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      })
+      .mockResolvedValueOnce({ content: "テストが心配です。" });
+
     const res = await POST(req({ token, sourceMessageId: "msg-1" }));
     expect(res.status).toBe(200);
+
+    const data = userFlashcardCreate.mock.calls[0][0].data;
+    expect(data.sourceChatId).toBe("chat-1");
+    expect(data.sourceMessageId).toBe("msg-1");
+    expect(JSON.parse(data.sourceContext)).toEqual({
+      ai: "心配しないで。",
+      user: "テストが心配です。",
+    });
   });
 
   it("reports when the word already existed", async () => {

@@ -304,11 +304,14 @@ function WordTokenBody({
   token,
   savedWords,
   onSaved,
+  sourceMessageId,
   compact = false,
 }: {
   token: CachedToken;
   savedWords: Set<string>;
   onSaved: (w: string) => void;
+  /** Message the popup was opened from — remembered on the saved card. */
+  sourceMessageId?: string;
   compact?: boolean;
 }) {
   const [state, setState] = useState<SaveState>("idle");
@@ -369,7 +372,7 @@ function WordTokenBody({
     const res = await fetch("/api/flashcards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wordId: wordLookup.word.id, wordFormId: null }),
+      body: JSON.stringify({ wordId: wordLookup.word.id, wordFormId: null, sourceMessageId }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -423,7 +426,7 @@ function WordTokenBody({
     const res = await fetch("/api/flashcards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, sourceMessageId }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -440,7 +443,11 @@ function WordTokenBody({
     const res = await fetch("/api/flashcards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wordId: wordLookup.word.id, wordFormId: tappedForm.id }),
+      body: JSON.stringify({
+        wordId: wordLookup.word.id,
+        wordFormId: tappedForm.id,
+        sourceMessageId,
+      }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -471,7 +478,11 @@ function WordTokenBody({
     const res = await fetch("/api/flashcards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wordId: wordLookup.word.id, wordFormIds: unsavedFormIds }),
+      body: JSON.stringify({
+        wordId: wordLookup.word.id,
+        wordFormIds: unsavedFormIds,
+        sourceMessageId,
+      }),
     });
     if (res.ok) {
       setLookupResult((current) => current?.type === "word"
@@ -614,6 +625,7 @@ function WordTokenBody({
 
 export default function WordToken({
   token,
+  sourceMessageId,
   savedWords,
   onSaved,
   isOpen,
@@ -732,7 +744,11 @@ export default function WordToken({
                   {alreadySaved ? (
                     <div className="text-xs font-bold text-mint">✓ in your review deck</div>
                   ) : (
-                    <SavePhraseButton token={token} onSaved={onSaved} />
+                    <SavePhraseButton
+                      token={token}
+                      sourceMessageId={sourceMessageId}
+                      onSaved={onSaved}
+                    />
                   )}
                 </div>
               </div>
@@ -742,7 +758,12 @@ export default function WordToken({
             {/* Always show dictionary body — for phrases this lets you look up
                 and save the full phrase expression even when words[] is empty */}
             <div className={isPhrase ? "mt-3 border-t border-border pt-3" : ""}>
-              <WordTokenBody token={token} savedWords={savedWords} onSaved={onSaved} />
+              <WordTokenBody
+                token={token}
+                savedWords={savedWords}
+                onSaved={onSaved}
+                sourceMessageId={sourceMessageId}
+              />
             </div>
 
           </div>
@@ -756,9 +777,11 @@ export default function WordToken({
 
 function SavePhraseButton({
   token,
+  sourceMessageId,
   onSaved,
 }: {
   token: CachedToken;
+  sourceMessageId?: string;
   onSaved: (w: string) => void;
 }) {
   const [state, setState] = useState<SaveState>("idle");
@@ -768,7 +791,7 @@ function SavePhraseButton({
     const res = await fetch("/api/flashcards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, sourceMessageId }),
     });
     if (res.ok) {
       const data = await res.json();

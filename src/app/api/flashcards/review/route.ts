@@ -10,6 +10,7 @@ import {
 } from "@/lib/fsrs/apply-review";
 
 import { FlashcardStatus, PartOfSpeech, Prisma } from "@/generated/prisma/client";
+import { parseCardSource } from "@/lib/review/card-source";
 
 // Cards for review with various study modes:
 //   ?studyMode=due         — cards with nextReview in the past (default)
@@ -210,6 +211,8 @@ export async function GET(req: Request) {
       dictionary: card.word?.dictionary ?? null,
       jlptTier,
       note: card.note,
+      // The chat exchange that introduced this word, when we know it.
+      sourceContext: parseCardSource(card.sourceContext),
       status: card.status,
       easeFactor: card.easeFactor,
       interval: card.interval,

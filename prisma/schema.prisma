@@ -472,6 +472,14 @@ model UserFlashcard {
   retrievability Float?
 
   note      String? // User's personal notes
+
+  // Where this card was first saved from (a chat message the user tapped).
+  // sourceContext is a denormalized JSON snippet { ai, user } so the review
+  // card can show the original exchange even after the message is deleted.
+  sourceChatId    String?
+  sourceMessageId String?
+  sourceContext   String?
+
   createdAt DateTime @default(now())
 
   @@unique([userId, wordFormId]) // One flashcard per form
