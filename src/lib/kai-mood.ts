@@ -89,6 +89,50 @@ export function kaiLineFor(
   }
 }
 
+/**
+ * Extra speech variants per mood, so the room doesn't say the same sentence
+ * every visit. Variant 0 is always the canonical `kaiLineFor` line.
+ */
+export function kaiLineVariants(
+  mood: RoomMood,
+  stats: Pick<DashboardStats, "dueNow" | "streak" | "progressLevel"> | null
+): string[] {
+  if (!stats) return ["Loading your progress…"];
+
+  const extra: Record<RoomMood, string[]> = {
+    sleepy: [
+      "…five more minutes? I'll wake you before the pile grows.",
+      "Your deck is safe with me. Sleep first, kanji later.",
+    ],
+    worried: [
+      "Start with the easiest one — momentum does the rest.",
+      "Ten cards is a ten-minute win. Shall we?",
+    ],
+    proud: [
+      "You keep showing up. That's the whole trick, you know.",
+      "I'm putting today's kanji on the fridge. 🧲",
+    ],
+    lapsed: [
+      "A gap isn't a failure — it's just a gap. 会いましょう?",
+      "No guilt trips. One review and we're back.",
+    ],
+    idle: [
+      "今日は何を話す? I'm listening.",
+      "Want to try a new word inside a real sentence?",
+      "Pick a word below and say it out loud — I'll wait.",
+    ],
+  };
+
+  return [kaiLineFor(mood, stats), ...extra[mood]];
+}
+
+/** Deterministic variant choice so a refresh doesn't re-roll the line. */
+export function pickKaiLine(lines: string[], seed: number): string {
+  if (lines.length === 0) return "";
+  const index = Math.abs(Math.trunc(seed)) % lines.length;
+  return lines[index];
+}
+
 /** Japanese greeting line by hour (shown big on the bubble's title row). */
 export function greetingForHour(h: number): string {
   if (h < 5) return "おやすみなさい";

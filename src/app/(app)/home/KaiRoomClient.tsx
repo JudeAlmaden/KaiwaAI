@@ -9,6 +9,7 @@ import {
   ChatCircleText,
   Fire,
   Sparkle,
+  SpeakerHigh,
 } from "@phosphor-icons/react";
 import type { DashboardStats } from "@/lib/dashboard-stats";
 import {
@@ -16,10 +17,13 @@ import {
   consumeCelebration,
   greetingForHour,
   isLateNight,
-  kaiLineFor,
+  kaiLineVariants,
+  pickKaiLine,
   roomMoodFor,
   transientLineFor,
 } from "@/lib/kai-mood";
+import type { DailyWord } from "@/lib/kai-word";
+import { canSpeak, speakJa } from "@/lib/speak";
 import KaiAvatar, { type KaiAvatarHandle } from "./KaiAvatar";
 import KaiSpeechBubble from "./KaiSpeechBubble";
 
@@ -235,8 +239,37 @@ function GameButton({
   );
 }
 
+/** One card from your own deck, rotated daily — tap the speaker to hear it. */
+function WordOfMoment({ moment }: { moment: DailyWord }) {
+  return (
+    <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-full border border-indigo-ai/25 bg-white/95 py-1 pl-3 pr-1.5 shadow-md backdrop-blur">
+      <span className="font-jp text-sm font-bold text-foreground">{moment.surface}</span>
+      {moment.reading && moment.reading !== moment.surface ? (
+        <span className="font-jp text-[11px] text-muted">{moment.reading}</span>
+      ) : null}
+      {moment.meaning ? (
+        <span className="max-w-[10rem] truncate text-[11px] font-semibold text-muted">
+          {moment.meaning}
+        </span>
+      ) : null}
+      {canSpeak() ? (
+        <button
+          type="button"
+          onClick={() => speakJa(moment.surface)}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai transition-colors hover:bg-indigo-ai/20"
+          title="Hear it"
+          aria-label={`Hear ${moment.surface}`}
+        >
+          <SpeakerHigh size={12} weight="bold" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export default function KaiRoomClient({ initialStats }: { initialStats: DashboardStats }) {
   const [stats, setStats] = useState<DashboardStats | null>(initialStats);
+  const [moment, setMoment] = useState<DailyWord | null>(null);
   const [phase, setPhase] = useState<Phase>("greeting");
   const [transient, setTransient] = useState<{ mood: "celebrate" | "poke" | "pet"; id: number } | null>(null);
   const transientId = useRef(0);
@@ -252,6 +285,10 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
     fetch("/api/stats")
       .then((r) => r.json())
       .then(setStats)
+      .catch(() => {});
+    fetch("/api/kai/word")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMoment(d?.word ?? null))
       .catch(() => {});
   }, []);
 
@@ -284,7 +321,13 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
   const reviewFirst = ready && dueNow > 0;
 
   const mood = roomMoodFor(stats, hour);
-  const baseLine = kaiLineFor(mood, stats);
+  // Rotate the line by day + hour so a reload doesn't shuffle it, but Kai
+  // doesn't repeat the same sentence all day.
+  const baseLine = useMemo(() => {
+    const now = new Date();
+    const seed = now.getDate() * 24 + now.getHours();
+    return pickKaiLine(kaiLineVariants(mood, stats), seed);
+  }, [mood, stats]);
   const tempo = isLateNight(hour) ? 0.6 : mood === "proud" ? 1.35 : 1;
 
   const onAvatarChange = useCallback((handle: KaiAvatarHandle) => {
@@ -376,6 +419,11 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
               </span>
             )}
           </KaiSpeechBubble>
+          {moment && phase !== "greeting" ? (
+            <div className="mt-2 flex justify-center">
+              <WordOfMoment moment={moment} />
+            </div>
+          ) : null}
         </div>
 
         {/* ── Quest bar ──────────────────────────────────────────── */}

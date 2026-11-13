@@ -6,7 +6,9 @@ import {
   greetingForHour,
   isLateNight,
   kaiLineFor,
+  kaiLineVariants,
   nextIdleSwayDelayMs,
+  pickKaiLine,
   roomMoodFor,
   transientLineFor,
 } from "./kai-mood";
@@ -73,6 +75,41 @@ describe("kaiLineFor", () => {
   it("keeps sleepy lines calm", () => {
     const line = kaiLineFor("sleepy", stats({ dueNow: 0 }) as never);
     expect(line).toContain("So sleepy");
+  });
+});
+
+describe("kaiLineVariants", () => {
+  it("keeps the canonical data-aware line first", () => {
+    const s = stats({ dueNow: 1 }) as never;
+    expect(kaiLineVariants("worried", s)[0]).toBe(kaiLineFor("worried", s));
+  });
+
+  it("offers extra lines for every base mood", () => {
+    for (const mood of ["idle", "worried", "sleepy", "proud", "lapsed"] as const) {
+      expect(kaiLineVariants(mood, stats() as never).length).toBeGreaterThan(1);
+    }
+  });
+
+  it("keeps a single loading line when stats are missing", () => {
+    expect(kaiLineVariants("idle", null)).toEqual(["Loading your progress…"]);
+  });
+});
+
+describe("pickKaiLine", () => {
+  const lines = ["a", "b", "c"];
+
+  it("is deterministic for a seed", () => {
+    expect(pickKaiLine(lines, 7)).toBe(pickKaiLine(lines, 7));
+  });
+
+  it("reaches every variant", () => {
+    const picked = new Set([0, 1, 2].map((i) => pickKaiLine(lines, i)));
+    expect(picked.size).toBe(lines.length);
+  });
+
+  it("survives negative and empty input", () => {
+    expect(lines).toContain(pickKaiLine(lines, -7));
+    expect(pickKaiLine([], 3)).toBe("");
   });
 });
 

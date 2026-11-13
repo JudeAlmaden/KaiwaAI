@@ -38,7 +38,7 @@ export default function StandaloneAppLockPage() {
           const parsed = JSON.parse(raw);
           if (typeof parsed.count === 'number' && parsed.count > 0) return parsed.count;
         }
-      } catch {}
+      } catch { }
     }
     return 10;
   });
@@ -52,7 +52,7 @@ export default function StandaloneAppLockPage() {
           const n = parseInt(saved, 10);
           if (!isNaN(n) && n >= 0) return n;
         }
-      } catch {}
+      } catch { }
     }
     return 0;
   });
@@ -77,11 +77,11 @@ export default function StandaloneAppLockPage() {
     finishingRef.current = true;
     try {
       sessionStorage.removeItem('kaiwa_app_lock_completed');
-    } catch {}
+    } catch { }
 
     // Skip native unlock call on web — it would throw
     if (!isWeb) {
-      await grantUnlock().catch(() => {});
+      await grantUnlock().catch(() => { });
     }
 
     let targetPkg = pkg;
@@ -91,12 +91,12 @@ export default function StandaloneAppLockPage() {
         if (config?.lastBlockedPackage) {
           targetPkg = config.lastBlockedPackage;
         }
-      } catch {}
+      } catch { }
     }
 
     if (targetPkg && !isWeb) {
       setTimeout(() => {
-        AppBlocker.launchApp({ packageName: targetPkg! }).catch(() => {});
+        AppBlocker.launchApp({ packageName: targetPkg! }).catch(() => { });
       }, 300);
     }
 
@@ -213,7 +213,7 @@ export default function StandaloneAppLockPage() {
             const p = JSON.parse(raw);
             if (typeof p.count === 'number' && p.count > 0) localConfigCount = p.count;
           }
-        } catch {}
+        } catch { }
 
         const targetCount = countParam
           ? parseInt(countParam, 10) || 10
@@ -317,10 +317,10 @@ export default function StandaloneAppLockPage() {
               direction === 'jp-to-en'
                 ? 'jp-to-en'
                 : direction === 'en-to-jp'
-                ? 'en-to-jp'
-                : Math.random() < 0.5
-                ? 'jp-to-en'
-                : 'en-to-jp',
+                  ? 'en-to-jp'
+                  : Math.random() < 0.5
+                    ? 'jp-to-en'
+                    : 'en-to-jp',
           }))
         );
         setInitResult({ kind: 'session' });
@@ -392,7 +392,7 @@ export default function StandaloneAppLockPage() {
           setCompletedCount(newCompleted);
           try {
             sessionStorage.setItem('kaiwa_app_lock_completed', String(newCompleted));
-          } catch {}
+          } catch { }
 
           const nextCards = [...cards];
           nextCards.splice(currentIndex, 1);
@@ -526,7 +526,7 @@ export default function StandaloneAppLockPage() {
             </span>
           )}
           <div className="px-3.5 py-1.5 rounded-full bg-indigo-ai/10 text-indigo-ai font-display text-xs font-extrabold border border-indigo-ai/20">
-            {Math.max(0, requiredCount - completedCount)} Left · {completedCount} / {requiredCount}
+            {Math.max(0, requiredCount - completedCount)} Left
           </div>
         </div>
       </header>
@@ -545,13 +545,12 @@ export default function StandaloneAppLockPage() {
           return (
             <div
               key={`${c.id}-${idx}`}
-              className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
-                isCurrent
+              className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${isCurrent
                   ? 'bg-indigo-ai ring-4 ring-indigo-ai/20 scale-125'
                   : isRetrying
-                  ? 'bg-sakura ring-2 ring-sakura/30'
-                  : 'bg-border border border-muted/20'
-              }`}
+                    ? 'bg-sakura ring-2 ring-sakura/30'
+                    : 'bg-border border border-muted/20'
+                }`}
               title={isCurrent ? 'Current card' : isRetrying ? 'Needs review' : 'Upcoming'}
             />
           );
