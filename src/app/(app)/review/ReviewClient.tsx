@@ -849,7 +849,7 @@ export default function ReviewClient() {
   const isAppBlockerSession = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "app-blocker";
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col" data-hide-bottom-nav="true">
       <OfflineBanner isAppBlockerMode={isAppBlockerSession} />
       {/* progress */}
       <div className="px-5 pt-4 sm:px-8">
@@ -880,7 +880,7 @@ export default function ReviewClient() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-4">
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-4 pb-8">
         {/* Active memory pool indicators */}
         {setup.activeLimit !== "all" && (
           <div className="flex items-center justify-center gap-2">

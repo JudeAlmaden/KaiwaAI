@@ -287,7 +287,10 @@ export function BottomTabs({ initialDueNow = 0 }: { initialDueNow?: number }) {
   const reviewsDue = dueCount > 0;
 
   return (
-    <div className="fixed bottom-3 inset-x-4 z-40 max-w-sm mx-auto pointer-events-none lg:hidden">
+    <div
+      data-bottom-tabs="true"
+      className="fixed bottom-3 inset-x-4 z-40 max-w-sm mx-auto pointer-events-none lg:hidden"
+    >
       <nav className="pointer-events-auto flex items-center justify-around rounded-full border-2 border-border/80 bg-card/95 px-3 py-2 shadow-2xl backdrop-blur-xl">
         {/* Home */}
         <Link

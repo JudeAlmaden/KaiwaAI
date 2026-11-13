@@ -120,13 +120,14 @@ export default function ReviewCard({
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 w-full max-w-md">
-      <div className="card-perspective w-full h-[420px] sm:h-[450px]">
+      <div className="card-perspective w-full" style={{ height: "clamp(340px, 46vh, 460px)" }}>
         <div
           onClick={onFlip}
           className={`card-inner cursor-pointer ${flipped ? "is-flipped" : ""}`}
         >
           {/* ── FRONT ─────────────────────────────────────────────────── */}
           <div className="card-front select-none">
+            <div className="card-front-scroll">
             {isVocab ? (
               isJpToEn ? (
                 // Task 1: Vocab JP→EN front = JP word w/ furigana + speaker
@@ -320,10 +321,11 @@ export default function ReviewCard({
                 )}
               </>
             )}
+            </div>{/* end card-front-scroll */}
           </div>
 
           {/* ── BACK ──────────────────────────────────────────────────── */}
-          <div className="card-back" style={{ position: 'relative' }}>
+          <div className="card-back">
             {/* Speaker button sits outside the scroll container so its
                 absolute positioning anchors to the card face, not the scroll div */}
             {isVocab ? (
@@ -388,7 +390,7 @@ export default function ReviewCard({
                         {formLabel(card.formType)}
                       </p>
                     )}
-                    {card.word && <KanjiBreakdown word={card.word} />}
+                    {card.word && <KanjiBreakdown word={card.word} center />}
                   </div>
                 ) : (
                   // Task 2: Vocab EN→JP back = JP word w/ furigana + speaker + conjugation
@@ -414,7 +416,7 @@ export default function ReviewCard({
                         {formLabel(card.formType)}
                       </p>
                     )}
-                    {card.word && <KanjiBreakdown word={card.word} />}
+                    {card.word && <KanjiBreakdown word={card.word} center />}
                   </div>
                 )
               ) : (

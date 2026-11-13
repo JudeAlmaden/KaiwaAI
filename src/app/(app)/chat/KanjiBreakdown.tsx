@@ -50,7 +50,13 @@ type Folder = {
   total: number;
 };
 
-export default function KanjiBreakdown({ word }: { word: string }) {
+export default function KanjiBreakdown({
+  word,
+  center = false,
+}: {
+  word: string;
+  center?: boolean;
+}) {
   const kanjiChars = extractKanji(word);
   const [selectedKanji, setSelectedKanji] = useState<string | null>(null);
   const [kanjiData, setKanjiData] = useState<KanjiDetail | null>(null);
@@ -379,12 +385,12 @@ export default function KanjiBreakdown({ word }: { word: string }) {
   return (
     <>
       {/* Kanji chip strip inside WordToken or Flashcard */}
-      <div className="mt-3 border-t-2 border-border/80 pt-3">
-        <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
+      <div className={`mt-3 border-t-2 border-border/80 pt-3 ${center ? "w-full" : ""}`}>
+        <div className={`mb-2 text-[10px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5 ${center ? "justify-center" : ""}`}>
           <BookBookmark size={13} className="text-indigo-ai" weight="duotone" />
           <span>Kanji in this word</span>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className={`flex flex-wrap gap-2 ${center ? "justify-center" : ""}`}>
           {kanjiChars.map((kanji, i) => (
             <button
               key={i}

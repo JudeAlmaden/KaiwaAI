@@ -208,31 +208,49 @@ html::-webkit-scrollbar-thumb:hover {
   border-color: var(--border);
   background-color: var(--card);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
 }
 
 .card-front {
   transform: rotateY(0deg) translateZ(1px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
 }
 
 .card-back {
   transform: rotateY(180deg) translateZ(1px);
-  overflow: hidden;
 }
 
+.card-front-scroll,
 .card-back-scroll {
   display: flex;
   height: 100%;
   width: 100%;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  justify-content: safe center;
   overflow-y: auto;
-  padding: 1.5rem;
+  overflow-x: hidden;
+  padding: 1.25rem 1.25rem 1.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.card-front-scroll::-webkit-scrollbar,
+.card-back-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.card-front-scroll::-webkit-scrollbar-thumb,
+.card-back-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+
+/* Hide floating mobile bottom tabs during active review session */
+body.review-session-active [data-bottom-tabs],
+body:has([data-hide-bottom-nav="true"]) [data-bottom-tabs] {
+  display: none !important;
 }
 
 /* ── Landing-specific: float-up entrance for sections ────────────────── */

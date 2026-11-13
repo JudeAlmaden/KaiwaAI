@@ -2,6 +2,23 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Flashcard card overflow on mobile** — content (Kanji breakdown, long meanings, mnemonics) no longer gets clipped or spills outside the card boundary on small screens.
+- **Flexbox safe-center scroll bug** — replaced `justify-content: center` with `justify-content: safe center` on card scroll containers; content that exceeds the card height now scrolls correctly from the top instead of being cropped off-screen.
+- **Card height adaptive to viewport** — switched from fixed `h-[420px]` to a `clamp(340px, 46vh, 460px)` fluid height so the card, grade buttons, and progress bar all fit on screen simultaneously on phones with small or dynamic viewports.
+- **Bottom nav obscuring grade buttons** — added `data-hide-bottom-nav="true"` to the active review session wrapper; the floating mobile bottom tab bar now hides during sessions so the *Again / Hard / Good / Easy* buttons are never obscured.
+- **Card front scroll wrapper** — wrapped card front content in a matching `.card-front-scroll` container so the front side can also scroll when mnemonic hints or long content are shown without overflowing the card.
+
+### Changed
+- **`KanjiBreakdown` centered in flashcard back** — added optional `center` prop to `KanjiBreakdown`; kanji chip strips on flashcard backs are now center-aligned to match the surrounding content layout.
+- **`BottomTabs` marked with `data-bottom-tabs`** — added data attribute to the mobile nav wrapper to enable CSS-based hiding via parent context.
+
+### Technical
+- Modified: `src/app/globals.css`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/AppNav.tsx`
+- Tests: 599 passing — lint/typecheck clean
+
 ## [2.2.8] - 2026-11-13
 
 ### Added
