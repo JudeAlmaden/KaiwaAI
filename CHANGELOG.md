@@ -8,6 +8,9 @@ All notable changes to KaiwaAI are documented in this file.
 - **In-progress learning card cap (`maxLearningPool`)** — added a user setting to cap actively learned cards (reps 1–3) at 10, 15, 20, 30, or unlimited; when the active learning queue reaches this threshold, introduction of new cards is automatically paused so users are not overwhelmed before existing cards mature.
 - **Reviews-only mode (`learningRatio: 0`)** — added a dedicated "Reviews only" (0% new) option in Review Defaults and Focus Guard interception rules to practice existing cards exclusively without introducing new vocabulary.
 - **`maxNewCards` session composer option** — `composeSession` now accepts a `maxNewCards` cap to strictly limit brand-new cards in any single study or Focus Guard unlock session.
+- **Chat-sourced review context** — vocabulary cards now remember the exact chat exchange they were first saved from (`UserFlashcard.sourceChatId` / `sourceMessageId` / `sourceContext`). The review card back shows a "From your chat" block with the learner's preceding message and Kai's line, so a saved word stays anchored to the sentence that gave it meaning. `POST /api/flashcards` verifies the message belongs to a chat the user is in, backfills context onto cards saved before this feature, and silently ignores unknown/foreign message ids.
+- **Leech badge & Kai's Breakdown** — cards reviewed 8+ times whose interval is still under a week get a ⚠️ Leech badge on the card back. Tapping **Kai's Breakdown** (BYOK Gemini) returns a fresh mnemonic, 1–2 confusable lookalikes with the distinguishing feature, and two short example sentences — using the card's original chat exchange as context when available.
+- **Kanji Coverage wall** — new **Coverage** tab in Study → Kanji (`GET /api/kanji/coverage`) rendering every JLPT kanji N5→N1: green = mastered, purple = learning, dashed = added, faint = untouched, with per-level percentages and a mastered/total summary.
 
 ### Fixed
 - **Brand-new cards flooding "Due" review mode** — resolved an issue where unstudied cards (`repetitions: 0`) with default `nextReview: now()` were treated as due retention reviews, filling review sessions even when the user selected "Due" cards only.
@@ -29,10 +32,15 @@ All notable changes to KaiwaAI are documented in this file.
 - **Direction & Furigana pills** — switched to `grid grid-cols-3` so all three options always fill the row equally in the Review Defaults card.
 - **Reply length cap pills** — switched to `grid grid-cols-4` so all four token options fill the row equally in the Model card.
 - **`Chip` component** — now renders as `inline-flex items-center justify-center` so label text is always perfectly centred inside a grid cell.
+- **Review counters on every surface** — `/api/flashcards/review`, `/api/kanji/review`, and `/api/review/mixed` now return `timesReviewed`, `interval`, and `repetitions`, so the leech badge has data regardless of how the session was composed.
+- **`WordToken` forwards `sourceMessageId`** — the prop was declared and passed by `RichText` but never destructured or sent; every save path (base word, single form, all forms, phrase) now includes it so the card can keep its context.
 
 ### Technical
 - Modified: `src/lib/learning-config.ts`, `src/lib/session-composer.ts`, `src/lib/session-composer.test.ts`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/app-lock/page.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/settings/ReviewDefaultsCard.tsx`, `src/app/(app)/settings/app-blocker/InterceptionRulesEditor.tsx`, `src/app/(app)/settings/app-blocker/InterceptionRulesModal.tsx`, `src/app/globals.css`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/AppNav.tsx`
-- Tests: 601 passing (62 files) — lint/typecheck clean
+- Modified (chat/SRS bridge pass): `prisma/schema.prisma`, `src/app/api/flashcards/route.ts`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/(app)/chat/WordToken.tsx`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/kanji/KanjiClient.tsx`, `src/app/api/flashcards/route.test.ts`, `.agents/AGENTS.md`
+- New (chat/SRS bridge pass): `prisma/migrations/20261113120000_flashcard_source_context/`, `src/lib/review/card-source.ts` (+ test), `src/lib/review/leech.ts` (+ test), `src/lib/card-breakdown-client.ts` (+ test), `src/lib/kanji-coverage.ts` (+ test), `src/app/api/kanji/coverage/route.ts`, `src/app/(app)/kanji/KanjiCoverageGrid.tsx`
+- Migration: run `npx prisma migrate deploy` to add the three nullable `UserFlashcard` source columns before using the new review context.
+- Tests: 623 passing (66 files) — lint/typecheck clean
 
 ## [2.2.8] - 2026-11-13
 
