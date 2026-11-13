@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { PartOfSpeech } from "@/generated/prisma/client";
 
 // Reset a card's SRS progress or update its status.
 export async function PATCH(
@@ -51,6 +52,54 @@ export async function PATCH(
       data: { note: body.note },
     });
     return NextResponse.json({ card });
+  }
+
+  if (body.action === "editCard") {
+    const { reading, meaning, partOfSpeech } = body as {
+      reading?: string;
+      meaning?: string;
+      partOfSpeech?: string;
+    };
+
+    if (owned.phraseId) {
+      const meaningsJson = meaning ? JSON.stringify([meaning]) : undefined;
+      await prisma.phrase.update({
+        where: { id: owned.phraseId },
+        data: {
+          ...(reading ? { reading: reading.trim() } : {}),
+          ...(meaningsJson ? { meanings: meaningsJson } : {}),
+          ...(partOfSpeech && partOfSpeech in PartOfSpeech
+            ? { partOfSpeech: partOfSpeech as PartOfSpeech }
+            : {}),
+        },
+      });
+    } else if (owned.wordId) {
+      if (owned.wordFormId) {
+        await prisma.wordForm.update({
+          where: { id: owned.wordFormId },
+          data: {
+            ...(reading ? { reading: reading.trim() } : {}),
+          },
+        });
+      }
+      const meaningsJson = meaning ? JSON.stringify([meaning]) : undefined;
+      await prisma.word.update({
+        where: { id: owned.wordId },
+        data: {
+          ...(reading && !owned.wordFormId ? { reading: reading.trim() } : {}),
+          ...(meaningsJson ? { meanings: meaningsJson } : {}),
+          ...(partOfSpeech && partOfSpeech in PartOfSpeech
+            ? { partOfSpeech: partOfSpeech as PartOfSpeech }
+            : {}),
+        },
+      });
+    }
+
+    const updated = await prisma.userFlashcard.findUnique({
+      where: { id },
+      include: { word: true, wordForm: true, phrase: true },
+    });
+    return NextResponse.json({ card: updated });
   }
 
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });

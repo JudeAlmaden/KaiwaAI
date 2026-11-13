@@ -99,6 +99,12 @@ export default function VocabClient() {
   const [editingNote, setEditingNote] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+
+  // Card detail editing state (reading, meaning)
+  const [editingCard, setEditingCard] = useState(false);
+  const [editReading, setEditReading] = useState("");
+  const [editMeaning, setEditMeaning] = useState("");
+  const [savingCardEdit, setSavingCardEdit] = useState(false);
   
   // Infinite scroll state
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
@@ -172,6 +178,9 @@ export default function VocabClient() {
     setSelected(card);
     setEditingNote(false);
     setNoteText(card.note || "");
+    setEditingCard(false);
+    setEditReading(card.reading || "");
+    setEditMeaning(card.meaning || "");
   }
 
   useEffect(() => {
@@ -330,6 +339,10 @@ export default function VocabClient() {
   }
 
   async function remove(id: string) {
+    const cardToDelete = cards?.find((c) => c.id === id);
+    const wordName = cardToDelete?.word;
+    const dictName = cardToDelete?.dictionary;
+
     setCards((cs) => {
       const updated = cs?.filter((c) => c.id !== id) ?? null;
       if (updated) saveToCache(updated);
@@ -337,6 +350,54 @@ export default function VocabClient() {
     });
     setSelected(null);
     await fetch(`/api/flashcards/${id}`, { method: "DELETE" });
+
+    // Notify other components/tabs (e.g. chat SavedWordsContext)
+    if (typeof window !== "undefined") {
+      if (wordName) window.dispatchEvent(new CustomEvent("kaiwa:vocab-removed", { detail: { word: wordName } }));
+      if (dictName && dictName !== wordName) {
+        window.dispatchEvent(new CustomEvent("kaiwa:vocab-removed", { detail: { word: dictName } }));
+      }
+    }
+  }
+
+  async function saveCardEdit() {
+    if (!selected) return;
+    setSavingCardEdit(true);
+    try {
+      const res = await fetch(`/api/flashcards/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "editCard",
+          reading: editReading.trim(),
+          meaning: editMeaning.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        const updatedReading = editReading.trim();
+        const updatedMeaning = editMeaning.trim();
+
+        setCards((cs) => {
+          const updated = cs?.map((c) =>
+            c.id === selected.id
+              ? { ...c, reading: updatedReading || c.reading, meaning: updatedMeaning || c.meaning }
+              : c
+          ) ?? null;
+          if (updated) saveToCache(updated);
+          return updated;
+        });
+
+        setSelected((s) =>
+          s
+            ? { ...s, reading: updatedReading || s.reading, meaning: updatedMeaning || s.meaning }
+            : null
+        );
+        setEditingCard(false);
+      }
+    } finally {
+      setSavingCardEdit(false);
+    }
   }
 
   async function saveNote() {
@@ -584,26 +645,89 @@ export default function VocabClient() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="font-jp text-3xl font-bold">{selected.word}</p>
-                <p className="font-jp text-base text-indigo-ai">{selected.reading}</p>
-                {selected.romaji && <p className="text-sm text-muted">{selected.romaji}</p>}
+                {editingCard ? (
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted">Reading (Kana)</label>
+                      <input
+                        type="text"
+                        value={editReading}
+                        onChange={(e) => setEditReading(e.target.value)}
+                        className="mt-0.5 w-full rounded-lg border-2 border-border bg-surface px-3 py-1.5 font-jp text-sm text-foreground outline-none focus:border-indigo-ai"
+                        placeholder="e.g. きいろ"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted">Meaning (English)</label>
+                      <input
+                        type="text"
+                        value={editMeaning}
+                        onChange={(e) => setEditMeaning(e.target.value)}
+                        className="mt-0.5 w-full rounded-lg border-2 border-border bg-surface px-3 py-1.5 text-sm text-foreground outline-none focus:border-indigo-ai"
+                        placeholder="e.g. yellow"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={saveCardEdit}
+                        disabled={savingCardEdit}
+                        className="rounded-full bg-indigo-ai px-3.5 py-1 text-xs font-bold text-white transition-colors hover:bg-indigo-soft disabled:opacity-60"
+                      >
+                        {savingCardEdit ? "Saving…" : "Save changes"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingCard(false);
+                          setEditReading(selected.reading || "");
+                          setEditMeaning(selected.meaning || "");
+                        }}
+                        className="rounded-full border-2 border-border px-3.5 py-1 text-xs font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="font-jp text-base text-indigo-ai">{selected.reading}</p>
+                    {selected.romaji && <p className="text-sm text-muted">{selected.romaji}</p>}
+                  </>
+                )}
               </div>
-              {canSpeak() && (
-                <button
-                  onClick={() => speakJa(selected.word)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai"
-                  title="Hear it"
-                >
-                  🔊
-                </button>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!editingCard && (
+                  <button
+                    onClick={() => {
+                      setEditingCard(true);
+                      setEditReading(selected.reading || "");
+                      setEditMeaning(selected.meaning || "");
+                    }}
+                    className="flex h-9 items-center justify-center rounded-full border border-border px-3 text-xs font-bold text-muted hover:border-indigo-ai hover:text-indigo-ai transition-colors"
+                    title="Edit reading or meaning"
+                  >
+                    ✏️ Edit
+                  </button>
+                )}
+                {canSpeak() && (
+                  <button
+                    onClick={() => speakJa(selected.word)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai"
+                    title="Hear it"
+                  >
+                    🔊
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Meaning</p>
-              <p className="mt-1 text-base font-semibold leading-6 break-words whitespace-pre-wrap">{selected.meaning}</p>
-            </div>
+            {!editingCard && (
+              <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Meaning</p>
+                <p className="mt-1 text-base font-semibold leading-6 break-words whitespace-pre-wrap">{selected.meaning}</p>
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-border/60 px-2.5 py-1 font-bold uppercase text-muted">
                 {selected.partOfSpeech}

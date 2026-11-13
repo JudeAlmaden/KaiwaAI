@@ -399,3 +399,88 @@ export async function POST(req: Request) {
     addedConjugations,
   });
 }
+
+// DELETE /api/flashcards?word=... or ?id=... or body { word, wordId, phraseId }
+// Allows chat tokens and quick lookups to remove/un-save cards without knowing the card ID.
+export async function DELETE(req: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const url = new URL(req.url);
+  const wordParam = url.searchParams.get("word");
+  const idParam = url.searchParams.get("id");
+
+  let body: { word?: string; id?: string; wordId?: number; phraseId?: string } = {};
+  try {
+    body = await req.json();
+  } catch {
+    // empty body is acceptable if query params provided
+  }
+
+  const targetWord = wordParam || body.word;
+  const targetId = idParam || body.id;
+  const wordId = body.wordId;
+  const phraseId = body.phraseId;
+
+  if (targetId) {
+    await prisma.userFlashcard.deleteMany({
+      where: { id: targetId, userId: user.id },
+    });
+    return NextResponse.json({ ok: true, deleted: targetId });
+  }
+
+  if (phraseId) {
+    await prisma.userFlashcard.deleteMany({
+      where: { phraseId, userId: user.id },
+    });
+    return NextResponse.json({ ok: true, deleted: phraseId });
+  }
+
+  if (wordId) {
+    await prisma.userFlashcard.deleteMany({
+      where: { wordId, userId: user.id },
+    });
+    return NextResponse.json({ ok: true, deleted: wordId });
+  }
+
+  if (targetWord) {
+    // Find matching word or phrase
+    const words = await prisma.word.findMany({
+      where: {
+        OR: [{ dictionary: targetWord }, { reading: targetWord }],
+      },
+      select: { id: true },
+    });
+
+    const forms = await prisma.wordForm.findMany({
+      where: {
+        OR: [{ form: targetWord }, { reading: targetWord }],
+      },
+      select: { id: true },
+    });
+
+    const phrases = await prisma.phrase.findMany({
+      where: { userId: user.id, text: targetWord },
+      select: { id: true },
+    });
+
+    const wordIds = words.map((w) => w.id);
+    const formIds = forms.map((f) => f.id);
+    const phraseIds = phrases.map((p) => p.id);
+
+    const res = await prisma.userFlashcard.deleteMany({
+      where: {
+        userId: user.id,
+        OR: [
+          ...(wordIds.length ? [{ wordId: { in: wordIds } }] : []),
+          ...(formIds.length ? [{ wordFormId: { in: formIds } }] : []),
+          ...(phraseIds.length ? [{ phraseId: { in: phraseIds } }] : []),
+        ],
+      },
+    });
+
+    return NextResponse.json({ ok: true, count: res.count });
+  }
+
+  return NextResponse.json({ error: "Missing identifier to delete" }, { status: 400 });
+}

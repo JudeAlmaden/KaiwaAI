@@ -385,6 +385,39 @@ function WordTokenBody({
     }
   }
 
+  async function removeCard() {
+    setState("saving");
+    const targetWord = wordLookup?.word.dictionary || token.dictForm;
+    const res = await fetch(`/api/flashcards`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        word: targetWord,
+        wordId: wordLookup?.word.id,
+      }),
+    });
+    if (res.ok) {
+      setState("idle");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("kaiwa:vocab-removed", { detail: { word: targetWord } }));
+        if (token.surface && token.surface !== targetWord) {
+          window.dispatchEvent(new CustomEvent("kaiwa:vocab-removed", { detail: { word: token.surface } }));
+        }
+      }
+      setLookupResult((current) =>
+        current?.type === "word"
+          ? {
+              ...current,
+              userHasBaseWord: false,
+              forms: current.forms.map((f) => ({ ...f, saved: false })),
+            }
+          : current
+      );
+    } else {
+      setState("idle");
+    }
+  }
+
   async function addQuick() {
     setState("saving");
     const res = await fetch("/api/flashcards", {
@@ -550,8 +583,18 @@ function WordTokenBody({
             )}
           </div>
         ) : alreadySaved ? (
-          <div className="flex items-center gap-1 text-xs font-bold text-mint">
-            ✓ in your review deck
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <div className="flex items-center gap-1 text-xs font-bold text-mint">
+              ✓ in your review deck
+            </div>
+            <button
+              onClick={removeCard}
+              disabled={state === "saving"}
+              className="text-[11px] font-semibold text-muted hover:text-sakura transition-colors cursor-pointer"
+              title="Remove from review deck"
+            >
+              {state === "saving" ? "Removing…" : "Remove"}
+            </button>
           </div>
         ) : (
           <button
@@ -923,6 +966,31 @@ export function SelectionLookupPopup({
     }
   };
 
+  const handleRemoveAI = async () => {
+    setSaveState("saving");
+    const target = aiResult?.word || text;
+    try {
+      const res = await fetch("/api/flashcards", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: target }),
+      });
+      if (res.ok) {
+        setSaveState("idle");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("kaiwa:vocab-removed", { detail: { word: target } }));
+          if (text !== target) {
+            window.dispatchEvent(new CustomEvent("kaiwa:vocab-removed", { detail: { word: text } }));
+          }
+        }
+      } else {
+        setSaveState("idle");
+      }
+    } catch {
+      setSaveState("idle");
+    }
+  };
+
   const dictMeanings = dictLookup
     ? dictLookup.type === "word"
       ? dictLookup.word.meanings.join("; ")
@@ -1091,8 +1159,18 @@ export function SelectionLookupPopup({
             {/* Save to Vocabulary Button */}
             <div className="mt-3">
               {isSaved ? (
-                <div className="flex items-center gap-1 text-xs font-bold text-mint">
-                  ✓ in your review deck
+                <div className="flex items-center justify-between gap-2 pt-0.5">
+                  <div className="flex items-center gap-1 text-xs font-bold text-mint">
+                    ✓ in your review deck
+                  </div>
+                  <button
+                    onClick={handleRemoveAI}
+                    disabled={saveState === "saving"}
+                    className="text-[11px] font-semibold text-muted hover:text-sakura transition-colors cursor-pointer"
+                    title="Remove from review deck"
+                  >
+                    {saveState === "saving" ? "Removing…" : "Remove"}
+                  </button>
                 </div>
               ) : (
                 <button

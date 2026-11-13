@@ -13,6 +13,7 @@ type SavedWordsCtx = {
   savedWords: Set<string>;
   vocabLoaded: boolean;
   markSaved: (w: string) => void;
+  unmarkSaved: (w: string) => void;
   refresh: () => void;
 };
 
@@ -43,8 +44,30 @@ export function SavedWordsProvider({ children }: { children: ReactNode }) {
     setSavedWords((s) => new Set(s).add(w));
   }, []);
 
+  const unmarkSaved = useCallback((w: string) => {
+    setSavedWords((s) => {
+      const next = new Set(s);
+      next.delete(w);
+      return next;
+    });
+  }, []);
+
+  // Listen for global custom events when a card is removed elsewhere (e.g. from Vocab study page)
+  useEffect(() => {
+    const handleRemovedEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ word?: string }>;
+      if (customEvent.detail?.word) {
+        unmarkSaved(customEvent.detail.word);
+      } else {
+        refresh();
+      }
+    };
+    window.addEventListener("kaiwa:vocab-removed", handleRemovedEvent);
+    return () => window.removeEventListener("kaiwa:vocab-removed", handleRemovedEvent);
+  }, [unmarkSaved, refresh]);
+
   return (
-    <Ctx.Provider value={{ savedWords, vocabLoaded, markSaved, refresh }}>
+    <Ctx.Provider value={{ savedWords, vocabLoaded, markSaved, unmarkSaved, refresh }}>
       {children}
     </Ctx.Provider>
   );
@@ -58,6 +81,7 @@ export function useSavedWords(): SavedWordsCtx {
       savedWords: new Set(),
       vocabLoaded: true,
       markSaved: () => {},
+      unmarkSaved: () => {},
       refresh: () => {},
     };
   }

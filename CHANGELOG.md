@@ -2,6 +2,23 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
+## [2.2.8] - 2026-11-13
+
+### Added
+- **Vocab card edit mode** — added an **✏️ Edit** action to the `/study?tab=vocab` detail modal sheet, allowing users to directly correct inaccurate readings (Kana) and meanings (English definitions) on flashcards and synchronize those edits back to the underlying `Word` or `Phrase` database records.
+- **Direct card removal from chat popups** — added a **Remove** button alongside `✓ in your review deck` in `WordToken` and `SelectionLookupPopup`, enabling users to instantly un-save or delete mistakenly added vocabulary without navigating away from their chat session.
+- **RESTful batch card removal endpoint** — added `DELETE /api/flashcards` supporting query/JSON parameters (`word`, `wordId`, `phraseId`, `id`) to remove user flashcards cleanly by target surface, dictionary form, or ID.
+- **Cross-view deletion event synchronization** — introduced a `kaiwa:vocab-removed` global window event and wired it into `SavedWordsContext`, ensuring cards deleted in the Vocab study tab immediately update `savedWords` across all active chat bubbles in the current session.
+
+### Changed
+- **Flashcard patch actions** — extended `PATCH /api/flashcards/[id]` with `action: "editCard"` to support updating reading, definition glosses, and part-of-speech mappings for both dictionary words and custom phrases.
+
+### Technical
+- Modified: `package.json`, `android/app/build.gradle`, `CHANGELOG.md`, `src/app/(app)/vocab/VocabClient.tsx`, `src/app/(app)/chat/SavedWordsContext.tsx`, `src/app/(app)/chat/WordToken.tsx`, `src/app/api/flashcards/[id]/route.ts`, `src/app/api/flashcards/route.ts`
+- New: —
+- Deleted: —
+- Tests: 599 passing (62 files) — lint/typecheck clean
+
 ## [2.2.7] - 2026-10-17
 
 ### Fixed
