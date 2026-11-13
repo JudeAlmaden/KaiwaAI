@@ -75,10 +75,10 @@ export default function FsrsSettingsCard() {
 
       <div className="mt-5 border-t-2 border-border pt-4 space-y-2">
         <p className="text-sm font-bold">Early review (before due)</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {(
             [
-              { id: "practice" as const, label: "Practice — don’t change intervals" },
+              { id: "practice" as const, label: "Practice — don't change intervals" },
               { id: "proportional" as const, label: "Proportional — adjust by how early" },
             ] as const
           ).map((opt) => (
@@ -86,7 +86,7 @@ export default function FsrsSettingsCard() {
               key={opt.id}
               type="button"
               onClick={() => patch({ earlyReviewStrategy: opt.id })}
-              className={`rounded-2xl px-3 py-2 text-xs font-bold border-2 transition ${
+              className={`rounded-2xl px-3 py-2.5 text-xs font-bold border-2 transition text-center leading-snug ${
                 config.earlyReviewStrategy === opt.id
                   ? "border-indigo-ai bg-indigo-ai/10 text-indigo-ai"
                   : "border-border text-muted hover:text-foreground"

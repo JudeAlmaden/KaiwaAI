@@ -14,6 +14,8 @@ All notable changes to KaiwaAI are documented in this file.
 ### Changed
 - **`KanjiBreakdown` centered in flashcard back** — added optional `center` prop to `KanjiBreakdown`; kanji chip strips on flashcard backs are now center-aligned to match the surrounding content layout.
 - **`BottomTabs` marked with `data-bottom-tabs`** — added data attribute to the mobile nav wrapper to enable CSS-based hiding via parent context.
+- **Settings tab icons** — replaced emoji icons in the Settings tab bar (User, AI Settings, Learning, Mobile) with Phosphor icon components for a consistent, theme-aware look.
+- **Early review strategy pills** — switched from `flex-wrap` to a strict `grid grid-cols-2` layout so the two strategy pills always split exactly 50/50 regardless of text length.
 
 ### Technical
 - Modified: `src/app/globals.css`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/AppNav.tsx`

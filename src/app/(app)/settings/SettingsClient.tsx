@@ -12,6 +12,7 @@ import AppBlockerSettings from "./app-blocker/page";
 import LearningResetCard from "./LearningResetCard";
 import MobileAppDownloadCard from "./MobileAppDownloadCard";
 import { Capacitor } from "@capacitor/core";
+import { User, Brain, BookOpen, DeviceMobile } from "@phosphor-icons/react";
 
 type Tab = "user" | "ai" | "learning" | "mobile";
 
@@ -19,11 +20,11 @@ export default function SettingsClient({ email }: { email: string }) {
   const [tab, setTab] = useState<Tab>("user");
   const isAndroid = Capacitor.getPlatform() === "android";
 
-  const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: "user", label: "User", icon: "👤" },
-    { id: "ai", label: "AI Settings", icon: "🧠" },
-    { id: "learning", label: "Learning", icon: "📚" },
-    { id: "mobile", label: "Mobile", icon: "📱" },
+  const tabs: { id: Tab; label: string; Icon: typeof User }[] = [
+    { id: "user", label: "User", Icon: User },
+    { id: "ai", label: "AI Settings", Icon: Brain },
+    { id: "learning", label: "Learning", Icon: BookOpen },
+    { id: "mobile", label: "Mobile", Icon: DeviceMobile },
   ];
 
   return (
@@ -40,7 +41,7 @@ export default function SettingsClient({ email }: { email: string }) {
                 : "text-muted hover:bg-indigo-ai/5 hover:text-foreground"
             }`}
           >
-            <span className="text-sm sm:text-base">{t.icon}</span>
+            <t.Icon size={16} weight={tab === t.id ? "fill" : "duotone"} />
             <span>{t.label}</span>
           </button>
         ))}
