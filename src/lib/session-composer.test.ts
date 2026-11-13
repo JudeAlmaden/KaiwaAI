@@ -295,4 +295,42 @@ describe("session-composer", () => {
     expect(activeCards.some(c => c.id === "weak-long")).toBe(false);
     expect(maintenanceCards.some(c => c.id === "weak-long")).toBe(true);
   });
+
+  it("should support learningRatio = 0 (reviews only)", () => {
+    const past = new Date(Date.now() - 1000 * 60 * 60 * 24);
+    const cards = [
+      createCard({ id: "new-1", repetitions: 0, easeFactor: 2.5, interval: 0 }),
+      createCard({ id: "new-2", repetitions: 0, easeFactor: 2.5, interval: 0 }),
+      createCard({ id: "due-1", repetitions: 4, easeFactor: 2.5, interval: 10, nextReview: past }),
+      createCard({ id: "due-2", repetitions: 5, easeFactor: 2.5, interval: 15, nextReview: past }),
+      createCard({ id: "due-3", repetitions: 6, easeFactor: 2.5, interval: 20, nextReview: past }),
+      createCard({ id: "due-3", repetitions: 6, easeFactor: 2.5, interval: 20, nextReview: past }),
+    ];
+
+    const { session, activeCards } = composeSession(cards, 3, false, 0);
+
+    expect(activeCards.length).toBe(0);
+    expect(session.every(c => c.repetitions > 0)).toBe(true);
+    expect(session.some(c => c.id === "new-1" || c.id === "new-2")).toBe(false);
+  });
+
+  it("should respect maxNewCards option in composeSession", () => {
+    const past = new Date(Date.now() - 1000 * 60 * 60 * 24);
+    const cards = [
+      createCard({ id: "new-1", repetitions: 0, easeFactor: 2.5, interval: 0 }),
+      createCard({ id: "new-2", repetitions: 0, easeFactor: 2.5, interval: 0 }),
+      createCard({ id: "new-3", repetitions: 0, easeFactor: 2.5, interval: 0 }),
+      createCard({ id: "struggle-1", repetitions: 2, easeFactor: 1.8, interval: 2, nextReview: past }),
+      createCard({ id: "due-1", repetitions: 4, easeFactor: 2.5, interval: 10, nextReview: past }),
+      createCard({ id: "due-2", repetitions: 5, easeFactor: 2.5, interval: 15, nextReview: past }),
+      createCard({ id: "due-3", repetitions: 6, easeFactor: 2.5, interval: 20, nextReview: past }),
+    ];
+
+    const { session, activeCards } = composeSession(cards, 5, false, 0.5, { maxNewCards: 1 });
+
+    expect(session.length).toBe(5);
+
+    const newInActive = activeCards.filter(c => c.repetitions === 0);
+    expect(newInActive.length).toBeLessThanOrEqual(1);
+  });
 });

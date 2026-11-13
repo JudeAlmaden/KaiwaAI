@@ -145,13 +145,20 @@ export default function StandaloneAppLockPage() {
     reviewType: 'vocabulary' | 'kanji' | 'mixed',
     studyMode: BlockerStudyMode,
     learningRatio: number = 0.5,
+    count: number = 10,
   ): Promise<Card[] | { offline: true }> => {
     const endpoint = reviewType === 'mixed'
       ? '/api/review/mixed'
       : `/api/${reviewType === 'kanji' ? 'kanji' : 'flashcards'}/review`;
 
+    const learningCfg = getLearningConfig();
+    const maxLearningPool = learningCfg.maxLearningPool;
+    const maxNew = learningRatio === 0 ? 0 : Math.max(1, Math.round(count * learningRatio));
+
     try {
-      const res = await fetch(`${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${getLearningConfig().maxDailyReviews}&learningRatio=${learningRatio}`);
+      const res = await fetch(
+        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&maxNewCards=${maxNew}&maxLearningPool=${maxLearningPool}`
+      );
       if (res.ok) {
         const data = await res.json();
         return data.cards ?? [];
@@ -261,13 +268,13 @@ export default function StandaloneAppLockPage() {
           }
         }
 
-        let pulledCards = await fetchCards(reviewType, studyMode, resolvedLearningRatio);
+        let pulledCards = await fetchCards(reviewType, studyMode, resolvedLearningRatio, targetCount);
         if (cancelled) return;
 
         // If nothing was returned for this studyMode (e.g. studyMode === 'due' and 0 cards due),
         // check noDueAction. If 'studyAny', fall back to 'all' cards before giving up.
         if (!('offline' in pulledCards) && pulledCards.length === 0 && studyMode !== 'all' && noDueAction === 'studyAny') {
-          pulledCards = await fetchCards(reviewType, 'all', resolvedLearningRatio);
+          pulledCards = await fetchCards(reviewType, 'all', resolvedLearningRatio, targetCount);
           if (cancelled) return;
         }
 

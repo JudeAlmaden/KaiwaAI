@@ -4,7 +4,15 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **In-progress learning card cap (`maxLearningPool`)** — added a user setting to cap actively learned cards (reps 1–3) at 10, 15, 20, 30, or unlimited; when the active learning queue reaches this threshold, introduction of new cards is automatically paused so users are not overwhelmed before existing cards mature.
+- **Reviews-only mode (`learningRatio: 0`)** — added a dedicated "Reviews only" (0% new) option in Review Defaults and Focus Guard interception rules to practice existing cards exclusively without introducing new vocabulary.
+- **`maxNewCards` session composer option** — `composeSession` now accepts a `maxNewCards` cap to strictly limit brand-new cards in any single study or Focus Guard unlock session.
+
 ### Fixed
+- **Brand-new cards flooding "Due" review mode** — resolved an issue where unstudied cards (`repetitions: 0`) with default `nextReview: now()` were treated as due retention reviews, filling review sessions even when the user selected "Due" cards only.
+- **Maintenance pool leakage** — ensured unstudied cards (`repetitions === 0`) can never enter the retention/maintenance pool or overflow into reviews when `learningRatio === 0`.
+- **Focus Guard card overfetching** — `app-lock` now queries the exact session count required for unlock rather than overfetching up to `maxDailyReviews` (50 cards), respecting `maxLearningPool` and `learningRatio`.
 - **Flashcard card overflow on mobile** — content (Kanji breakdown, long meanings, mnemonics) no longer gets clipped or spills outside the card boundary on small screens.
 - **Flexbox safe-center scroll bug** — replaced `justify-content: center` with `justify-content: safe center` on card scroll containers; content that exceeds the card height now scrolls correctly from the top instead of being cropped off-screen.
 - **Card height adaptive to viewport** — switched from fixed `h-[420px]` to a `clamp(340px, 46vh, 460px)` fluid height so the card, grade buttons, and progress bar all fit on screen simultaneously on phones with small or dynamic viewports.
@@ -12,6 +20,8 @@ All notable changes to KaiwaAI are documented in this file.
 - **Card front scroll wrapper** — wrapped card front content in a matching `.card-front-scroll` container so the front side can also scroll when mnemonic hints or long content are shown without overflowing the card.
 
 ### Changed
+- **Review Defaults settings UI** — added configurable chip selectors for **Max in-progress learning cards** (`10`, `15`, `20`, `30`, `All`) and **Review mix** (`Reviews only`, `20% new`, `50/50`, `70% new`).
+- **Focus Guard interception rules** — added "Reviews" (0% new) and "Gentle" (20% new) focus ratio options to InterceptionRulesEditor and InterceptionRulesModal.
 - **`KanjiBreakdown` centered in flashcard back** — added optional `center` prop to `KanjiBreakdown`; kanji chip strips on flashcard backs are now center-aligned to match the surrounding content layout.
 - **`BottomTabs` marked with `data-bottom-tabs`** — added data attribute to the mobile nav wrapper to enable CSS-based hiding via parent context.
 - **Settings tab icons** — replaced emoji icons in the Settings tab bar (User, AI Settings, Learning, Mobile) with Phosphor icon components for a consistent, theme-aware look.
@@ -21,8 +31,8 @@ All notable changes to KaiwaAI are documented in this file.
 - **`Chip` component** — now renders as `inline-flex items-center justify-center` so label text is always perfectly centred inside a grid cell.
 
 ### Technical
-- Modified: `src/app/globals.css`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/AppNav.tsx`
-- Tests: 599 passing — lint/typecheck clean
+- Modified: `src/lib/learning-config.ts`, `src/lib/session-composer.ts`, `src/lib/session-composer.test.ts`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/app-lock/page.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/settings/ReviewDefaultsCard.tsx`, `src/app/(app)/settings/app-blocker/InterceptionRulesEditor.tsx`, `src/app/(app)/settings/app-blocker/InterceptionRulesModal.tsx`, `src/app/globals.css`, `src/app/(app)/review/ReviewCard.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/AppNav.tsx`
+- Tests: 601 passing (62 files) — lint/typecheck clean
 
 ## [2.2.8] - 2026-11-13
 

@@ -289,8 +289,9 @@ export default function InterceptionRulesModal({
                   </div>
                   <div className="flex gap-1">
                     {[
+                      { ratio: 0.0, label: 'Reviews' },
+                      { ratio: 0.2, label: 'Gentle' },
                       { ratio: 0.5, label: '50/50' },
-                      { ratio: 0.7, label: '70/30' },
                       { ratio: 1.0, label: 'All New' },
                     ].map((opt) => (
                       <button

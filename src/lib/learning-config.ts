@@ -9,6 +9,7 @@ export interface LearningConfig {
   desiredRetention: number;
   maxDailyReviews: number;
   maxNewCards: number;
+  maxLearningPool: number; // Max in-progress learning cards before pausing new cards (default: 20, 0 = unlimited)
   earlyReviewStrategy: EarlyReviewStrategy;
   defaultDirection: ReviewDirection;
   defaultFuriganaMode: FuriganaMode;
@@ -21,6 +22,7 @@ export const DEFAULT_LEARNING_CONFIG: LearningConfig = {
   desiredRetention: 0.9,
   maxDailyReviews: 50,
   maxNewCards: 20,
+  maxLearningPool: 20,
   earlyReviewStrategy: "proportional",
   defaultDirection: "mixed",
   defaultFuriganaMode: "always",
@@ -51,8 +53,11 @@ export function getLearningConfig(): LearningConfig {
         0,
         Math.min(200, parsed.maxNewCards ?? DEFAULT_LEARNING_CONFIG.maxNewCards)
       ),
+      maxLearningPool: parsed.maxLearningPool !== undefined
+        ? Math.max(0, Math.min(200, parsed.maxLearningPool))
+        : DEFAULT_LEARNING_CONFIG.maxLearningPool,
       defaultLearningRatio: Math.max(
-        0.1,
+        0,
         Math.min(1, parsed.defaultLearningRatio ?? DEFAULT_LEARNING_CONFIG.defaultLearningRatio)
       ),
     };

@@ -17,15 +17,19 @@ interface SessionComposition<T extends Card> {
   maintenanceCards: T[];
 }
 
+export interface ComposeSessionOptions {
+  maxNewCards?: number;
+}
+
 /**
  * Composes a review session from active (focused learning) and maintenance (retention) pools.
  * 
- * Active pool: 50% of session (or learningRatio)
- *   - Priority: New cards (repetitions === 0) first
+ * Active pool: learningRatio proportion of session (or 0 for reviews only)
+ *   - Priority: New cards (repetitions === 0) first (up to maxNewCards)
  *   - Then: Weak cards (easeFactor < 2.2 AND interval < 3, or high difficulty & low stability)
  *   - Sorted deterministically: easeFactor → repetitions → createdAt (all asc)
  * 
- * Maintenance pool: 50% of session
+ * Maintenance pool: remaining slots
  *   - Criteria: nextReview <= now AND lastReviewedAt < now - 1 hour
  *   - Avoids recently seen cards to prevent immediate repetition
  *   - Sorted by nextReview asc, then shuffled for variety
@@ -38,13 +42,16 @@ interface SessionComposition<T extends Card> {
  * @param allCards - Pre-sorted cards from database
  * @param sessionSize - Total cards in session (default: 5)
  * @param ignoreDueDate - If true, maintenance pool includes all cards regardless of due date (for studyMode=all)
+ * @param learningRatio - Proportion of active cards (0.0 to 1.0, default: 0.5)
+ * @param options - Additional constraints like maxNewCards
  * @returns Session composition with interleaved active and maintenance cards
  */
 export function composeSession<T extends Card>(
   allCards: T[],
   sessionSize: number = 5,
   ignoreDueDate: boolean = false,
-  learningRatio: number = 0.5
+  learningRatio: number = 0.5,
+  options?: ComposeSessionOptions
 ): SessionComposition<T> {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -55,14 +62,15 @@ export function composeSession<T extends Card>(
   const ACTIVE_COOLDOWN_MS = 10 * 60 * 1000;
   const activeCooldownAgo = new Date(now.getTime() - ACTIVE_COOLDOWN_MS);
 
-  const ratio = Math.max(0.1, Math.min(1.0, typeof learningRatio === "number" && !isNaN(learningRatio) ? learningRatio : 0.5));
+  const ratio = Math.max(0, Math.min(1.0, typeof learningRatio === "number" && !isNaN(learningRatio) ? learningRatio : 0.5));
   // Calculate pool sizes based on learningRatio (target, not a hard cap)
-  const activeTarget = Math.max(1, Math.round(sessionSize * ratio));
-  const maintenanceTarget = Math.max(0, sessionSize - activeTarget);
+  const activeTarget = ratio === 0 ? 0 : Math.max(1, Math.round(sessionSize * ratio));
+  const maintenanceTarget = sessionSize - activeTarget;
 
   // Split cards into pools
   const activePool: T[] = [];
   const maintenancePool: T[] = [];
+  let newCardsAdded = 0;
 
   for (const card of allCards) {
     // Active pool criteria: prioritize new cards, then weak short-interval cards.
@@ -84,14 +92,18 @@ export function composeSession<T extends Card>(
       // SM-2 fallback
       isWeakAndShort = card.easeFactor < 2.2 && card.interval < 3;
     }
-    const isActive = isNew || isWeakAndShort;
+
+    const maxNew = options?.maxNewCards;
+    const canAddNew = isNew && (maxNew === undefined || newCardsAdded < maxNew);
+    const isActive = (canAddNew || isWeakAndShort) && ratio > 0;
     const wasJustReviewed =
       card.lastReviewedAt != null && card.lastReviewedAt >= activeCooldownAgo;
 
     if (isActive && !wasJustReviewed) {
       activePool.push(card);
-    } else {
-      // Maintenance pool: check due date unless ignoreDueDate=true
+      if (isNew) newCardsAdded++;
+    } else if (!isNew) {
+      // Maintenance pool: only previously reviewed cards (repetitions > 0)
       const isDue = ignoreDueDate || card.nextReview <= now;
       
       if (isDue) {
@@ -106,7 +118,7 @@ export function composeSession<T extends Card>(
     }
   }
 
-  // Take up to each target from its pool (still honoring 50/50 split when pools are large)
+  // Take up to each target from its pool (still honoring split when pools are large)
   const selectedActive = activePool.slice(0, activeTarget);
   const activeIds = new Set(selectedActive.map(c => c.id));
 
@@ -115,12 +127,14 @@ export function composeSession<T extends Card>(
   shuffleArray(eligibleMaintenance);
   const selectedMaintenance = eligibleMaintenance.slice(0, maintenanceTarget);
 
-  // Build pools of "overflow" cards beyond the 50/50 targets, still eligible for use
+  // Build pools of "overflow" cards beyond the targets, still eligible for use
   // to fill the session up to sessionSize (so the user doesn't get a truncated queue
-  // when sufficient cards exist but the 50/50 split isn't perfectly achievable).
-  const overflowActive = activePool
-    .slice(activeTarget)
-    .filter(c => !activeIds.has(c.id));
+  // when sufficient cards exist but the split isn't perfectly achievable).
+  const overflowActive = ratio === 0
+    ? []
+    : activePool
+        .slice(activeTarget)
+        .filter(c => !activeIds.has(c.id));
   const overflowMaintenance = eligibleMaintenance.slice(maintenanceTarget);
 
   // Compose session: [A1, M1, A2, M2, M3, ...]
@@ -139,7 +153,7 @@ export function composeSession<T extends Card>(
 
     if (!primaryA && !primaryM && !overA && !overM) break;
 
-    const wantActive = i % 2 === 0 || (!primaryM && !overM);
+    const wantActive = ratio > 0 && (i % 2 === 0 || (!primaryM && !overM));
 
     if (wantActive) {
       if (primaryA) {
@@ -156,9 +170,9 @@ export function composeSession<T extends Card>(
         session.push(selectedMaintenance[mIdx++]);
       } else if (overM) {
         session.push(overflowMaintenance[mOverIdx++]);
-      } else if (primaryA) {
+      } else if (primaryA && ratio > 0) {
         session.push(selectedActive[aIdx++]);
-      } else if (overA) {
+      } else if (overA && ratio > 0) {
         session.push(overflowActive[aOverIdx++]);
       }
     }

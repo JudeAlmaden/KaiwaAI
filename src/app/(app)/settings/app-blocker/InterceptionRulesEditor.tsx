@@ -262,17 +262,26 @@ export default function InterceptionRulesEditor({
         {values.learningRatio != null && (
           <div className="space-y-1.5">
             <SectionTitle>Learning ratio</SectionTitle>
-            <div className="flex flex-wrap gap-1">
-              {[0.5, 0.7, 1].map((r) => (
+            <div className="grid grid-cols-4 gap-1">
+              {[0, 0.2, 0.5, 1].map((r) => (
                 <Segmented
                   key={r}
                   active={values.learningRatio === r}
                   onClick={() => onChange({ learningRatio: r, useReviewDefaults: false })}
                 >
-                  {r === 1 ? "All new" : `${Math.round(r * 100)}%`}
+                  {r === 0 ? "Reviews" : r === 1 ? "All new" : `${Math.round(r * 100)}%`}
                 </Segmented>
               ))}
             </div>
+            <p className="text-[10px] text-muted">
+              {values.learningRatio === 0
+                ? "Reviews only: no brand-new unstudied words on app intercept."
+                : values.learningRatio <= 0.2
+                ? "Gentle: mostly reviews with at most 1–2 new words."
+                : values.learningRatio === 1
+                ? "All new: prioritize new words."
+                : "Balanced: 50% new words, 50% reviews."}
+            </p>
           </div>
         )}
 

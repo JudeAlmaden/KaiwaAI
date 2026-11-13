@@ -29,6 +29,10 @@ export async function GET(req: Request) {
   const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
   const rawRatio = sp.get("learningRatio");
   const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
+  const rawMaxNew = sp.get("maxNewCards");
+  const rawMaxLearning = sp.get("maxLearningPool");
+  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
+  const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
   const heisigLesson = sp.get("heisigLesson"); // lesson-based mode
   const groupId = sp.get("groupId"); // group-based mode
 
@@ -123,6 +127,7 @@ export async function GET(req: Request) {
   // Get user's kanji learning records
   const where: {
     userId: string;
+    repetitions?: { gt: number };
     nextReview?: { lte: Date };
     createdAt?: { gte: Date };
     easeFactor?: { lt: number };
@@ -131,6 +136,11 @@ export async function GET(req: Request) {
       interval?: { lt: number };
     }>;
   } = { userId: user.id };
+
+  // If reviews only (learningRatio === 0) in due mode, exclude unstudied new cards
+  if (studyMode === "due" && learningRatio === 0) {
+    where.repetitions = { gt: 0 };
+  }
 
   if (studyMode === "due") {
     where.nextReview = { lte: new Date() };
@@ -172,9 +182,25 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
+    let effectiveMaxNewCards = maxNewCards;
+    if (maxLearningPool !== undefined && maxLearningPool > 0) {
+      const inLearningCount = await prisma.userKanji.count({
+        where: { userId: user.id, status: "learning" },
+      });
+      if (inLearningCount >= maxLearningPool) {
+        effectiveMaxNewCards = 0;
+      }
+    }
+
     // Compose session based on learningRatio
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
-    const { session, maintenanceCards } = composeSession(allKanji, limit, ignoreDueDate, learningRatio);
+    const { session, maintenanceCards } = composeSession(
+      allKanji,
+      limit,
+      ignoreDueDate,
+      learningRatio,
+      { maxNewCards: effectiveMaxNewCards }
+    );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     userKanji = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
   } else {

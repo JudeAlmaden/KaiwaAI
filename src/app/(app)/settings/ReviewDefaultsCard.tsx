@@ -23,7 +23,20 @@ const FURIGANA: { id: FuriganaMode; label: string }[] = [
   { id: "never", label: "Off" },
 ];
 
+const LEARNING_POOLS: { value: number; label: string }[] = [
+  { value: 10, label: "10" },
+  { value: 15, label: "15" },
+  { value: 20, label: "20" },
+  { value: 30, label: "30" },
+  { value: 0, label: "All" },
+];
 
+const LEARNING_RATIOS: { value: number; label: string }[] = [
+  { value: 0.0, label: "Reviews only" },
+  { value: 0.2, label: "20% new" },
+  { value: 0.5, label: "50/50" },
+  { value: 0.7, label: "70% new" },
+];
 
 export default function ReviewDefaultsCard() {
   const [config, setConfig] = useState<LearningConfig>(() => getLearningConfig());
@@ -41,6 +54,9 @@ export default function ReviewDefaultsCard() {
     }
     if (updates.defaultDirection !== undefined) {
       appBlockerUpdates.direction = updates.defaultDirection;
+    }
+    if (updates.defaultLearningRatio !== undefined) {
+      appBlockerUpdates.learningRatio = updates.defaultLearningRatio;
     }
 
     if (Object.keys(appBlockerUpdates).length > 0) {
@@ -110,7 +126,43 @@ export default function ReviewDefaultsCard() {
         </p>
       </div>
 
+      <div className="mt-5">
+        <p className="text-sm font-bold">Max in-progress learning cards</p>
+        <p className="mb-2 text-xs text-muted">
+          Pauses introducing new cards when your in-progress learning queue reaches this limit.
+        </p>
+        <div className="mt-2 grid grid-cols-5 gap-2">
+          {LEARNING_POOLS.map((p) => (
+            <Chip
+              key={p.value}
+              active={config.maxLearningPool === p.value}
+              onClick={() => patch({ maxLearningPool: p.value })}
+              className="w-full justify-center"
+            >
+              {p.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
 
+      <div className="mt-5">
+        <p className="text-sm font-bold">Review mix (new vs reviews)</p>
+        <p className="mb-2 text-xs text-muted">
+          Proportion of new or struggling cards to mature reviews in sessions and Focus Guard.
+        </p>
+        <div className="mt-2 grid grid-cols-4 gap-2">
+          {LEARNING_RATIOS.map((r) => (
+            <Chip
+              key={r.value}
+              active={Math.abs(config.defaultLearningRatio - r.value) < 0.05}
+              onClick={() => patch({ defaultLearningRatio: r.value })}
+              className="w-full justify-center"
+            >
+              {r.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
 
       <div className="mt-5 flex items-start justify-between gap-4 border-t-2 border-border pt-4">
         <div>

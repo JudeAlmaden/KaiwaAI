@@ -271,11 +271,14 @@ export default function ReviewClient() {
       : `/api/${setup.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
       
     const resolvedStudyMode = setup.studyMode === "new" || setup.studyMode === "custom" ? "all" : setup.studyMode;
-    const learningRatio = setup.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.5;
+    const learningCfg = getLearningConfig();
+    const learningRatio = setup.learningRatio ?? learningCfg.defaultLearningRatio ?? 0.5;
     const params = new URLSearchParams({ 
       studyMode: resolvedStudyMode, 
       limit: "100",
-      learningRatio: String(learningRatio)
+      learningRatio: String(learningRatio),
+      maxLearningPool: String(learningCfg.maxLearningPool),
+      maxNewCards: String(learningCfg.maxNewCards),
     });
     if (setup.studyMode === "new") params.set("status", "new");
     if (setup.practice) params.set("practice", "true");
@@ -318,11 +321,14 @@ export default function ReviewClient() {
       : `/api/${s.reviewType === "kanji" ? "kanji" : "flashcards"}/review`;
       
     const resolvedStudyMode = s.studyMode === "new" || s.studyMode === "custom" ? "all" : s.studyMode;
-    const learningRatio = s.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.5;
+    const learningCfg = getLearningConfig();
+    const learningRatio = s.learningRatio ?? learningCfg.defaultLearningRatio ?? 0.5;
     const params = new URLSearchParams({ 
       studyMode: resolvedStudyMode, 
       limit: String(s.limit),
-      learningRatio: String(learningRatio)
+      learningRatio: String(learningRatio),
+      maxLearningPool: String(learningCfg.maxLearningPool),
+      maxNewCards: String(learningCfg.maxNewCards),
     });
     if (s.studyMode === "new") params.set("status", "new");
     if (s.practice) params.set("practice", "true");

@@ -33,9 +33,18 @@ export async function GET(req: Request) {
   const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
   const rawRatio = sp.get("learningRatio");
   const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
+  const rawMaxNew = sp.get("maxNewCards");
+  const rawMaxLearning = sp.get("maxLearningPool");
+  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
+  const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
 
   // Build base where clause
   const where: Prisma.UserFlashcardWhereInput = { userId: user.id };
+
+  // If reviews only (learningRatio === 0) in due mode, exclude unstudied new cards
+  if (studyMode === "due" && learningRatio === 0) {
+    where.repetitions = { gt: 0 };
+  }
 
   // Apply study mode logic
   if (studyMode === "due") {
@@ -113,9 +122,25 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
+    let effectiveMaxNewCards = maxNewCards;
+    if (maxLearningPool !== undefined && maxLearningPool > 0) {
+      const inLearningCount = await prisma.userFlashcard.count({
+        where: { userId: user.id, status: "learning" },
+      });
+      if (inLearningCount >= maxLearningPool) {
+        effectiveMaxNewCards = 0;
+      }
+    }
+
     // Compose session: active (focused learning) vs maintenance (retention) based on learningRatio
     // For studyMode=all, ignoreDueDate allows maintenance pool to include all cards
-    const { session, maintenanceCards } = composeSession(allCards, limit, ignoreDueDate, learningRatio);
+    const { session, maintenanceCards } = composeSession(
+      allCards,
+      limit,
+      ignoreDueDate,
+      learningRatio,
+      { maxNewCards: effectiveMaxNewCards }
+    );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
   } else {
