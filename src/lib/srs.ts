@@ -1,4 +1,9 @@
 import type { CardStatus } from "./types";
+import {
+  GRADUATED_INTERVAL_DAYS,
+  GRADUATED_REPETITIONS,
+  isGraduated,
+} from "./review/lifecycle";
 
 // SM-2 spaced-repetition scheduling.
 // grade: 0 = Again, 1 = Hard, 2 = Good, 3 = Easy (mapped to SM-2 quality 0..5).
@@ -18,9 +23,7 @@ export type SrsResult = SrsState & {
 
 const QUALITY: Record<ReviewGrade, number> = { 0: 2, 1: 3, 2: 4, 3: 5 };
 
-// A word is "known" once it survives several correct reps with a long interval.
-const KNOWN_REPETITIONS = 3;
-const KNOWN_INTERVAL = 21; // days
+// Graduation is defined once, in review/lifecycle.ts.
 
 export function applyReview(
   state: SrsState,
@@ -55,12 +58,7 @@ export function applyReview(
     if (easeFactor < 1.3) easeFactor = 1.3;
   }
 
-  const status: CardStatus =
-    repetitions >= KNOWN_REPETITIONS && interval >= KNOWN_INTERVAL
-      ? "known"
-      : repetitions === 0
-        ? "learning"
-        : "learning";
+  const status: CardStatus = isGraduated({ repetitions, interval }) ? "known" : "learning";
 
   const nextReview = new Date();
   nextReview.setDate(nextReview.getDate() + Math.max(interval, 0));
@@ -72,7 +70,7 @@ export function applyReview(
 
 /** A 0..1 progress value derived from SM-2 state (no stored mastery). */
 export function progress(state: SrsState): number {
-  const repPart = Math.min(state.repetitions / KNOWN_REPETITIONS, 1);
-  const intPart = Math.min(state.interval / KNOWN_INTERVAL, 1);
+  const repPart = Math.min(state.repetitions / GRADUATED_REPETITIONS, 1);
+  const intPart = Math.min(state.interval / GRADUATED_INTERVAL_DAYS, 1);
   return Math.round(((repPart + intPart) / 2) * 100) / 100;
 }

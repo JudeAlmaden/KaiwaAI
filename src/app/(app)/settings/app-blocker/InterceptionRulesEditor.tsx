@@ -262,8 +262,8 @@ export default function InterceptionRulesEditor({
         {values.learningRatio != null && (
           <div className="space-y-1.5">
             <SectionTitle>Learning ratio</SectionTitle>
-            <div className="grid grid-cols-4 gap-1">
-              {[0, 0.2, 0.5, 1].map((r) => (
+            <div className="grid grid-cols-5 gap-1">
+              {[0, 0.2, 0.5, 0.7, 1].map((r) => (
                 <Segmented
                   key={r}
                   active={values.learningRatio === r}

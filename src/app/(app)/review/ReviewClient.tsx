@@ -15,6 +15,11 @@ import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from "@/lib/fall
 import { getLearningConfig } from "@/lib/learning-config";
 import { resolveShowFurigana } from "@/lib/review/furigana";
 import type { FuriganaMode } from "@/lib/review/types";
+import {
+  formatComposition,
+  summarizeComposition,
+  type CompositionCounts,
+} from "@/lib/review/composition";
 
 type StudyMode = 
   | "due"           // Cards with nextReview in the past
@@ -63,6 +68,7 @@ export default function ReviewClient() {
   const [failedCardIds, setFailedCardIds] = useState<Set<string>>(new Set());
   const [passedCardIds, setPassedCardIds] = useState<Set<string>>(new Set());
   const [total, setTotal] = useState(0);
+  const [sessionComposition, setSessionComposition] = useState<CompositionCounts | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [cardEpoch, setCardEpoch] = useState(0);
   const [tally, setTally] = useState({ again: 0, good: 0 });
@@ -279,6 +285,7 @@ export default function ReviewClient() {
       learningRatio: String(learningRatio),
       maxLearningPool: String(learningCfg.maxLearningPool),
       maxNewCards: String(learningCfg.maxNewCards),
+      newPerSession: String(learningCfg.newPerSession),
     });
     if (setup.studyMode === "new") params.set("status", "new");
     if (setup.practice) params.set("practice", "true");
@@ -329,6 +336,7 @@ export default function ReviewClient() {
       learningRatio: String(learningRatio),
       maxLearningPool: String(learningCfg.maxLearningPool),
       maxNewCards: String(learningCfg.maxNewCards),
+      newPerSession: String(learningCfg.newPerSession),
     });
     if (s.studyMode === "new") params.set("status", "new");
     if (s.practice) params.set("practice", "true");
@@ -386,6 +394,7 @@ export default function ReviewClient() {
     setFailedCardIds(new Set());
     setPassedCardIds(new Set());
     setTotal(shuffled.length);
+    setSessionComposition(summarizeComposition(shuffled));
     setTally({ again: 0, good: 0 });
     setFlipped(false);
     setCardEpoch((e) => e + 1);
@@ -884,6 +893,11 @@ export default function ReviewClient() {
             {setup.isContinuous ? `${doneCount} reviewed` : `${doneCount}/${total}`}
           </span>
         </div>
+        {sessionComposition && (sessionComposition.newCount > 0 || sessionComposition.reviewCount > 0) && (
+          <p className="mx-auto mt-1.5 max-w-md text-center text-[10px] font-bold uppercase tracking-wide text-muted">
+            {formatComposition(sessionComposition)}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-4 pb-8">

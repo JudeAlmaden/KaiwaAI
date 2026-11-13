@@ -280,18 +280,18 @@ export default function InterceptionRulesModal({
                 </div>
               </div>
 
-              {/* Focus (learning ratio) — only meaningful when pool is 'all' */}
-              {studyMode === 'all' && (
-                <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+              {/* Focus (learning ratio): how much of the session is new vs review */}
+              <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
                   <div className="flex flex-col">
                     <span className="text-xs font-semibold text-foreground shrink-0">Focus</span>
                     <span className="text-[9px] text-muted">New vs review mix</span>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap justify-end">
                     {[
                       { ratio: 0.0, label: 'Reviews' },
                       { ratio: 0.2, label: 'Gentle' },
                       { ratio: 0.5, label: '50/50' },
+                      { ratio: 0.7, label: '70%' },
                       { ratio: 1.0, label: 'All New' },
                     ].map((opt) => (
                       <button
@@ -309,7 +309,6 @@ export default function InterceptionRulesModal({
                     ))}
                   </div>
                 </div>
-              )}
             </div>
           </div>
 

@@ -31,6 +31,14 @@ const LEARNING_POOLS: { value: number; label: string }[] = [
   { value: 0, label: "All" },
 ];
 
+const NEW_PER_SESSION: { value: number; label: string }[] = [
+  { value: 0, label: "Off" },
+  { value: 1, label: "1" },
+  { value: 2, label: "2" },
+  { value: 3, label: "3" },
+  { value: 5, label: "5" },
+];
+
 const LEARNING_RATIOS: { value: number; label: string }[] = [
   { value: 0.0, label: "Reviews only" },
   { value: 0.2, label: "20% new" },
@@ -140,6 +148,26 @@ export default function ReviewDefaultsCard() {
               className="w-full justify-center"
             >
               {p.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-sm font-bold">New cards per session</p>
+        <p className="mb-2 text-xs text-muted">
+          Rationed intake: at most this many brand-new cards per session, with reviews
+          filling the rest. Never padded with extra new cards.
+        </p>
+        <div className="mt-2 grid grid-cols-5 gap-2">
+          {NEW_PER_SESSION.map((n) => (
+            <Chip
+              key={n.value}
+              active={config.newPerSession === n.value}
+              onClick={() => patch({ newPerSession: n.value })}
+              className="w-full justify-center"
+            >
+              {n.label}
             </Chip>
           ))}
         </div>

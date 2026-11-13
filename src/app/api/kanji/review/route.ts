@@ -4,6 +4,12 @@ import { getCurrentUser } from "@/lib/auth-helpers";
 import type { ReviewGrade } from "@/lib/srs";
 import { composeSession } from "@/lib/session-composer";
 import {
+  mergeUniqueById,
+  needsMaintenanceTopUp,
+} from "@/lib/review/maintenance-window";
+import { LEARNING_CARD_WHERE } from "@/lib/review/lifecycle";
+import { introducedTodayWhere, resolveNewAllowance } from "@/lib/review/intake";
+import {
   applyFsrsReview,
   buildReviewPersistData,
   type EarlyReviewStrategy,
@@ -32,6 +38,8 @@ export async function GET(req: Request) {
   const rawMaxNew = sp.get("maxNewCards");
   const rawMaxLearning = sp.get("maxLearningPool");
   const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
+  const rawNewPerSession = sp.get("newPerSession");
+  const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
   const heisigLesson = sp.get("heisigLesson"); // lesson-based mode
   const groupId = sp.get("groupId"); // group-based mode
@@ -169,7 +177,7 @@ export async function GET(req: Request) {
     // Fetch larger pool with deterministic ordering
     const fetchLimit = Math.min(limit * 4, 200);
     
-    const allKanji = await prisma.userKanji.findMany({
+    let allKanji = await prisma.userKanji.findMany({
       where,
       include: {
         kanji: true,
@@ -182,10 +190,39 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
+    // Weakest-first ordering lets a large new-card backlog fill the entire
+    // window, so the maintenance pool never forms. Top it up separately.
+    const alreadyReviewsOnly =
+      (where as { repetitions?: unknown }).repetitions !== undefined;
+    if (!alreadyReviewsOnly && needsMaintenanceTopUp(allKanji, limit, learningRatio)) {
+      const reviewed = await prisma.userKanji.findMany({
+        where: { ...where, repetitions: { gt: 0 } },
+        include: {
+          kanji: true,
+        },
+        orderBy: [{ nextReview: "asc" }],
+        take: fetchLimit,
+      });
+      allKanji = mergeUniqueById(allKanji, reviewed ?? []);
+    }
+
     let effectiveMaxNewCards = maxNewCards;
+    if (maxNewCards !== undefined || newPerSession !== undefined) {
+      const introducedToday =
+        Number(
+          await prisma.userKanji.count({
+            where: introducedTodayWhere(user.id),
+          })
+        ) || 0;
+      effectiveMaxNewCards = resolveNewAllowance({
+        maxNewCards: maxNewCards ?? Number.POSITIVE_INFINITY,
+        maxNewPerSession: newPerSession,
+        introducedToday,
+      });
+    }
     if (maxLearningPool !== undefined && maxLearningPool > 0) {
       const inLearningCount = await prisma.userKanji.count({
-        where: { userId: user.id, status: "learning" },
+        where: { userId: user.id, ...LEARNING_CARD_WHERE },
       });
       if (inLearningCount >= maxLearningPool) {
         effectiveMaxNewCards = 0;
@@ -199,7 +236,7 @@ export async function GET(req: Request) {
       limit,
       ignoreDueDate,
       learningRatio,
-      { maxNewCards: effectiveMaxNewCards }
+      { maxNewCards: effectiveMaxNewCards, maxNewPerSession: newPerSession }
     );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     userKanji = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));

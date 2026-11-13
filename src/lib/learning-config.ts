@@ -9,6 +9,7 @@ export interface LearningConfig {
   desiredRetention: number;
   maxDailyReviews: number;
   maxNewCards: number;
+  newPerSession: number; // Fixed intake of new cards per session (default: 3)
   maxLearningPool: number; // Max in-progress learning cards before pausing new cards (default: 20, 0 = unlimited)
   earlyReviewStrategy: EarlyReviewStrategy;
   defaultDirection: ReviewDirection;
@@ -22,6 +23,7 @@ export const DEFAULT_LEARNING_CONFIG: LearningConfig = {
   desiredRetention: 0.9,
   maxDailyReviews: 50,
   maxNewCards: 20,
+  newPerSession: 3,
   maxLearningPool: 20,
   earlyReviewStrategy: "proportional",
   defaultDirection: "mixed",
@@ -52,6 +54,10 @@ export function getLearningConfig(): LearningConfig {
       maxNewCards: Math.max(
         0,
         Math.min(200, parsed.maxNewCards ?? DEFAULT_LEARNING_CONFIG.maxNewCards)
+      ),
+      newPerSession: Math.max(
+        0,
+        Math.min(20, parsed.newPerSession ?? DEFAULT_LEARNING_CONFIG.newPerSession)
       ),
       maxLearningPool: parsed.maxLearningPool !== undefined
         ? Math.max(0, Math.min(200, parsed.maxLearningPool))

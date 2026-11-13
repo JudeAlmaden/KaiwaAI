@@ -168,38 +168,67 @@ describe("session-composer", () => {
     expect(active20.length).toBe(10); // 50% of 20
   });
 
-  it("should exclude recently reviewed cards from maintenance pool", () => {
+  it("should hold back only cards reviewed moments ago from maintenance pool", () => {
     const now = new Date();
     const past = new Date(now.getTime() - 1000 * 60 * 60 * 24); // 1 day ago
-    const recent = new Date(now.getTime() - 30 * 60 * 1000); // 30 minutes ago
-    const longAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000); // 2 hours ago
-    
+    const justNow = new Date(now.getTime() - 30 * 1000); // 30 seconds ago
+    const lastSession = new Date(now.getTime() - 5 * 60 * 1000); // 5 minutes ago
+
     const cards = [
       createCard({ id: "new-1", repetitions: 0, nextReview: past }),
-      createCard({ 
-        id: "recent-review", 
-        repetitions: 5, 
-        easeFactor: 2.5, 
-        interval: 10, 
+      createCard({
+        id: "just-reviewed",
+        repetitions: 5,
+        easeFactor: 2.5,
+        interval: 10,
         nextReview: past,
-        lastReviewedAt: recent, // Reviewed 30 min ago
+        lastReviewedAt: justNow,
       }),
-      createCard({ 
-        id: "old-review", 
-        repetitions: 5, 
-        easeFactor: 2.5, 
-        interval: 10, 
+      createCard({
+        id: "previous-session",
+        repetitions: 5,
+        easeFactor: 2.5,
+        interval: 10,
         nextReview: past,
-        lastReviewedAt: longAgo, // Reviewed 2 hours ago
+        lastReviewedAt: lastSession, // Finished a session 5 min ago
       }),
     ];
 
     const { maintenanceCards } = composeSession(cards, 5);
 
-    // Should NOT include recently reviewed card
-    expect(maintenanceCards.some(c => c.id === "recent-review")).toBe(false);
-    // Should include card reviewed >1 hour ago
-    expect(maintenanceCards.some(c => c.id === "old-review")).toBe(true);
+    // Only the card reviewed seconds ago is held back
+    expect(maintenanceCards.some(c => c.id === "just-reviewed")).toBe(false);
+    // A card from the previous session is available again
+    expect(maintenanceCards.some(c => c.id === "previous-session")).toBe(true);
+  });
+
+  it("should include reviewed cards in a session started right after another", () => {
+    const now = new Date();
+    const past = new Date(now.getTime() - 1000 * 60 * 60 * 24);
+    const finishedFiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
+    // 4 new + 4 reviewed, all reviewed cards finished 5 min ago (study-ahead mode)
+    const cards = [
+      ...Array.from({ length: 4 }, (_, i) =>
+        createCard({ id: `new-${i}`, repetitions: 0, nextReview: past })
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        createCard({
+          id: `maint-${i}`,
+          repetitions: 5,
+          easeFactor: 2.5,
+          interval: 10,
+          nextReview: past,
+          lastReviewedAt: finishedFiveMinAgo,
+        })
+      ),
+    ];
+
+    const { session } = composeSession(cards, 8, true);
+    const reviewed = session.filter(c => c.repetitions > 0);
+
+    expect(reviewed.length).toBeGreaterThan(0);
+    expect(session.length).toBe(8);
   });
 
   it("should prioritize new cards over weak old cards in active pool", () => {
@@ -268,9 +297,10 @@ describe("session-composer", () => {
     expect(activeCards.some(c => c.id === "cooling-down")).toBe(false);
     expect(activeCards.some(c => c.id === "new-cooling")).toBe(false);
     expect(activeCards.some(c => c.id === "cooldown-expired")).toBe(true);
-    // The 5-min-ago card is in NEITHER pool: active cooldown (10 min) plus the
-    // maintenance 1-hour recency guard both apply while it cools down.
-    expect(maintenanceCards.some(c => c.id === "cooling-down")).toBe(false);
+    // The 5-min-ago card is out of the active pool (10-minute cooldown) but its
+    // maintenance cooldown (2 minutes) has expired, so it can come back as a
+    // review card — that is what makes a second session non-empty.
+    expect(maintenanceCards.some(c => c.id === "cooling-down")).toBe(true);
   });
 
   it("should exclude old weak cards with longer intervals from active pool", () => {

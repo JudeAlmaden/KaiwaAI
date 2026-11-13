@@ -11,6 +11,12 @@ import {
 
 import { FlashcardStatus, PartOfSpeech, Prisma } from "@/generated/prisma/client";
 import { parseCardSource } from "@/lib/review/card-source";
+import {
+  mergeUniqueById,
+  needsMaintenanceTopUp,
+} from "@/lib/review/maintenance-window";
+import { LEARNING_CARD_WHERE } from "@/lib/review/lifecycle";
+import { introducedTodayWhere, resolveNewAllowance } from "@/lib/review/intake";
 
 // Cards for review with various study modes:
 //   ?studyMode=due         — cards with nextReview in the past (default)
@@ -37,6 +43,8 @@ export async function GET(req: Request) {
   const rawMaxNew = sp.get("maxNewCards");
   const rawMaxLearning = sp.get("maxLearningPool");
   const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
+  const rawNewPerSession = sp.get("newPerSession");
+  const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
 
   // Build base where clause
@@ -108,7 +116,7 @@ export async function GET(req: Request) {
     const fetchLimit = Math.min(limit * 4, 200);
     
     // Fetch with deterministic ordering for active pool prioritization
-    const allCards = await prisma.userFlashcard.findMany({
+    let allCards = await prisma.userFlashcard.findMany({
       where,
       include: {
         word: true,
@@ -123,10 +131,39 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
+    // Weakest-first ordering lets a large new-card backlog fill the entire
+    // window, so the maintenance pool never forms. Top it up separately.
+    if (!where.repetitions && needsMaintenanceTopUp(allCards, limit, learningRatio)) {
+      const reviewed = await prisma.userFlashcard.findMany({
+        where: { ...where, repetitions: { gt: 0 } },
+        include: {
+          word: true,
+          wordForm: true,
+          phrase: true,
+        },
+        orderBy: [{ nextReview: "asc" }],
+        take: fetchLimit,
+      });
+      allCards = mergeUniqueById(allCards, reviewed ?? []);
+    }
+
     let effectiveMaxNewCards = maxNewCards;
+    if (maxNewCards !== undefined || newPerSession !== undefined) {
+      const introducedToday =
+        Number(
+          await prisma.userFlashcard.count({
+            where: introducedTodayWhere(user.id),
+          })
+        ) || 0;
+      effectiveMaxNewCards = resolveNewAllowance({
+        maxNewCards: maxNewCards ?? Number.POSITIVE_INFINITY,
+        maxNewPerSession: newPerSession,
+        introducedToday,
+      });
+    }
     if (maxLearningPool !== undefined && maxLearningPool > 0) {
       const inLearningCount = await prisma.userFlashcard.count({
-        where: { userId: user.id, status: "learning" },
+        where: { userId: user.id, ...LEARNING_CARD_WHERE },
       });
       if (inLearningCount >= maxLearningPool) {
         effectiveMaxNewCards = 0;
@@ -140,7 +177,7 @@ export async function GET(req: Request) {
       limit,
       ignoreDueDate,
       learningRatio,
-      { maxNewCards: effectiveMaxNewCards }
+      { maxNewCards: effectiveMaxNewCards, maxNewPerSession: newPerSession }
     );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));

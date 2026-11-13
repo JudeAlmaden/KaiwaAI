@@ -23,6 +23,8 @@ import {
   transientLineFor,
 } from "@/lib/kai-mood";
 import type { DailyWord } from "@/lib/kai-word";
+import { formatComposition, projectSessionMix } from "@/lib/review/composition";
+import { getLearningConfig } from "@/lib/learning-config";
 import { canSpeak, speakJa } from "@/lib/speak";
 import KaiAvatar, { type KaiAvatarHandle } from "./KaiAvatar";
 import KaiSpeechBubble from "./KaiSpeechBubble";
@@ -270,6 +272,11 @@ function WordOfMoment({ moment }: { moment: DailyWord }) {
 export default function KaiRoomClient({ initialStats }: { initialStats: DashboardStats }) {
   const [stats, setStats] = useState<DashboardStats | null>(initialStats);
   const [moment, setMoment] = useState<DailyWord | null>(null);
+  const [mix, setMix] = useState<{
+    newCount: number;
+    reviewCount: number;
+    total: number;
+  } | null>(null);
   const [phase, setPhase] = useState<Phase>("greeting");
   const [transient, setTransient] = useState<{ mood: "celebrate" | "poke" | "pet"; id: number } | null>(null);
   const transientId = useRef(0);
@@ -289,6 +296,23 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
     fetch("/api/kai/word")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMoment(d?.word ?? null))
+      .catch(() => {});
+    // What a review session would actually contain, using this device's
+    // Learning defaults (new-card cap + review mix).
+    fetch("/api/review/composition")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.due) return;
+        const cfg = getLearningConfig();
+        setMix(
+          projectSessionMix(d.due, {
+            learningRatio: cfg.defaultLearningRatio,
+            maxNewCards: cfg.maxNewCards,
+            maxNewPerSession: cfg.newPerSession,
+            maxReviews: cfg.maxDailyReviews,
+          })
+        );
+      })
       .catch(() => {});
   }, []);
 
@@ -457,7 +481,15 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
               href="/review"
               primary={reviewFirst}
               title="Review Cards"
-              subtitle={ready ? (dueNow > 0 ? `${dueNow} waiting` : "All caught up!") : "—"}
+              subtitle={
+                ready
+                  ? mix && mix.total > 0
+                    ? formatComposition(mix)
+                    : dueNow > 0
+                      ? `${dueNow} waiting`
+                      : "All caught up!"
+                  : "—"
+              }
               icon={<Cards size={18} weight="fill" className={reviewFirst ? "text-white" : "text-indigo-ai"} />}
             />
             <GameButton

@@ -18,33 +18,31 @@ interface SessionComposition<T extends Card> {
 }
 
 export interface ComposeSessionOptions {
+  /** Daily ceiling on new cards (Learning settings / request param). */
   maxNewCards?: number;
+  /** Fixed per-session intake of new cards (default: unlimited for backwards compatibility). */
+  maxNewPerSession?: number;
 }
 
 /**
- * Composes a review session from active (focused learning) and maintenance (retention) pools.
- * 
- * Active pool: learningRatio proportion of session (or 0 for reviews only)
- *   - Priority: New cards (repetitions === 0) first (up to maxNewCards)
- *   - Then: Weak cards (easeFactor < 2.2 AND interval < 3, or high difficulty & low stability)
- *   - Sorted deterministically: easeFactor → repetitions → createdAt (all asc)
- * 
- * Maintenance pool: remaining slots
- *   - Criteria: nextReview <= now AND lastReviewedAt < now - 1 hour
- *   - Avoids recently seen cards to prevent immediate repetition
- *   - Sorted by nextReview asc, then shuffled for variety
- *   - When ignoreDueDate=true: includes ALL non-active cards regardless of nextReview
- * 
- * Pattern: [A1, M1, A2, M2, M3, ...]
- *   - Active cards appear early and close together for reinforcement
- *   - Maintenance cards fill remaining slots with variety
- * 
- * @param allCards - Pre-sorted cards from database
- * @param sessionSize - Total cards in session (default: 5)
- * @param ignoreDueDate - If true, maintenance pool includes all cards regardless of due date (for studyMode=all)
- * @param learningRatio - Proportion of active cards (0.0 to 1.0, default: 0.5)
- * @param options - Additional constraints like maxNewCards
- * @returns Session composition with interleaved active and maintenance cards
+ * Composes a review session from active (focused learning) and maintenance
+ * (retention) pools.
+ *
+ * Active slots: `learningRatio` share of the session. Filled by new cards (up to
+ * the per-session intake quota AND the daily ceiling) and then by weak cards.
+ *
+ * Maintenance slots: the rest of the session. Reviewed cards only, rotated by
+ * least-recently-reviewed so consecutive sessions don't replay the same cards.
+ *
+ * Composition rules:
+ *   - New cards are rationed: never more than `maxNewCards`/`maxNewPerSession`,
+ *     and never used to pad a session past the active target.
+ *   - Reviews fill every remaining slot, so a short active pool means more
+ *     maintenance (never more new cards).
+ *   - If reviews run short the session is simply shorter; new cards never pad it.
+ *   - Cards reviewed in the last 2 minutes are held back from maintenance, and
+ *     cards reviewed in the last 10 minutes from active, so a second session
+ *     started immediately after the first still gets review cards.
  */
 export function composeSession<T extends Card>(
   allCards: T[],
@@ -54,47 +52,46 @@ export function composeSession<T extends Card>(
   options?: ComposeSessionOptions
 ): SessionComposition<T> {
   const now = new Date();
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  // Active-pool cooldown: FSRS "Again" cards return after ~10 minutes, so any
-  // shorter cooldown would let a card appear twice in one sitting. 10 minutes
-  // lets failed cards cycle back for relearning while preventing the same weak
-  // cards from dominating every consecutive session.
+  const MAINTENANCE_COOLDOWN_MS = 2 * 60 * 1000;
+  const maintenanceCooldownAgo = new Date(now.getTime() - MAINTENANCE_COOLDOWN_MS);
+  // FSRS "Again" cards return after ~10 minutes; shorter would let the same card
+  // appear twice in one sitting.
   const ACTIVE_COOLDOWN_MS = 10 * 60 * 1000;
   const activeCooldownAgo = new Date(now.getTime() - ACTIVE_COOLDOWN_MS);
 
-  const ratio = Math.max(0, Math.min(1.0, typeof learningRatio === "number" && !isNaN(learningRatio) ? learningRatio : 0.5));
-  // Calculate pool sizes based on learningRatio (target, not a hard cap)
-  const activeTarget = ratio === 0 ? 0 : Math.max(1, Math.round(sessionSize * ratio));
-  const maintenanceTarget = sessionSize - activeTarget;
+  const safeSize = Math.max(0, Math.floor(sessionSize));
+  const ratio = Math.max(
+    0,
+    Math.min(1.0, typeof learningRatio === "number" && !isNaN(learningRatio) ? learningRatio : 0.5)
+  );
 
-  // Split cards into pools
+  // Target split: active gets round(size * ratio), at least one card when any new
+  // cards are allowed; maintenance gets the rest.
+  const activeTarget =
+    ratio === 0 ? 0 : Math.min(safeSize, Math.max(1, Math.round(safeSize * ratio)));
+
+  // New-card intake: the session quota and the daily ceiling both apply.
+  const newQuota = Math.min(
+    options?.maxNewCards ?? Number.POSITIVE_INFINITY,
+    options?.maxNewPerSession ?? Number.POSITIVE_INFINITY
+  );
+
   const activePool: T[] = [];
   const maintenancePool: T[] = [];
   let newCardsAdded = 0;
 
   for (const card of allCards) {
-    // Active pool criteria: prioritize new cards, then weak short-interval cards.
-    // When FSRS fields (D, S) are present we use those for the "weak" detection;
-    // otherwise we fall back to the SM-2 heuristic (easeFactor + interval).
-    const isNew = card.repetitions === 0;
+    const isNew = (card.repetitions ?? 0) === 0;
     const hasFsrs =
       card.difficulty != null &&
       card.stability != null &&
       !isNaN(card.difficulty) &&
       !isNaN(card.stability);
-    let isWeakAndShort: boolean;
-    if (hasFsrs) {
-      // FSRS-active: high difficulty (struggling) AND low stability (short memory)
-      const D = card.difficulty!;
-      const S = card.stability!;
-      isWeakAndShort = D > 7 && S < 5;
-    } else {
-      // SM-2 fallback
-      isWeakAndShort = card.easeFactor < 2.2 && card.interval < 3;
-    }
+    const isWeakAndShort = hasFsrs
+      ? card.difficulty! > 7 && card.stability! < 5
+      : card.easeFactor < 2.2 && card.interval < 3;
 
-    const maxNew = options?.maxNewCards;
-    const canAddNew = isNew && (maxNew === undefined || newCardsAdded < maxNew);
+    const canAddNew = isNew && newCardsAdded < newQuota;
     const isActive = (canAddNew || isWeakAndShort) && ratio > 0;
     const wasJustReviewed =
       card.lastReviewedAt != null && card.lastReviewedAt >= activeCooldownAgo;
@@ -103,80 +100,49 @@ export function composeSession<T extends Card>(
       activePool.push(card);
       if (isNew) newCardsAdded++;
     } else if (!isNew) {
-      // Maintenance pool: only previously reviewed cards (repetitions > 0)
       const isDue = ignoreDueDate || card.nextReview <= now;
-      
-      if (isDue) {
-        // Avoid recently reviewed cards (within last hour)
-        const wasRecentlyReviewed = 
-          card.lastReviewedAt && card.lastReviewedAt >= oneHourAgo;
-        
-        if (!wasRecentlyReviewed) {
-          maintenancePool.push(card);
-        }
+      const wasRecentlyReviewed =
+        card.lastReviewedAt != null && card.lastReviewedAt >= maintenanceCooldownAgo;
+      if (isDue && !wasRecentlyReviewed) {
+        maintenancePool.push(card);
       }
     }
   }
 
-  // Take up to each target from its pool (still honoring split when pools are large)
+  // Least-recently-reviewed first: rotation, not luck.
+  maintenancePool.sort((a, b) => {
+    const at = a.lastReviewedAt ? a.lastReviewedAt.getTime() : 0;
+    const bt = b.lastReviewedAt ? b.lastReviewedAt.getTime() : 0;
+    return at - bt;
+  });
+
   const selectedActive = activePool.slice(0, activeTarget);
-  const activeIds = new Set(selectedActive.map(c => c.id));
+  const activeIds = new Set(selectedActive.map((c) => c.id));
+  const rotatedMaintenance = maintenancePool.filter((c) => !activeIds.has(c.id));
 
-  // Maintenance pool: exclude active cards, then shuffle
-  const eligibleMaintenance = maintenancePool.filter(c => !activeIds.has(c.id));
-  shuffleArray(eligibleMaintenance);
-  const selectedMaintenance = eligibleMaintenance.slice(0, maintenanceTarget);
+  const maintenanceTarget = safeSize - activeTarget;
+  const selectedMaintenance = rotatedMaintenance.slice(0, maintenanceTarget);
+  const maintenanceExtra = rotatedMaintenance.slice(selectedMaintenance.length);
+  const activeExtra = activePool.slice(activeTarget);
 
-  // Build pools of "overflow" cards beyond the targets, still eligible for use
-  // to fill the session up to sessionSize (so the user doesn't get a truncated queue
-  // when sufficient cards exist but the split isn't perfectly achievable).
-  const overflowActive = ratio === 0
-    ? []
-    : activePool
-        .slice(activeTarget)
-        .filter(c => !activeIds.has(c.id));
-  const overflowMaintenance = eligibleMaintenance.slice(maintenanceTarget);
-
-  // Compose session: [A1, M1, A2, M2, M3, ...]
-  // Interleave active and maintenance for better spacing.
-  // When the primary selections run out, draw from overflow pools (active first, then
-  // maintenance) until sessionSize is reached or no more cards are available.
-  const session: T[] = [];
-  let aIdx = 0, mIdx = 0;
-  let aOverIdx = 0, mOverIdx = 0;
-
-  for (let i = 0; i < sessionSize; i++) {
-    const primaryA = aIdx < selectedActive.length;
-    const primaryM = mIdx < selectedMaintenance.length;
-    const overA = aOverIdx < overflowActive.length;
-    const overM = mOverIdx < overflowMaintenance.length;
-
-    if (!primaryA && !primaryM && !overA && !overM) break;
-
-    const wantActive = ratio > 0 && (i % 2 === 0 || (!primaryM && !overM));
-
-    if (wantActive) {
-      if (primaryA) {
-        session.push(selectedActive[aIdx++]);
-      } else if (overA) {
-        session.push(overflowActive[aOverIdx++]);
-      } else if (primaryM) {
-        session.push(selectedMaintenance[mIdx++]);
-      } else if (overM) {
-        session.push(overflowMaintenance[mOverIdx++]);
-      }
-    } else {
-      if (primaryM) {
-        session.push(selectedMaintenance[mIdx++]);
-      } else if (overM) {
-        session.push(overflowMaintenance[mOverIdx++]);
-      } else if (primaryA && ratio > 0) {
-        session.push(selectedActive[aIdx++]);
-      } else if (overA && ratio > 0) {
-        session.push(overflowActive[aOverIdx++]);
-      }
-    }
+  // Reviews fill the session; a short active pool donates its slots to reviews.
+  const missing = safeSize - selectedActive.length - selectedMaintenance.length;
+  if (missing > 0) {
+    selectedMaintenance.push(...maintenanceExtra.slice(0, missing));
   }
+
+  // Remaining gaps may only be filled by reviewed cards — never by extra new
+  // cards beyond the intake quota.
+  const stillMissing = safeSize - selectedActive.length - selectedMaintenance.length;
+  if (stillMissing > 0) {
+    const reviewedExtras = activeExtra.filter((c) => (c.repetitions ?? 0) > 0);
+    selectedActive.push(...reviewedExtras.slice(0, stillMissing));
+  }
+
+  // Rotate selection, then shuffle within the chosen set for session order.
+  shuffleArray(selectedMaintenance);
+
+  const session = interleave(selectedActive, selectedMaintenance);
 
   return {
     session,
@@ -186,8 +152,28 @@ export function composeSession<T extends Card>(
 }
 
 /**
- * Fisher-Yates shuffle (in-place)
+ * Spread the two lists across the session: each active card is followed by as
+ * many maintenance cards as its share of the session allows, so the mix stays
+ * even and the session always opens with an active card when there is one.
  */
+function interleave<T>(active: T[], maintenance: T[]): T[] {
+  const out: T[] = [];
+  if (active.length === 0) return [...maintenance];
+  if (maintenance.length === 0) return [...active];
+
+  let placed = 0;
+  for (let i = 0; i < active.length; i++) {
+    out.push(active[i]);
+    const upTo = Math.floor(((i + 1) * maintenance.length) / active.length);
+    while (placed < upTo) {
+      out.push(maintenance[placed++]);
+    }
+  }
+  while (placed < maintenance.length) out.push(maintenance[placed++]);
+  return out;
+}
+
+/** Fisher-Yates shuffle (in-place) */
 function shuffleArray<T>(array: T[]): void {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

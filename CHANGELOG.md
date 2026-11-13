@@ -4,6 +4,27 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-11-13
+
+### Added
+- **Focus mix in Interception Rules** — the Focus row (new vs review mix) now always appears in the interception rules modal instead of only when Pool = All, and gained a 70% option so it matches Review defaults.
+- **Rationed new-card intake** (`newPerSession`, default 3) — sessions no longer take whatever new cards happen to be in the deck. Each session introduces at most this many brand-new cards, further capped by the daily `maxNewCards` ceiling and anything already introduced today; reviews fill every remaining slot, and a session is allowed to be shorter rather than padded with new cards. Exposed in Settings → Review defaults ("New cards per session") and passed by both the in-app review flow and Focus Guard.
+- **Visible session composition** — the home **Review Cards** button and the review session header now show the new-vs-review split (e.g. "3 new · 7 review") instead of a single opaque due count. New `GET /api/review/composition` returns due cards split by class (vocab + kanji), and `projectSessionMix` projects them through the device's Learning defaults (intake quota, new-card ceiling, review mix, max daily reviews) with the same rules the composer uses. The session header summarises the cards actually loaded, so the mix is verifiable at a glance.
+- **One card lifecycle** (`src/lib/review/lifecycle.ts`) — graduation is now defined once: 3 successful reviews and a 21-day interval. Scheduling (SM-2 and FSRS), session composition, the learning-pool gate and the status backfill all use it, ending the three-way disagreement where 61 reviewed cards sat in "learning" forever.
+
+### Fixed
+- **The review mix setting was not honoured** — `learningRatio` only picked the target slice, and the interleave forced active cards into every other slot, so 20%, 50%, 70% and 100% all produced a 50/50 session. Composition now fills each side to its target and lets reviews take over any shortfall: 0/10, 2/8, 5/5, 7/3 and 10/0 for ratios 0, 0.2, 0.5, 0.7 and 1. The home-screen projection agrees with the composer in every case.
+- **Cards silently retired by runaway intervals** — 33 cards had intervals over 100 years (worst 98,592,206 days) and could never come due again. `recallProbability` treated a missing `lastReviewedAt` as "elapsed = stored interval", collapsing retrievability to ~0 and exploding the FSRS growth term. Unknown history now assumes an on-time review, and intervals/stability are clamped to 3,650 days. `scripts/fix-runaway-intervals.ts` repairs existing cards (dry-run by default).
+- **The in-progress learning gate counted almost the whole deck** — it queried `status: "learning"`, which included every card short of graduation (77 of 155 cards for one account), so the gate could block new cards for weeks. It now counts only cards actively in progress (reps 1–2 or interval under 21 days).
+- **Maintenance cards were locked out for an hour** — the maintenance recency guard was 60 minutes, so a session started right after another was new-only. It is now 2 minutes, and maintenance cards rotate least-recently-reviewed first so a short cooldown doesn't replay the same few.
+- **Review sessions never composing the maintenance pool** — all three review endpoints fetched a single weakest-first window of candidates, so a deck with more new cards than that window held returned only new cards and the maintenance half of the session was never formed, regardless of the 50/50 mix in Review defaults or Focus Guard. Each endpoint now checks whether the fetched window can satisfy its maintenance target and, if not, merges a separate reviewed pool ordered by `nextReview` (deduplicated by card id). Reviews-only queries, which already constrain `repetitions`, are left untouched.
+
+### Technical
+- Scripts (`npx tsx`): `scripts/audit-card-timing.ts` (read-only scheduling audit), `scripts/fix-runaway-intervals.ts` and `scripts/backfill-card-status.ts` (dry-run by default, `--apply` to write).
+- Modified: `src/app/(app)/settings/app-blocker/InterceptionRulesModal.tsx`, `src/app/(app)/settings/app-blocker/InterceptionRulesEditor.tsx`, `src/lib/session-composer.ts`, `src/lib/learning-config.ts`, `src/lib/srs.ts`, `src/lib/fsrs/apply-review.ts`, `src/lib/fsrs/scheduler.ts`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/(app)/home/KaiRoomClient.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/settings/ReviewDefaultsCard.tsx`, `src/app/app-lock/page.tsx`
+- New: `src/lib/review/maintenance-window.ts` (+ test), `src/lib/review/composition.ts` (+ test), `src/lib/review/lifecycle.ts` (+ test), `src/lib/review/intake.ts` (+ test), `src/app/api/review/composition/route.ts`, `scripts/fix-runaway-intervals.ts`, `scripts/backfill-card-status.ts`, `scripts/audit-card-timing.ts`
+- Tests: 664 passing (71 files) — lint/typecheck clean
+
 ## [2.3.0] - 2026-11-13
 
 ### Added

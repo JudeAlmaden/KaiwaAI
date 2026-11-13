@@ -153,11 +153,14 @@ export default function StandaloneAppLockPage() {
 
     const learningCfg = getLearningConfig();
     const maxLearningPool = learningCfg.maxLearningPool;
-    const maxNew = learningRatio === 0 ? 0 : Math.max(1, Math.round(count * learningRatio));
+    // Same intake rules as the in-app session: the route combines the daily
+    // ceiling with the per-session quota.
+    const maxNewCards = learningCfg.maxNewCards;
+    const newPerSession = learningCfg.newPerSession;
 
     try {
       const res = await fetch(
-        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&maxNewCards=${maxNew}&maxLearningPool=${maxLearningPool}`
+        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&maxNewCards=${maxNewCards}&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}`
       );
       if (res.ok) {
         const data = await res.json();

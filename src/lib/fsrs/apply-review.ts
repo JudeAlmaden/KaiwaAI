@@ -4,6 +4,7 @@ import { createScheduler, type FSRSOptions, type ReviewGrade as FSRSGrade } from
 import { createConverter } from "./converter";
 import { FallbackHandler } from "./fallback";
 import { getServerDesiredRetention, parseDesiredRetention } from "@/lib/learning-config";
+import { MAX_INTERVAL_DAYS, cardStatus } from "@/lib/review/lifecycle";
 import { DEFAULT_FSRS_PARAMETERS } from "./config";
 
 export type EarlyReviewStrategy = "practice" | "proportional";
@@ -64,17 +65,23 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * (i.e. assume the card was reviewed on time, giving R ≈ 0.9).
  */
 function recallProbability(card: ReviewableCard, stability: number, now: Date): number {
+  const s = Math.max(stability, 0.1);
   const last = card.lastReviewedAt ? new Date(card.lastReviewedAt) : null;
+  // Unknown review history means "assume the review happened on time". Using
+  // the stored interval as elapsed time made R collapse to 0 for cards with a
+  // long interval and blew stability up (cards were scheduled 100+ years out).
   const daysElapsed = last
     ? Math.max(0, (now.getTime() - last.getTime()) / MS_PER_DAY)
-    : Math.max(0, card.interval);
-  const s = Math.max(stability, 0.1);
+    : 9 * s * (1 / 0.9 - 1); // R = 0.9: the schedule's own desired retention
   return Math.max(0, Math.min(1, Math.pow(1 + daysElapsed / (9 * s), -1)));
 }
 
 function sm2IntervalFromStability(stability: number, retention: number): number {
-  if (retention === 0.9) return Math.max(1, Math.round(stability));
-  return Math.max(1, Math.round(stability * (Math.log(retention) / Math.log(0.9))));
+  const raw =
+    retention === 0.9
+      ? stability
+      : stability * (Math.log(retention) / Math.log(0.9));
+  return Math.max(1, Math.min(MAX_INTERVAL_DAYS, Math.round(raw)));
 }
 
 /**
@@ -157,12 +164,14 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
 
     const result = scheduler.schedule(state, grade as FSRSGrade, fsrsOptions);
     const interval = sm2IntervalFromStability(result.stability, retention);
+    const repetitions = grade === 0 ? 0 : card.repetitions + 1;
 
     return {
       easeFactor: card.easeFactor,
       interval,
-      repetitions: grade === 0 ? 0 : card.repetitions + 1,
-      status: result.status,
+      repetitions,
+      // One graduation rule for both schedulers (see review/lifecycle.ts).
+      status: cardStatus({ repetitions, interval }),
       nextReview: result.nextReview,
       difficulty: result.difficulty,
       stability: result.stability,

@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { composeSession } from "@/lib/session-composer";
 import { parseCardSource } from "@/lib/review/card-source";
+import {
+  mergeUniqueById,
+  needsMaintenanceTopUp,
+} from "@/lib/review/maintenance-window";
+import { LEARNING_CARD_WHERE } from "@/lib/review/lifecycle";
+import { introducedTodayWhere, resolveNewAllowance } from "@/lib/review/intake";
 
 function safeJsonArray(val: string | null | undefined): string[] {
   if (!val) return [];
@@ -27,6 +33,8 @@ export async function GET(req: Request) {
   const rawMaxNew = sp.get("maxNewCards");
   const rawMaxLearning = sp.get("maxLearningPool");
   const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
+  const rawNewPerSession = sp.get("newPerSession");
+  const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
 
   // Build where clauses for both vocab and kanji
@@ -84,7 +92,7 @@ export async function GET(req: Request) {
     // Fetch larger pools with deterministic ordering
     const fetchLimit = Math.ceil(limit * 2); // Each type gets 2x for pool composition
     
-    const allVocab = await prisma.userFlashcard.findMany({
+    let allVocab = await prisma.userFlashcard.findMany({
       where: vocabWhere,
       include: {
         word: true,
@@ -99,7 +107,7 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
-    const allKanji = await prisma.userKanji.findMany({
+    let allKanji = await prisma.userKanji.findMany({
       where: kanjiWhere,
       include: {
         kanji: true,
@@ -112,11 +120,56 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
+    // Each type gets half the session, so each half needs its own maintenance
+    // cards. Weakest-first windows otherwise return only new cards.
+    const perTypeSession = Math.ceil(limit / 2);
+    if (
+      !vocabWhere.repetitions &&
+      needsMaintenanceTopUp(allVocab, perTypeSession, learningRatio)
+    ) {
+      const reviewedVocab = await prisma.userFlashcard.findMany({
+        where: { ...vocabWhere, repetitions: { gt: 0 } },
+        include: {
+          word: true,
+          wordForm: true,
+          phrase: true,
+        },
+        orderBy: [{ nextReview: "asc" }],
+        take: fetchLimit,
+      });
+      allVocab = mergeUniqueById(allVocab, reviewedVocab ?? []);
+    }
+    if (
+      !kanjiWhere.repetitions &&
+      needsMaintenanceTopUp(allKanji, perTypeSession, learningRatio)
+    ) {
+      const reviewedKanji = await prisma.userKanji.findMany({
+        where: { ...kanjiWhere, repetitions: { gt: 0 } },
+        include: {
+          kanji: true,
+        },
+        orderBy: [{ nextReview: "asc" }],
+        take: fetchLimit,
+      });
+      allKanji = mergeUniqueById(allKanji, reviewedKanji ?? []);
+    }
+
     let effectiveMaxNewCards = maxNewCards;
+    if (maxNewCards !== undefined || newPerSession !== undefined) {
+      const [introducedVocab, introducedKanji] = await Promise.all([
+        prisma.userFlashcard.count({ where: introducedTodayWhere(user.id) }),
+        prisma.userKanji.count({ where: introducedTodayWhere(user.id) }),
+      ]);
+      effectiveMaxNewCards = resolveNewAllowance({
+        maxNewCards: maxNewCards ?? Number.POSITIVE_INFINITY,
+        maxNewPerSession: newPerSession,
+        introducedToday: (Number(introducedVocab) || 0) + (Number(introducedKanji) || 0),
+      });
+    }
     if (maxLearningPool !== undefined && maxLearningPool > 0) {
       const [inLearningVocab, inLearningKanji] = await Promise.all([
-        prisma.userFlashcard.count({ where: { userId: user.id, status: "learning" } }),
-        prisma.userKanji.count({ where: { userId: user.id, status: "learning" } }),
+        prisma.userFlashcard.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
+        prisma.userKanji.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
       ]);
       if (inLearningVocab + inLearningKanji >= maxLearningPool) {
         effectiveMaxNewCards = 0;
@@ -127,8 +180,14 @@ export async function GET(req: Request) {
     // unused slots to the other so the session reaches the requested limit.
     const halfLimit = Math.ceil(limit / 2);
     const halfMaxNew = effectiveMaxNewCards !== undefined ? Math.ceil(effectiveMaxNewCards / 2) : undefined;
-    const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio, { maxNewCards: halfMaxNew });
-    const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate, learningRatio, { maxNewCards: halfMaxNew });
+    const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio, {
+      maxNewCards: halfMaxNew,
+      maxNewPerSession: halfMaxNew,
+    });
+    const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate, learningRatio, {
+      maxNewCards: halfMaxNew,
+      maxNewPerSession: halfMaxNew,
+    });
 
     const vocabActual = vocabSession.session.length;
     const kanjiActual = kanjiSession.session.length;

@@ -63,10 +63,10 @@ describe("session-composer integration with app blocker", () => {
       const { session, activeCards, maintenanceCards } = composeSession(cards, 50);
 
       expect(session.length).toBe(50);
-      // 50% target for active, but we only have 20 eligible new cards so we cap there
-      // and overflow uses maintenance fill to reach 50 total
+      // The active target is 25 but only 20 new cards exist, so the shortfall is
+      // donated to reviews: 20 new + 30 review, never extra new cards.
       expect(activeCards.length).toBe(20);
-      expect(maintenanceCards.length).toBe(25);
+      expect(maintenanceCards.length).toBe(30);
     });
 
     it("should handle empty card pool gracefully", () => {
@@ -139,7 +139,7 @@ describe("session-composer integration with app blocker", () => {
     it("should handle consecutive review sessions without repetition", () => {
       const now = new Date();
       const past = new Date(now.getTime() - 1000 * 60 * 60 * 24);
-      const recent = new Date(now.getTime() - 30 * 60 * 1000); // 30 min ago
+      const recent = new Date(now.getTime() - 30 * 1000); // 30 seconds ago
       
       const cards = [
         // New cards
@@ -182,11 +182,12 @@ describe("session-composer integration with app blocker", () => {
 
       const { session, maintenanceCards } = composeSession(cards, 5);
 
-      // Recently reviewed cards should be excluded from maintenance
+      // Cards reviewed seconds ago are held back from maintenance
       const recentIds = ["due-recent-1", "due-recent-2"];
       expect(maintenanceCards.every(c => !recentIds.includes(c.id))).toBe(true);
-      
-      // Session should include old due cards, not recent ones
+
+      // Everything else stays available, so the session is never new-only
+      expect(maintenanceCards.some(c => c.id === "due-old-1")).toBe(true);
       expect(session.length).toBeGreaterThan(0);
     });
   });

@@ -82,6 +82,13 @@ const MAX_DIFFICULTY = 10;
 /** Minimum stability (in days) */
 const MIN_STABILITY = 0.1;
 
+/**
+ * Stability ceiling (days). Stability feeds the interval written to the card, so
+ * an unclamped growth term could schedule a card centuries out and silently
+ * retire it. Ten years is already far beyond useful review spacing.
+ */
+const MAX_STABILITY = 3650;
+
 /** Status thresholds */
 const KNOWN_STABILITY = 21; // days
 const KNOWN_DIFFICULTY = 6;
@@ -193,8 +200,8 @@ export class FSRSScheduler {
       );
     }
 
-    // Ensure minimum stability
-    newStability = Math.max(newStability, MIN_STABILITY);
+    // Keep stability inside sane bounds
+    newStability = Math.min(Math.max(newStability, MIN_STABILITY), MAX_STABILITY);
 
     // Calculate next interval based on desired retention and new stability
     const interval = this.calculateInterval(newStability, retention);
