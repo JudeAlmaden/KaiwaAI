@@ -152,7 +152,7 @@ export async function GET(req: Request) {
       const introducedToday =
         Number(
           await prisma.userFlashcard.count({
-            where: introducedTodayWhere(user.id),
+            where: introducedTodayWhere(user.id, new Date(), user.timezone),
           })
         ) || 0;
       effectiveMaxNewCards = resolveNewAllowance({

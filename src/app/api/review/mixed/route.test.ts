@@ -5,9 +5,11 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     userFlashcard: {
       findMany: vi.fn(),
+      count: vi.fn(),
     },
     userKanji: {
       findMany: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
@@ -23,7 +25,9 @@ describe("Mixed Review API - GET (/api/review/mixed)", () => {
   const mockUser = { id: "user-123", email: "test@example.com" };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    // reset (not clear): the new-card tests install persistent implementations
+    // that must not leak into the next test.
+    vi.resetAllMocks();
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -151,6 +155,149 @@ describe("Mixed Review API - GET (/api/review/mixed)", () => {
         }),
       })
     );
+  });
+
+  it("never introduces more new cards than the per-session quota", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ ...mockUser, timezone: "Asia/Manila" } as never);
+
+    const vocabNew = Array.from({ length: 10 }, (_, i) => ({
+      id: `uf-new-${i}`,
+      userId: "user-123",
+      status: "learning",
+      easeFactor: 2.5,
+      repetitions: 0,
+      interval: 0,
+      nextReview: new Date(Date.now() - 60000),
+      createdAt: new Date("2026-01-01"),
+      lastReviewedAt: null,
+      word: {
+        dictionary: `言葉${i}`,
+        reading: "ことば",
+        meanings: '["word"]',
+        partOfSpeech: "noun",
+      },
+      wordForm: null,
+      phrase: null,
+    }));
+
+    const kanjiNew = Array.from({ length: 10 }, (_, i) => ({
+      id: `uk-new-${i}`,
+      userId: "user-123",
+      status: "learning",
+      easeFactor: 2.5,
+      repetitions: 0,
+      interval: 0,
+      nextReview: new Date(Date.now() - 60000),
+      createdAt: new Date("2026-01-01"),
+      lastReviewedAt: null,
+      kanji: {
+        id: `k-${i}`,
+        character: "食",
+        meanings: '["eat"]',
+        readingsOn: "[]",
+        readingsKun: "[]",
+        radicals: "[]",
+        primitives: "[]",
+        heisigNumber: null,
+        heisigKeyword: null,
+        heisigLesson: null,
+      },
+      customMeaning: null,
+      mnemonic: null,
+    }));
+
+    // Not `Once`: maintenance top-ups may query again.
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue(vocabNew as never);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue(kanjiNew as never);
+    vi.mocked(prisma.userFlashcard.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.userKanji.count).mockResolvedValue(0 as never);
+
+    const req = new Request(
+      "http://localhost/api/review/mixed?studyMode=due&limit=10&newPerSession=3"
+    );
+    const res = await GET(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    const newCards = data.cards.filter(
+      (c: { repetitions?: number }) => (c.repetitions ?? 0) === 0
+    );
+    // Splitting 3 across two pools used to round each half up: 2 + 2 = 4.
+    expect(newCards.length).toBe(3);
+  });
+
+  it("does not spend the new-card allowance twice when backfilling", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ ...mockUser, timezone: "Asia/Manila" } as never);
+
+    const vocab = (i: number) => ({
+      id: `uf-short-${i}`,
+      userId: "user-123",
+      status: "learning",
+      easeFactor: 2.5,
+      repetitions: 0,
+      interval: 0,
+      nextReview: new Date(Date.now() - 60000),
+      createdAt: new Date("2026-01-01"),
+      lastReviewedAt: null,
+      word: {
+        dictionary: `言葉${i}`,
+        reading: "ことば",
+        meanings: '["word"]',
+        partOfSpeech: "noun",
+      },
+      wordForm: null,
+      phrase: null,
+    });
+
+    const kanji = (i: number, repetitions: number) => ({
+      id: `uk-${repetitions}-${i}`,
+      userId: "user-123",
+      status: "learning",
+      easeFactor: 2.5,
+      repetitions,
+      interval: repetitions === 0 ? 0 : 5,
+      nextReview: new Date(Date.now() - 60000),
+      createdAt: new Date("2026-01-01"),
+      lastReviewedAt: repetitions === 0 ? null : new Date("2026-01-02"),
+      kanji: {
+        id: `k-${repetitions}-${i}`,
+        character: "学",
+        meanings: '["study"]',
+        readingsOn: "[]",
+        readingsKun: "[]",
+        radicals: "[]",
+        primitives: "[]",
+        heisigNumber: null,
+        heisigKeyword: null,
+        heisigLesson: null,
+      },
+      customMeaning: null,
+      mnemonic: null,
+    });
+
+    // Vocab offers 2 new cards and nothing else, so it falls short of its half
+    // and kanji backfills. Kanji must not re-spend the allowance vocab used.
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([vocab(0), vocab(1)] as never);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([
+      kanji(0, 0),
+      ...Array.from({ length: 20 }, (_, i) => kanji(i + 1, 2)),
+    ] as never);
+    vi.mocked(prisma.userFlashcard.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.userKanji.count).mockResolvedValue(0 as never);
+
+    const req = new Request(
+      "http://localhost/api/review/mixed?studyMode=due&limit=10&newPerSession=3"
+    );
+    const res = await GET(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    const newCards = data.cards.filter(
+      (c: { repetitions?: number }) => (c.repetitions ?? 0) === 0
+    );
+    // 2 from vocab + at most 1 from the backfill. The old backfill passed the
+    // full allowance again and produced 5.
+    expect(newCards.length).toBe(3);
   });
 
   it("safely parses malformed JSON without crashing", async () => {

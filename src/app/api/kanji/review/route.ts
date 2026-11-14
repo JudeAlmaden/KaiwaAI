@@ -211,7 +211,7 @@ export async function GET(req: Request) {
       const introducedToday =
         Number(
           await prisma.userKanji.count({
-            where: introducedTodayWhere(user.id),
+            where: introducedTodayWhere(user.id, new Date(), user.timezone),
           })
         ) || 0;
       effectiveMaxNewCards = resolveNewAllowance({

@@ -7,8 +7,12 @@ import {
   mergeUniqueById,
   needsMaintenanceTopUp,
 } from "@/lib/review/maintenance-window";
-import { LEARNING_CARD_WHERE } from "@/lib/review/lifecycle";
-import { introducedTodayWhere, resolveNewAllowance } from "@/lib/review/intake";
+import { LEARNING_CARD_WHERE, isNewCard } from "@/lib/review/lifecycle";
+import {
+  introducedTodayWhere,
+  isLearningPoolFull,
+  resolveNewAllowance,
+} from "@/lib/review/intake";
 
 function safeJsonArray(val: string | null | undefined): string[] {
   if (!val) return [];
@@ -157,8 +161,8 @@ export async function GET(req: Request) {
     let effectiveMaxNewCards = maxNewCards;
     if (maxNewCards !== undefined || newPerSession !== undefined) {
       const [introducedVocab, introducedKanji] = await Promise.all([
-        prisma.userFlashcard.count({ where: introducedTodayWhere(user.id) }),
-        prisma.userKanji.count({ where: introducedTodayWhere(user.id) }),
+        prisma.userFlashcard.count({ where: introducedTodayWhere(user.id, new Date(), user.timezone) }),
+        prisma.userKanji.count({ where: introducedTodayWhere(user.id, new Date(), user.timezone) }),
       ]);
       effectiveMaxNewCards = resolveNewAllowance({
         maxNewCards: maxNewCards ?? Number.POSITIVE_INFINITY,
@@ -171,7 +175,12 @@ export async function GET(req: Request) {
         prisma.userFlashcard.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
         prisma.userKanji.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
       ]);
-      if (inLearningVocab + inLearningKanji >= maxLearningPool) {
+      if (
+        isLearningPoolFull({
+          inProgress: inLearningVocab + inLearningKanji,
+          maxLearningPool,
+        })
+      ) {
         effectiveMaxNewCards = 0;
       }
     }
@@ -179,18 +188,25 @@ export async function GET(req: Request) {
     // Split limit 50/50 but allow backfill: if one type has fewer cards, donate
     // unused slots to the other so the session reaches the requested limit.
     const halfLimit = Math.ceil(limit / 2);
-    const halfMaxNew = effectiveMaxNewCards !== undefined ? Math.ceil(effectiveMaxNewCards / 2) : undefined;
+    // The allowance is split so the two halves sum to it. Rounding both halves
+    // up turned a quota of 3 into 2 + 2 = 4 new cards in one mixed session.
+    const vocabNewBudget =
+      effectiveMaxNewCards !== undefined ? Math.ceil(effectiveMaxNewCards / 2) : undefined;
+    const kanjiNewBudget =
+      effectiveMaxNewCards !== undefined ? Math.floor(effectiveMaxNewCards / 2) : undefined;
     const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio, {
-      maxNewCards: halfMaxNew,
-      maxNewPerSession: halfMaxNew,
+      maxNewCards: vocabNewBudget,
+      maxNewPerSession: vocabNewBudget,
     });
     const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate, learningRatio, {
-      maxNewCards: halfMaxNew,
-      maxNewPerSession: halfMaxNew,
+      maxNewCards: kanjiNewBudget,
+      maxNewPerSession: kanjiNewBudget,
     });
 
     const vocabActual = vocabSession.session.length;
     const kanjiActual = kanjiSession.session.length;
+    const vocabNewUsed = vocabSession.session.filter(isNewCard).length;
+    const kanjiNewUsed = kanjiSession.session.filter(isNewCard).length;
 
     // Backfill: if vocab came up short, ask kanji to fill the gap (and vice-versa)
     const vocabShortfall = halfLimit - vocabActual;
@@ -201,13 +217,28 @@ export async function GET(req: Request) {
     let kanjiMaintenanceCards = kanjiSession.maintenanceCards;
 
     if (vocabShortfall > 0 && kanjiShortfall <= 0) {
-      // Kanji has surplus; pull extra from it
-      const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate, learningRatio, { maxNewCards: effectiveMaxNewCards });
+      // Kanji has surplus; pull extra from it — but only with the allowance the
+      // vocab half did not spend, so the backfill cannot spend it twice.
+      const remainingNew =
+        effectiveMaxNewCards !== undefined
+          ? Math.max(0, effectiveMaxNewCards - vocabNewUsed)
+          : undefined;
+      const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate, learningRatio, {
+        maxNewCards: remainingNew,
+        maxNewPerSession: remainingNew,
+      });
       kanjiFinal = extraKanji.session;
       kanjiMaintenanceCards = extraKanji.maintenanceCards;
     } else if (kanjiShortfall > 0 && vocabShortfall <= 0) {
-      // Vocab has surplus; pull extra from it
-      const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate, learningRatio, { maxNewCards: effectiveMaxNewCards });
+      // Vocab has surplus; pull extra from it with the unspent allowance only.
+      const remainingNew =
+        effectiveMaxNewCards !== undefined
+          ? Math.max(0, effectiveMaxNewCards - kanjiNewUsed)
+          : undefined;
+      const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate, learningRatio, {
+        maxNewCards: remainingNew,
+        maxNewPerSession: remainingNew,
+      });
       vocabFinal = extraVocab.session;
       vocabMaintenanceCards = extraVocab.maintenanceCards;
     }
