@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
-import { PopButton } from "../../PopButton";
-import Petals from "../../Petals";
 import QuestGallery from "./QuestGallery";
+import EmptyReviewScreen from "./screens/EmptyReviewScreen";
+import ErrorReviewScreen from "./screens/ErrorReviewScreen";
+import DoneReviewScreen from "./screens/DoneReviewScreen";
 import { useAppBlockerCompletion } from "@/hooks/useAppBlockerCompletion";
 import OfflineBanner from "@/components/OfflineBanner";
 import { AppBlocker } from "@/plugins/app-blocker";
@@ -87,9 +87,9 @@ export default function ReviewClient() {
   const [appBlockerConfig, setAppBlockerConfig] = useState<import('@/plugins/app-blocker').AppBlockerConfig>({
     count: 10,
     blockChance: 100,
-    unlockDurationMinutes: 15,
+    unlockDurationMinutes: 45,
     reviewType: 'vocabulary',
-    direction: 'jp-to-en',
+    direction: 'mixed',
     studyMode: 'all',
     practice: false,
     noDueAction: 'autoOpen',
@@ -565,262 +565,46 @@ export default function ReviewClient() {
     );
   }
 
-  // ── EMPTY ───────────────────────────────────────────────────────────────
+  // ── EMPTY ──────────────────────────────────────────────────────────────
   if (phase === "empty") {
-    const isKanji = setup.reviewType === "kanji";
-    const isDue = setup.studyMode === "due";
-    const isStruggling = setup.studyMode === "struggling" || setup.studyMode === "leeches";
-
-    const emptyTitle = isKanji
-      ? "No Kanji to Study Yet"
-      : isDue
-      ? "All Caught Up! 🎉"
-      : isStruggling
-      ? "Gauntlet Cleared! 🔥"
-      : "No Flashcards Found";
-
-    const emptySubtitle = isKanji
-      ? "No kanji in study list"
-      : isDue
-      ? "No cards due for review"
-      : isStruggling
-      ? "No difficult cards found"
-      : "No cards match this criteria";
-
-    const emptyDescription = isKanji
-      ? "You haven't added any kanji to your study list yet. Create a lesson folder, import from your Heisig RTK notes, or browse your folders to start studying!"
-      : isDue
-      ? "You have reviewed all flashcards currently due. Great work! You can study ahead with all cards or chat with Kai to learn new words."
-      : isStruggling
-      ? "You don't have any cards currently marked as struggling or leeches. Keep reviewing to maintain your mastery!"
-      : "No flashcards match this review criteria. Chat with Kai or save new vocabulary to build your review deck.";
-
     return (
-      <div className="flex flex-1 flex-col relative overflow-hidden">
-        <PageHeader 
-          title="Review" 
-          jp="復習" 
-          subtitle={emptySubtitle} 
-        />
-        
-        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center z-10 max-w-md mx-auto">
-          {isKanji ? (
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-amber/15 border-2 border-amber/30 text-4xl font-bold font-jp text-amber shadow-lg shadow-amber/10 mb-5 animate-pulse">
-              漢
-            </div>
-          ) : isStruggling ? (
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-sakura/15 border-2 border-sakura/30 text-3xl mb-5">
-              🔥
-            </div>
-          ) : (
-            <Kai size={80} className="mb-4" />
-          )}
-
-          <h2 className="font-display text-2xl font-extrabold text-foreground">
-            {emptyTitle}
-          </h2>
-
-          <p className="mt-3 text-sm text-muted leading-relaxed">
-            {emptyDescription}
-          </p>
-
-          <div className="mt-8 flex flex-col gap-3 w-full">
-            {isKanji ? (
-              <Link
-                href="/kanji"
-                className="w-full inline-flex h-12 items-center justify-center rounded-2xl bg-amber-500 border-b-4 border-amber-600 px-6 text-sm font-bold text-white shadow-sm hover:brightness-105 transition active:translate-y-[2px]"
-              >
-                ⛩️ Open Kanji Lessons
-              </Link>
-            ) : (
-              <>
-                {(isDue || isStruggling) && (
-                  <button
-                    onClick={() => start({ ...setup, studyMode: "all" })}
-                    className="w-full inline-flex h-12 items-center justify-center rounded-2xl bg-indigo-ai border-b-4 border-indigo-deep px-6 text-sm font-bold text-white shadow-sm hover:brightness-105 transition active:translate-y-[2px]"
-                  >
-                    📖 Study Ahead (All Cards)
-                  </button>
-                )}
-                <Link
-                  href="/chat"
-                  className="w-full inline-flex h-12 items-center justify-center rounded-2xl border-2 border-border bg-card/60 backdrop-blur-sm px-6 text-sm font-bold text-foreground transition hover:border-indigo-ai hover:text-indigo-ai"
-                >
-                  💬 Chat with Kai
-                </Link>
-              </>
-            )}
-
-            <button
-              onClick={() => {
-                refreshDueCount();
-                setPhase("setup");
-              }}
-              className="w-full inline-flex h-12 items-center justify-center rounded-2xl border border-border bg-card/40 px-6 text-sm font-bold text-muted transition hover:text-foreground"
-            >
-              ← Back to Quest Gallery
-            </button>
-          </div>
-        </div>
-      </div>
+      <EmptyReviewScreen
+        reviewType={setup.reviewType}
+        studyMode={setup.studyMode}
+        onStudyAhead={() => start({ ...setup, studyMode: "all" })}
+        onBack={() => {
+          refreshDueCount();
+          setPhase("setup");
+        }}
+      />
     );
   }
 
-  // ── ERROR ───────────────────────────────────────────────────────────────
+  // ── ERROR ──────────────────────────────────────────────────────────────
   if (phase === "error") {
     return (
-      <div className="flex flex-1 flex-col relative overflow-hidden">
-        <PageHeader 
-          title="Review" 
-          jp="復習" 
-          subtitle="Connection issue" 
-        />
-        
-        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center z-10 max-w-md mx-auto">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-rose-500/15 border-2 border-rose-500/30 text-3xl mb-5">
-            ⚠️
-          </div>
-
-          <h2 className="font-display text-2xl font-extrabold text-foreground">
-            Something Went Wrong
-          </h2>
-
-          <p className="mt-3 text-sm text-muted leading-relaxed">
-            {errorMessage || "Unable to load review cards. Please check your network connection or try again."}
-          </p>
-
-          <div className="mt-8 flex flex-col gap-3 w-full">
-            <button
-              onClick={() => start()}
-              className="w-full inline-flex h-12 items-center justify-center rounded-2xl bg-indigo-ai border-b-4 border-indigo-deep px-6 text-sm font-bold text-white shadow-sm hover:brightness-105 transition active:translate-y-[2px]"
-            >
-              🔄 Try Again
-            </button>
-
-            <button
-              onClick={() => {
-                refreshDueCount();
-                setPhase("setup");
-              }}
-              className="w-full inline-flex h-12 items-center justify-center rounded-2xl border border-border bg-card/40 px-6 text-sm font-bold text-muted transition hover:text-foreground"
-            >
-              ← Back to Quest Gallery
-            </button>
-          </div>
-        </div>
-      </div>
+      <ErrorReviewScreen
+        message={errorMessage}
+        onRetry={() => start()}
+        onBack={() => {
+          refreshDueCount();
+          setPhase("setup");
+        }}
+      />
     );
   }
 
-  // ── DONE ───────────────────────────────────────────────────────────────
+  // ── DONE ────────────────────────────────────────────────────────────────
   if (phase === "done") {
-    const reviewed = tally.again + tally.good;
-    const accuracy = reviewed > 0 ? Math.round((tally.good / reviewed) * 100) : 0;
-    
-    const radius = 40;
-    const circumference = 2 * Math.PI * radius;
-    const strokeDashoffset = circumference - (accuracy / 100) * circumference;
-
     return (
-      <div className="flex flex-1 flex-col relative overflow-hidden">
-        {/* Celebrating drifting sakura petals in background */}
-        {reviewed > 0 && <Petals />}
-        
-        <PageHeader title="Review" jp="復習" subtitle="Review complete! Here's your performance." />
-        
-        <div className="flex flex-1 flex-col items-center justify-center px-6 py-8 text-center z-10">
-          <Kai size={80} />
-          <h2 className="mt-4 font-display text-2xl font-extrabold text-foreground">
-            {reviewed > 0 ? "Nice work! 🎉" : "Nothing to review"}
-          </h2>
-          
-          {reviewed > 0 ? (
-            <>
-              {/* Radial Accuracy Ring */}
-              <div className="relative flex items-center justify-center h-28 w-28 mt-6">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle
-                    cx="56"
-                    cy="56"
-                    r={radius}
-                    className="stroke-border"
-                    strokeWidth="8"
-                    fill="transparent"
-                  />
-                  <circle
-                    cx="56"
-                    cy="56"
-                    r={radius}
-                    className="stroke-indigo-ai transition-all duration-1000 ease-out"
-                    strokeWidth="8"
-                    fill="transparent"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={strokeDashoffset}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute flex flex-col items-center justify-center">
-                  <span className="text-2xl font-extrabold text-foreground">{accuracy}%</span>
-                  <span className="text-[10px] uppercase font-bold tracking-widest text-muted">Accuracy</span>
-                </div>
-              </div>
-
-              {/* Stats Cards Dashboard */}
-              <div className="grid grid-cols-3 gap-3 w-full max-w-md mt-6">
-                <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-4 text-center shadow-sm hover:scale-[1.02] transition-transform">
-                  <span className="text-xl">📚</span>
-                  <span className="block text-lg font-extrabold text-foreground mt-1">{reviewed}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Reviewed</span>
-                </div>
-                <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-4 text-center shadow-sm hover:scale-[1.02] transition-transform">
-                  <span className="text-xl">✅</span>
-                  <span className="block text-lg font-extrabold text-mint mt-1">{tally.good}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">Solid</span>
-                </div>
-                <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-4 text-center shadow-sm hover:scale-[1.02] transition-transform">
-                  <span className="text-xl">🔁</span>
-                  <span className="block text-lg font-extrabold text-sakura mt-1">{tally.again}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">To Revisit</span>
-                </div>
-              </div>
-            </>
-          ) : (
-            <p className="mt-1.5 text-sm text-muted">
-              You have no pending cards left to review right now.
-            </p>
-          )}
-
-          <div className="mt-8 flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-            {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("blocked_package") && (
-              <button
-                onClick={() => {
-                  const pkg = new URLSearchParams(window.location.search).get("blocked_package");
-                  if (pkg) AppBlocker.launchApp({ packageName: pkg }).catch(() => {});
-                }}
-                className="w-full h-12 rounded-2xl bg-emerald-500 border-b-4 border-emerald-600 text-white font-bold text-sm shadow-sm hover:brightness-105 transition active:translate-y-[2px] flex items-center justify-center gap-2"
-              >
-                🚀 Launch App
-              </button>
-            )}
-            <PopButton
-              onClick={() => {
-                refreshDueCount();
-                setPhase("setup");
-              }}
-              size="md"
-              className="flex-1"
-            >
-              New session
-            </PopButton>
-            <Link
-              href="/chat"
-              className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl border-2 border-border bg-card/40 backdrop-blur-sm px-6 text-sm font-bold text-muted transition-all hover:border-indigo-ai hover:text-indigo-ai"
-            >
-              Back to chat
-            </Link>
-          </div>
-        </div>
-      </div>
+      <DoneReviewScreen
+        again={tally.again}
+        good={tally.good}
+        onNewSession={() => {
+          refreshDueCount();
+          setPhase("setup");
+        }}
+      />
     );
   }
 
