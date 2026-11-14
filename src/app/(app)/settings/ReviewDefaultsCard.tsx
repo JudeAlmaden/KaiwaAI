@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getLearningConfig,
   setLearningConfig,
   type LearningConfig,
 } from "@/lib/learning-config";
 import type { FuriganaMode, ReviewDirection } from "@/lib/review/types";
+import { describeIntake } from "@/lib/review/intake";
 import { getAutoSaveWords, setAutoSaveWords } from "@/lib/model-config";
 import { AppBlocker } from "@/plugins/app-blocker";
 import { Chip, Surface, Toggle } from "../ui";
@@ -46,9 +47,31 @@ const LEARNING_RATIOS: { value: number; label: string }[] = [
   { value: 0.7, label: "70% new" },
 ];
 
+type IntakeCounts = { inProgress: number; introducedToday: number };
+
 export default function ReviewDefaultsCard() {
   const [config, setConfig] = useState<LearningConfig>(() => getLearningConfig());
   const [autoSave, setAutoSave] = useState<boolean>(() => getAutoSaveWords());
+  const [counts, setCounts] = useState<IntakeCounts | null>(null);
+
+  // Real counts for the "why are new cards paused" line. Best-effort: the card
+  // still works when the request fails.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/review/composition")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d?.intake) return;
+        setCounts({
+          inProgress: Number(d.intake.inProgress) || 0,
+          introducedToday: Number(d.intake.introducedToday) || 0,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function patch(updates: Partial<LearningConfig>) {
     const next = setLearningConfig(updates);
@@ -78,12 +101,116 @@ export default function ReviewDefaultsCard() {
     setAutoSave(next);
   }
 
+  const intake = counts
+    ? describeIntake({
+        maxNewCards: config.maxNewCards,
+        maxNewPerSession: config.newPerSession,
+        introducedToday: counts.introducedToday,
+        inProgress: counts.inProgress,
+        maxLearningPool: config.maxLearningPool,
+      })
+    : null;
+
+  function intakeMessage(): string {
+    if (!intake || !counts) return "";
+    if (intake.reason === "off") {
+      return "Right now: new cards are off — set a number above 0 per session to introduce any.";
+    }
+    if (intake.reason === "learning-pool") {
+      return `Right now: new cards are paused — ${counts.inProgress} cards are in progress against a cap of ${config.maxLearningPool}. Raise the cap or choose All.`;
+    }
+    if (intake.reason === "daily-ceiling") {
+      return `Right now: new cards are paused — today's ceiling of ${config.maxNewCards} is already used (${counts.introducedToday} introduced today).`;
+    }
+    return `Right now: ${intake.allowance} new available (${counts.introducedToday} introduced today, ${counts.inProgress} in progress).`;
+  }
+
   return (
     <Surface>
       <h2 className="font-display text-lg font-bold">Review defaults</h2>
       <p className="mt-1 text-sm text-muted">
         Default settings for review sessions and Focus Guard app blocker.
       </p>
+
+      <div className="mt-5">
+        <p className="text-sm font-bold">New cards</p>
+        <p className="mb-2 text-xs text-muted">
+          One intake, three limits: how many a session may introduce, how many a day, and how
+          many unfinished cards you tolerate before intake pauses.
+        </p>
+
+        <p className="text-xs font-bold text-muted">Per session</p>
+        <div className="mt-1 grid grid-cols-5 gap-2">
+          {NEW_PER_SESSION.map((n) => (
+            <Chip
+              key={n.value}
+              active={config.newPerSession === n.value}
+              onClick={() => patch({ newPerSession: n.value })}
+              className="w-full justify-center"
+            >
+              {n.label}
+            </Chip>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <label htmlFor="max-new-per-day" className="text-xs font-bold text-muted">
+            Per day
+          </label>
+          <input
+            id="max-new-per-day"
+            type="number"
+            min={0}
+            max={200}
+            value={config.maxNewCards}
+            onChange={(e) =>
+              patch({
+                maxNewCards: Math.max(0, Math.min(200, Number(e.target.value) || 0)),
+              })
+            }
+            className="w-20 rounded-2xl border-2 border-border bg-background px-3 py-1.5 text-center text-sm"
+          />
+        </div>
+
+        <p className="mt-3 text-xs font-bold text-muted">In-progress learning cap</p>
+        <div className="mt-1 grid grid-cols-5 gap-2">
+          {LEARNING_POOLS.map((p) => (
+            <Chip
+              key={p.value}
+              active={config.maxLearningPool === p.value}
+              onClick={() => patch({ maxLearningPool: p.value })}
+              className="w-full justify-center"
+            >
+              {p.label}
+            </Chip>
+          ))}
+        </div>
+
+        {intake && counts && (
+          <p className="mt-3 rounded-2xl border border-border bg-background/60 px-3 py-2 text-xs text-muted">
+            {intakeMessage()}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5">
+        <p className="text-sm font-bold">Review mix (new vs reviews)</p>
+        <p className="mb-2 text-xs text-muted">
+          Proportion of new or struggling cards to mature reviews in sessions and Focus Guard.
+        </p>
+        <div className="mt-2 grid grid-cols-4 gap-2">
+          {LEARNING_RATIOS.map((r) => (
+            <Chip
+              key={r.value}
+              active={Math.abs(config.defaultLearningRatio - r.value) < 0.05}
+              onClick={() => patch({ defaultLearningRatio: r.value })}
+              className="w-full justify-center"
+            >
+              {r.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
 
       <div className="mt-5">
         <p className="text-sm font-bold">Direction</p>
@@ -132,64 +259,6 @@ export default function ReviewDefaultsCard() {
               ? "Off: clean kanji — recall readings from memory."
               : "Always: readings shown above kanji."}
         </p>
-      </div>
-
-      <div className="mt-5">
-        <p className="text-sm font-bold">Max in-progress learning cards</p>
-        <p className="mb-2 text-xs text-muted">
-          Pauses introducing new cards when your in-progress learning queue reaches this limit.
-        </p>
-        <div className="mt-2 grid grid-cols-5 gap-2">
-          {LEARNING_POOLS.map((p) => (
-            <Chip
-              key={p.value}
-              active={config.maxLearningPool === p.value}
-              onClick={() => patch({ maxLearningPool: p.value })}
-              className="w-full justify-center"
-            >
-              {p.label}
-            </Chip>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <p className="text-sm font-bold">New cards per session</p>
-        <p className="mb-2 text-xs text-muted">
-          Rationed intake: at most this many brand-new cards per session, with reviews
-          filling the rest. Never padded with extra new cards.
-        </p>
-        <div className="mt-2 grid grid-cols-5 gap-2">
-          {NEW_PER_SESSION.map((n) => (
-            <Chip
-              key={n.value}
-              active={config.newPerSession === n.value}
-              onClick={() => patch({ newPerSession: n.value })}
-              className="w-full justify-center"
-            >
-              {n.label}
-            </Chip>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <p className="text-sm font-bold">Review mix (new vs reviews)</p>
-        <p className="mb-2 text-xs text-muted">
-          Proportion of new or struggling cards to mature reviews in sessions and Focus Guard.
-        </p>
-        <div className="mt-2 grid grid-cols-4 gap-2">
-          {LEARNING_RATIOS.map((r) => (
-            <Chip
-              key={r.value}
-              active={Math.abs(config.defaultLearningRatio - r.value) < 0.05}
-              onClick={() => patch({ defaultLearningRatio: r.value })}
-              className="w-full justify-center"
-            >
-              {r.label}
-            </Chip>
-          ))}
-        </div>
       </div>
 
       <div className="mt-5 flex items-start justify-between gap-4 border-t-2 border-border pt-4">

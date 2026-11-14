@@ -75,6 +75,30 @@ describe("projectSessionMix", () => {
     expect(mix).toEqual({ newCount: 0, reviewCount: 4, total: 4 });
   });
 
+  it("drops new cards when the learning pool is full", () => {
+    const mix = projectSessionMix(
+      { new: 10, review: 10 },
+      { ...base, maxNewPerSession: 3, maxReviews: 10, inProgress: 48, maxLearningPool: 20 }
+    );
+    expect(mix).toEqual({ newCount: 0, reviewCount: 10, total: 10 });
+  });
+
+  it("ignores the learning cap when it is unlimited", () => {
+    const mix = projectSessionMix(
+      { new: 10, review: 10 },
+      { ...base, maxNewPerSession: 3, maxReviews: 10, inProgress: 48, maxLearningPool: 0 }
+    );
+    expect(mix.newCount).toBe(3);
+  });
+
+  it("still introduces new cards just below the cap", () => {
+    const mix = projectSessionMix(
+      { new: 10, review: 10 },
+      { ...base, maxNewPerSession: 3, maxReviews: 10, inProgress: 19, maxLearningPool: 20 }
+    );
+    expect(mix.newCount).toBe(3);
+  });
+
   it("returns zeroes for an empty deck", () => {
     expect(projectSessionMix({ new: 0, review: 0 }, base)).toEqual({
       newCount: 0,

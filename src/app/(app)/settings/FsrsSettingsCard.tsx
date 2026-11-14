@@ -22,8 +22,8 @@ export default function FsrsSettingsCard() {
     <Surface>
       <h2 className="font-display text-lg font-bold">Spaced repetition (FSRS)</h2>
       <p className="mt-1 text-sm text-muted">
-        Controls how often cards come back for review. Applies to new reviews once
-        scheduling runs on the server.
+        Controls how often cards come back for review. Applies to every graded
+        review — retention and early-review handling.
       </p>
 
       <div className="mt-5 space-y-2">
@@ -44,7 +44,7 @@ export default function FsrsSettingsCard() {
         </p>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t-2 border-border pt-4">
+      <div className="mt-5 border-t-2 border-border pt-4">
         <label className="space-y-1">
           <span className="text-sm font-bold">Max daily reviews</span>
           <input
@@ -54,19 +54,6 @@ export default function FsrsSettingsCard() {
             value={config.maxDailyReviews}
             onChange={(e) =>
               patch({ maxDailyReviews: Math.max(1, Number(e.target.value) || 1) })
-            }
-            className="w-full rounded-2xl border-2 border-border bg-background px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-sm font-bold">Max new cards / day</span>
-          <input
-            type="number"
-            min={0}
-            max={200}
-            value={config.maxNewCards}
-            onChange={(e) =>
-              patch({ maxNewCards: Math.max(0, Number(e.target.value) || 0) })
             }
             className="w-full rounded-2xl border-2 border-border bg-background px-3 py-2 text-sm"
           />

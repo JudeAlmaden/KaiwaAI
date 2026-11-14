@@ -5,6 +5,7 @@
  */
 
 import { isNewCard } from "./lifecycle";
+import { isLearningPoolFull } from "./intake";
 
 export { isNewCard };
 
@@ -26,6 +27,10 @@ export type SessionMixOptions = {
   maxNewPerSession?: number;
   /** Session size cap (Goal / limit). */
   maxReviews?: number;
+  /** Cards currently in progress — blocks intake when the cap is reached. */
+  inProgress?: number;
+  /** Max in-progress learning cards (0 or omitted = unlimited). */
+  maxLearningPool?: number;
 };
 
 const clampRatio = (ratio: number) =>
@@ -66,7 +71,14 @@ export function projectSessionMix(
     options.maxNewPerSession ?? Number.POSITIVE_INFINITY
   );
 
-  const newCount = Math.min(dueNew, activeTarget, quota);
+  // A full learning pool pauses intake, exactly as the routes do, so the home
+  // button cannot promise new cards the session will refuse to deliver.
+  const poolFull = isLearningPoolFull({
+    inProgress: options.inProgress,
+    maxLearningPool: options.maxLearningPool,
+  });
+
+  const newCount = poolFull ? 0 : Math.min(dueNew, activeTarget, quota);
   const reviewCount = Math.min(dueReview, size - newCount);
 
   return { newCount, reviewCount, total: newCount + reviewCount };
