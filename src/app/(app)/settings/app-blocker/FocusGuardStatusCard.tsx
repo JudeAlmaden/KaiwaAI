@@ -10,7 +10,6 @@ interface FocusGuardStatusCardProps {
   isMonitoring: boolean;
   blockedCount: number;
   flashcardCount: number;
-  blockChance?: number;
   unlockDurationMinutes?: number;
   reviewType?: string;
   direction?: string;
@@ -44,8 +43,7 @@ export default function FocusGuardStatusCard({
   isMonitoring,
   blockedCount,
   flashcardCount,
-  blockChance = 100,
-  unlockDurationMinutes = 15,
+  unlockDurationMinutes = 45,
   reviewType = 'mixed',
   direction = 'mixed',
   studyMode = 'all',
@@ -214,7 +212,6 @@ export default function FocusGuardStatusCard({
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         count={flashcardCount}
-        blockChance={blockChance}
         unlockDurationMinutes={unlockDurationMinutes}
         reviewType={reviewType as 'mixed' | 'vocabulary' | 'kanji'}
         direction={direction as 'jp-to-en' | 'en-to-jp' | 'mixed'}

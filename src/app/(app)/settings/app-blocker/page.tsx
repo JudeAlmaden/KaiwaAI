@@ -36,9 +36,9 @@ const RECOMMENDED_APPS: RecommendedApp[] = [
 const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction' | 'earlyReviewStrategy' | 'learningRatio'>> = {
   count: 10,
   blockChance: 100,
-  unlockDurationMinutes: 15,
+  unlockDurationMinutes: 45,
   reviewType: 'vocabulary',
-  direction: 'jp-to-en',
+  direction: 'mixed',
   studyMode: 'all',
   practice: false,
   noDueAction: 'autoOpen',
@@ -54,8 +54,8 @@ export default function AppBlockerSettings() {
   const [blockedApps, setBlockedApps] = useState<string[]>([]);
   const [installedApps, setInstalledApps] = useState<AppInfo[]>([]);
   const [flashcardCount, setFlashcardCount] = useState(10);
-  const [blockChance, setBlockChance] = useState<number>(100);
-  const [unlockDurationMinutes, setUnlockDurationMinutes] = useState<number>(15);
+  const blockChance = 100; // The interceptor always blocks at 100%.
+  const [unlockDurationMinutes, setUnlockDurationMinutes] = useState<number>(45);
   const [reviewType, setReviewType] = useState<'vocabulary' | 'kanji' | 'mixed'>(DEFAULT_CONFIG.reviewType);
   const [direction, setDirection] = useState<'jp-to-en' | 'en-to-jp' | 'mixed'>(DEFAULT_CONFIG.direction);
   const [studyMode, setStudyMode] = useState<BlockerStudyMode>(DEFAULT_CONFIG.studyMode);
@@ -118,10 +118,10 @@ export default function AppBlockerSettings() {
 
       if (config) {
         setFlashcardCount(config.count ?? 10);
-        setBlockChance(config.blockChance ?? 100);
-        setUnlockDurationMinutes(config.unlockDurationMinutes ?? 15);
+        if (config.blockChance !== blockChance) await AppBlocker.setAppBlockerConfig({ blockChance });
+        setUnlockDurationMinutes(config.unlockDurationMinutes ?? 45);
         setReviewType(config.reviewType ?? 'vocabulary');
-        setDirection(config.direction ?? 'jp-to-en');
+        setDirection(config.direction ?? 'mixed');
         setStudyMode(config.studyMode ?? 'all');
         setPractice(config.practice ?? false);
         setLearningRatio(config.learningRatio ?? 0.5);
@@ -199,7 +199,7 @@ export default function AppBlockerSettings() {
         // Ensure full config is saved before starting
         await AppBlocker.setAppBlockerConfig({
           count: flashcardCount,
-          blockChance,
+          blockChance: 100,
           unlockDurationMinutes,
           reviewType,
           direction,
@@ -258,7 +258,7 @@ export default function AppBlockerSettings() {
   }) => {
     // Apply optimistic UI state
     if (updates.count !== undefined) setFlashcardCount(updates.count);
-    if (updates.blockChance !== undefined) setBlockChance(updates.blockChance);
+    // blockChance stays fixed at 100 for the interceptor.
     if (updates.unlockDurationMinutes !== undefined) setUnlockDurationMinutes(updates.unlockDurationMinutes);
     if (updates.reviewType !== undefined) setReviewType(updates.reviewType);
     if (updates.direction !== undefined) setDirection(updates.direction);
@@ -273,7 +273,7 @@ export default function AppBlockerSettings() {
       if (updates.count !== undefined) {
         await AppBlocker.setFlashcardRequirement({ count: updates.count });
       }
-      await AppBlocker.setAppBlockerConfig(updates);
+      await AppBlocker.setAppBlockerConfig({ ...updates, blockChance: 100 });
     } catch (error) {
       console.error('Error updating blocker config:', error);
     }
@@ -382,7 +382,6 @@ export default function AppBlockerSettings() {
           isMonitoring={effectiveIsMonitoring}
           blockedCount={effectiveBlockedCount}
           flashcardCount={flashcardCount}
-          blockChance={blockChance}
           unlockDurationMinutes={unlockDurationMinutes}
           reviewType={reviewType}
           direction={direction}

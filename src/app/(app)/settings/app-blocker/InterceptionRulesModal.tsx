@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Minus, Plus, Sliders, ArrowRight } from '@phosphor-icons/react';
+import { X, Sliders, ArrowRight } from '@phosphor-icons/react';
 import Link from 'next/link';
 import type {
   AppBlockerConfig,
@@ -12,7 +12,6 @@ export interface InterceptionRulesModalProps {
   isOpen: boolean;
   onClose: () => void;
   count: number;
-  blockChance?: number;
   unlockDurationMinutes?: number;
   reviewType?: 'mixed' | 'vocabulary' | 'kanji';
   direction?: 'jp-to-en' | 'en-to-jp' | 'mixed';
@@ -38,10 +37,9 @@ export default function InterceptionRulesModal({
   isOpen,
   onClose,
   count,
-  blockChance = 100,
-  unlockDurationMinutes = 15,
+  unlockDurationMinutes = 45,
   reviewType = 'vocabulary',
-  direction = 'jp-to-en',
+  direction = 'mixed',
   studyMode = 'all',
   practice = false,
   learningRatio = 0.5,
@@ -119,31 +117,24 @@ export default function InterceptionRulesModal({
           <div className="space-y-3">
             <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Goal</span>
 
-            {/* Cards goal stepper + presets */}
+            {/* Cards goal: typed amount + presets */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleCountChange(Math.max(1, count - 1))}
-                  disabled={count <= 1}
-                  className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40 cursor-pointer"
-                >
-                  <Minus size={13} />
-                </button>
-                <div className="text-center w-10">
-                  <span className="font-display font-extrabold text-foreground text-xl leading-none">
-                    {count}
-                  </span>
-                  <p className="text-[9px] text-muted font-medium mt-0.5">cards</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleCountChange(Math.min(100, count + 1))}
-                  disabled={count >= 100}
-                  className="w-8 h-8 rounded-xl border border-border bg-background flex items-center justify-center font-bold text-foreground transition active:scale-95 disabled:opacity-40 cursor-pointer"
-                >
-                  <Plus size={13} />
-                </button>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={count}
+                  onChange={(e) => {
+                    const next = parseInt(e.target.value, 10);
+                    handleCountChange(
+                      Number.isNaN(next) ? 1 : Math.min(100, Math.max(1, next))
+                    );
+                  }}
+                  aria-label="Cards required to unlock"
+                  className="w-16 h-8 rounded-xl border border-border bg-background text-center font-display font-extrabold text-foreground text-base focus:outline-none focus:border-indigo-ai"
+                />
+                <p className="text-[10px] text-muted font-medium">cards</p>
               </div>
               <div className="flex items-center gap-1">
                 {[5, 10, 15, 20].map((preset) => (
@@ -163,48 +154,30 @@ export default function InterceptionRulesModal({
               </div>
             </div>
 
-            {/* Block chance + Unlock grace — compact 2-col */}
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-2 border-t border-border/50">
-              {/* Block chance */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-semibold text-muted">Block chance</span>
-                <div className="flex gap-1">
-                  {[25, 50, 75, 100].map((pct) => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => onUpdateAppBlockerConfig({ blockChance: pct })}
-                      className={`flex-1 py-1 rounded-lg text-[10px] font-bold text-center transition cursor-pointer ${
-                        blockChance === pct
-                          ? 'bg-amber-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {pct === 100 ? '100' : `${pct}%`}
-                    </button>
-                  ))}
-                </div>
+            {/* Unlock grace: typed amount */}
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/50">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-semibold text-muted">Unlock for</span>
+                <span className="text-[9px] text-muted">Grace before it re-arms</span>
               </div>
-
-              {/* Unlock grace */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-semibold text-muted">Unlock grace</span>
-                <div className="flex gap-1">
-                  {[5, 15, 30, 60].map((mins) => (
-                    <button
-                      key={mins}
-                      type="button"
-                      onClick={() => onUpdateAppBlockerConfig({ unlockDurationMinutes: mins })}
-                      className={`flex-1 py-1 rounded-lg text-[10px] font-bold text-center transition cursor-pointer ${
-                        unlockDurationMinutes === mins
-                          ? 'bg-emerald-500 text-white'
-                          : 'border border-border bg-background text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {mins}m
-                    </button>
-                  ))}
-                </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={240}
+                  value={unlockDurationMinutes}
+                  onChange={(e) => {
+                    const next = parseInt(e.target.value, 10);
+                    onUpdateAppBlockerConfig({
+                      unlockDurationMinutes: Number.isNaN(next)
+                        ? 1
+                        : Math.min(240, Math.max(1, next)),
+                    });
+                  }}
+                  aria-label="Unlock duration in minutes"
+                  className="w-16 h-7 rounded-xl border border-border bg-background text-center font-bold text-foreground text-xs focus:outline-none focus:border-indigo-ai"
+                />
+                <p className="text-[10px] text-muted font-medium">min</p>
               </div>
             </div>
           </div>

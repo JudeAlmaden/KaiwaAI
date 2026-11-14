@@ -140,8 +140,8 @@ class AppBlockerPlugin : Plugin() {
 
         val ret = com.getcapacitor.JSObject().apply {
             put("count", prefs.getInt("flashcard_requirement", 10))
-            put("blockChance", prefs.getInt("block_chance_pct", 100))
-            put("unlockDurationMinutes", prefs.getInt("unlock_duration_minutes", 15))
+            put("blockChance", 100)
+            put("unlockDurationMinutes", prefs.getInt("unlock_duration_minutes", 45))
             put("reviewType", prefs.getString("review_type", "vocabulary") ?: "vocabulary")
             put("direction", prefs.getString("direction", "jp-to-en") ?: "jp-to-en")
             put("studyMode", prefs.getString("study_mode", "due") ?: "due")
@@ -165,7 +165,7 @@ class AppBlockerPlugin : Plugin() {
         val editor = prefs.edit()
 
         call.getInt("count")?.let { editor.putInt("flashcard_requirement", it) }
-        call.getInt("blockChance")?.let { editor.putInt("block_chance_pct", it) }
+        call.getInt("blockChance")?.let { editor.putInt("block_chance_pct", 100) }
         call.getInt("unlockDurationMinutes")?.let { editor.putInt("unlock_duration_minutes", it) }
         call.getString("reviewType")?.let { editor.putString("review_type", it) }
         call.getString("direction")?.let { editor.putString("direction", it) }
@@ -184,7 +184,7 @@ class AppBlockerPlugin : Plugin() {
     @PluginMethod
     fun markFlashcardsCompleted(call: PluginCall) {
         val prefs = activity.getSharedPreferences("AppBlocker", android.content.Context.MODE_PRIVATE)
-        val unlockDurationMinutes = prefs.getInt("unlock_duration_minutes", 15)
+        val unlockDurationMinutes = prefs.getInt("unlock_duration_minutes", 45)
         val expirationTime = System.currentTimeMillis() + (unlockDurationMinutes * 60 * 1000L)
         
         prefs.edit()

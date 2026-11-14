@@ -598,7 +598,6 @@ export default function QuestGallery({
         isOpen={showAppBlockerModal}
         onClose={() => setShowAppBlockerModal(false)}
         count={appBlockerConfig.count}
-        blockChance={appBlockerConfig.blockChance}
         unlockDurationMinutes={appBlockerConfig.unlockDurationMinutes}
         reviewType={appBlockerConfig.reviewType}
         direction={appBlockerConfig.direction}

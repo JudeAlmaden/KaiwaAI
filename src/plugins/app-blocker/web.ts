@@ -6,9 +6,9 @@ const STORAGE_KEY = 'kaiwa_app_blocker_config';
 const DEFAULT_CONFIG: AppBlockerConfig = {
   count: 10,
   blockChance: 100,
-  unlockDurationMinutes: 15,
+  unlockDurationMinutes: 45,
   reviewType: 'vocabulary',
-  direction: 'jp-to-en',
+  direction: 'mixed',
   studyMode: 'all',
   practice: false,
   noDueAction: 'autoOpen',
@@ -23,7 +23,7 @@ function loadPersistedConfig(): AppBlockerConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_CONFIG };
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    return { ...DEFAULT_CONFIG, ...JSON.parse(raw), blockChance: 100 };
   } catch {
     return { ...DEFAULT_CONFIG };
   }
@@ -83,7 +83,7 @@ export class AppBlockerWeb extends WebPlugin implements AppBlockerPlugin {
   }
 
   async setAppBlockerConfig(config: Partial<AppBlockerConfig>): Promise<void> {
-    this.config = { ...this.config, ...config };
+    this.config = { ...this.config, ...config, blockChance: 100 };
     persistConfig(this.config);
   }
 
