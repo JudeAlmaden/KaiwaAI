@@ -4,6 +4,40 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-11-14
+
+### Added
+- **Intake status in Learning settings** — "New cards" now shows why intake is or is not happening, from the learner's real deck: "new cards are paused — 48 cards are in progress against a cap of 20", "today's ceiling of 20 is already used", or "3 new available". `GET /api/review/composition` gained `intake.inProgress` and `intake.introducedToday`, and `describeIntake()` resolves the three limits into one allowance plus the reason it is zero.
+
+### Changed
+- **New-card intake is one block** — "Per session", "Per day" and "In-progress learning cap" now sit together in Review defaults as a single "New cards" group, with the daily field moved out of the Spaced-repetition card. The three limits were previously split across two cards with no hint that they combine.
+- **Learning-pool cap defaults to All** — `maxLearningPool` defaults to 0 (unlimited) instead of 20, so an existing deck no longer has new-card intake silently disabled on first run. The 10/15/20/30 chips remain for anyone who wants a cap.
+- **Learning tab order** — Review defaults now leads with intake and review mix, and puts direction, furigana and auto-save after them; the Spaced-repetition subtitle no longer implies it only applies to future scheduling.
+- **Group chat split into modules** — `GroupChatClient.tsx` (1,473 lines) now imports `GroupBubble`, `QuestStrip`, shared `group-types` and a `timeLabel` helper instead of defining them inline; the file is 1,132 lines.
+- **Word-token popup split into a module** — the popup positioning maths, viewport constants and portal moved to `chat/WordTokenPopup.tsx` (`calcPos`, `PopupPos`, `PopupPortal`, `POPUP_W`, `POPUP_MAX_H`); `WordToken.tsx` drops from 1,213 to 1,104 lines.
+- **Review screens split out** — `ReviewClient.tsx` now delegates its empty, error and completion states to `review/screens/EmptyReviewScreen.tsx`, `ErrorReviewScreen.tsx` and `DoneReviewScreen.tsx`, each taking callbacks instead of reaching into session state; 958 → 742 lines.
+- **Review card parts split out** — the speaker button, conjugation badge and card-back extras (leech badge, saved chat exchange, Kai's Breakdown) moved to `review/ReviewCardParts.tsx`, with the `Card` shape in `review/card-types.ts` so the parts and the card share one type without a circular import; `ReviewCard.tsx` 731 → 546 lines.
+- **Vocab page split into modules** — `VocabClient.tsx` (929 → 336 lines) now composes `VocabFilterBar` (search, status chips, sort), `VocabList` (grouped rows, empty state, infinite-scroll sentinel, add-word FAB) and `VocabDetailSheet` (reading/meaning edits, notes, conjugation picks, reset/mark-known/delete). The sheet owns its own editing state and reports back through `onUpdated`/`onReload`/`onRemove` instead of reaching into the page; the card shape, filters and mastery weighting live in `vocab/types.ts`. A leftover `console.log` in the content filter was removed.
+- **Kanji markdown renderer split out** — `FormattedText` and its inline-token parser moved from `KanjiClient.tsx` to `kanji/FormattedText.tsx` (1,700 → 1,565 lines). It was exported but never imported by any other file, so it is now a standalone module instead of an inline block nobody reached.
+- **Interceptor rules are typed, not stepped** — the cards-to-unlock stepper is now a numeric field (presets kept), and the unlock grace is a typed number of minutes defaulting to 45 instead of fixed chips.
+- **Block chance removed** — the interceptor always blocks at 100%. The 25/50/75% options are gone from the rules modal, and a stored value is normalised to 100 on load and on every save (web config and Android prefs).
+- **Direction defaults to Mixed** for interception rules on web, in the Android plugin defaults and in the review gallery.
+
+### Fixed
+- **Mixed sessions no longer exceed the new-card quota** — the allowance is split across the vocab and kanji pools so the two halves sum to it (a quota of 3 was becoming 2 + 2 = 4), and the backfill recompose now receives only the allowance the other half did not spend instead of the full amount again (that path could reach 5). Both are pinned by route tests that fail against the previous logic.
+- **The home projection respects the in-progress learning cap** — `projectSessionMix` now takes `inProgress` and `maxLearningPool` and drops projected new cards when the pool is full, using the same `isLearningPoolFull` rule the routes apply. The home button no longer promises "3 new" for a session that will hand back reviews only.
+- **Daily new-card ceiling follows the learner's timezone** — `introducedTodayWhere` now accepts `User.timezone` and resolves the day boundary with `startOfDayInTimezone`, so the limit resets at local midnight rather than the server's (a UTC+8 learner on a UTC host was resetting at 08:00). All four call sites pass it: mixed, composition, flashcards/review and kanji/review.
+
+### Technical
+- Modified: `src/app/(app)/settings/app-blocker/InterceptionRulesModal.tsx`, `src/app/(app)/settings/app-blocker/FocusGuardStatusCard.tsx`, `src/app/(app)/settings/app-blocker/page.tsx`, `src/app/(app)/settings/ReviewDefaultsCard.tsx`, `src/app/(app)/settings/FsrsSettingsCard.tsx`, `src/app/(app)/review/QuestGallery.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/groups/[id]/GroupChatClient.tsx`, `src/lib/learning-config.ts`, `src/lib/review/intake.ts`, `src/lib/review/intake.test.ts`, `src/plugins/app-blocker/web.ts`, `android/app/src/main/java/com/kaiwaai/app/AppBlockerPlugin.kt`, `src/app/api/review/mixed/route.ts`, `src/app/api/review/mixed/route.test.ts`, `src/app/api/review/composition/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/flashcards/review/route.ts`, `src/lib/review/composition.ts`, `src/lib/review/composition.test.ts`, `src/app/(app)/home/KaiRoomClient.tsx`
+- New: `src/app/(app)/groups/[id]/GroupBubble.tsx`, `src/app/(app)/groups/[id]/QuestStrip.tsx`, `src/app/(app)/groups/[id]/group-types.ts`, `src/app/(app)/groups/[id]/group-format.ts`, `src/app/(app)/chat/WordTokenPopup.tsx`, `src/app/(app)/kanji/FormattedText.tsx`, `src/app/(app)/review/screens/EmptyReviewScreen.tsx`, `src/app/(app)/review/screens/ErrorReviewScreen.tsx`, `src/app/(app)/review/screens/DoneReviewScreen.tsx`, `src/app/(app)/review/ReviewCardParts.tsx`, `src/app/(app)/review/card-types.ts`, `src/app/(app)/vocab/types.ts`, `src/app/(app)/vocab/VocabBits.tsx`, `src/app/(app)/vocab/VocabFilterBar.tsx`, `src/app/(app)/vocab/VocabList.tsx`, `src/app/(app)/vocab/VocabDetailSheet.tsx`
+- Deleted: —
+- Tests: 677 passing (71 files) — lint/typecheck clean
+- Note: the Android defaults only take effect in a rebuilt app; an already-saved 15-minute grace is left untouched, and `RulesConfigCard.tsx` (the only consumer of `InterceptionRulesEditor.tsx`) is no longer imported anywhere.
+- Note: `GroupBubble.tsx` carries the same `/* eslint-disable react-hooks/immutability */` the original single-file component used for its swipe refs; the exemption moved with the code rather than being added for it.
+- Remaining files over 700 lines: `kanji/KanjiClient.tsx` (1,565), `groups/[id]/GroupChatClient.tsx` (1,132), `chat/WordToken.tsx` (1,104), `chat/KanjiBreakdown.tsx` (913), `kanji/[character]/KanjiDetailClient.tsx` (829), `review/ReviewClient.tsx` (742), `kanji/AddKanjiModal.tsx` (703). Seven remain, down from eleven; each needs its render split into children with explicit props rather than another mechanical move.
+- Known duplication, not merged: `chat/WordTokenPopup.tsx` and `chat/TokenPopup.tsx` implement overlapping popup positioning and portal logic with slightly different APIs; unifying them is a behaviour change and was left alone.
+
 ## [2.3.1] - 2026-11-13
 
 ### Added
