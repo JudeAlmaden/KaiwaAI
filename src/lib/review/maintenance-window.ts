@@ -8,14 +8,11 @@
  * These helpers detect that starvation and merge in a separate reviewed pool.
  */
 
-const clampRatio = (ratio: number) =>
-  Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0.5));
+import { activeTargetFor } from "../session-composer";
 
 /** How many maintenance cards a session of this size is aiming for. */
 export function maintenanceTargetFor(sessionSize: number, learningRatio: number): number {
-  const ratio = clampRatio(learningRatio);
-  const activeTarget = ratio === 0 ? 0 : Math.max(1, Math.round(sessionSize * ratio));
-  return Math.max(0, sessionSize - activeTarget);
+  return Math.max(0, sessionSize - activeTargetFor(sessionSize, learningRatio));
 }
 
 /**

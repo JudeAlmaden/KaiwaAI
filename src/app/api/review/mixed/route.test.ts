@@ -151,7 +151,9 @@ describe("Mixed Review API - GET (/api/review/mixed)", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
-          easeFactor: { lt: 2.0 },
+          AND: [
+            { OR: [{ difficulty: { gt: 7 } }, { difficulty: null, easeFactor: { lt: 2.0 } }] },
+          ],
         }),
       })
     );

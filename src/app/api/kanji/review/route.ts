@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import type { ReviewGrade } from "@/lib/srs";
+import type { Prisma } from "@/generated/prisma/client";
 import { composeSession } from "@/lib/session-composer";
 import {
   mergeUniqueById,
@@ -59,7 +60,8 @@ export async function GET(req: Request) {
     } else if (groupId) {
       const groupIds = groupId.split(",").map((id) => id.trim()).filter(Boolean);
       const entries = await prisma.kanjiGroupEntry.findMany({
-        where: { groupId: { in: groupIds } },
+        // Scope to the caller's own folders — groupId alone is not authorisation.
+        where: { groupId: { in: groupIds }, group: { userId: user.id } },
         select: { kanjiId: true },
         orderBy: { order: "asc" },
       });
@@ -83,48 +85,42 @@ export async function GET(req: Request) {
     });
     const existingIds = new Set(existingUK.map((uk) => uk.kanjiId));
 
-    // Fetch kanji info for ones without UserKanji records
     const missingIds = kanjiIds.filter((id) => !existingIds.has(id));
-    const missingKanji =
+
+    // Scaffold the records the user does not own yet. Lesson mode used to return
+    // `preview-<id>` placeholders, and grading one 404'd because no UserKanji row
+    // matched — the review was silently lost.
+    if (missingIds.length > 0) {
+      await prisma.userKanji.createMany({
+        data: missingIds.map((kanjiId) => ({ userId: user.id, kanjiId })),
+        skipDuplicates: true,
+      });
+    }
+
+    const records =
       missingIds.length > 0
-        ? await prisma.kanji.findMany({
-            where: { id: { in: missingIds } },
+        ? await prisma.userKanji.findMany({
+            where: { userId: user.id, kanjiId: { in: kanjiIds } },
+            include: { kanji: true },
           })
-        : [];
+        : existingUK;
 
     // Combine and sort by heisig order
-    const allKanji = [
-      ...existingUK.map((uk) => ({
-        id: uk.id,
-        kanjiId: uk.kanjiId,
-        character: uk.kanji.character,
-        meanings: safeJsonArray(uk.kanji.meanings),
-        readingsOn: safeJsonArray(uk.kanji.readingsOn),
-        readingsKun: safeJsonArray(uk.kanji.readingsKun),
-        radicals: safeJsonArray(uk.kanji.radicals),
-        heisigNumber: uk.kanji.heisigNumber,
-        heisigKeyword: uk.kanji.heisigKeyword,
-        primitives: safeJsonArray(uk.kanji.primitives),
-        mnemonic: uk.mnemonic,
-        status: uk.status,
-        _pool: "active" as const,
-      })),
-      ...missingKanji.map((k) => ({
-        id: `preview-${k.id}`, // preview-only, not a real UserKanji ID
-        kanjiId: k.id,
-        character: k.character,
-        meanings: safeJsonArray(k.meanings),
-        readingsOn: safeJsonArray(k.readingsOn),
-        readingsKun: safeJsonArray(k.readingsKun),
-        radicals: safeJsonArray(k.radicals),
-        heisigNumber: k.heisigNumber,
-        heisigKeyword: k.heisigKeyword,
-        primitives: safeJsonArray(k.primitives),
-        mnemonic: null,
-        status: "new" as const,
-        _pool: "active" as const,
-      })),
-    ];
+    const allKanji = records.map((uk) => ({
+      id: uk.id,
+      kanjiId: uk.kanjiId,
+      character: uk.kanji.character,
+      meanings: safeJsonArray(uk.kanji.meanings),
+      readingsOn: safeJsonArray(uk.kanji.readingsOn),
+      readingsKun: safeJsonArray(uk.kanji.readingsKun),
+      radicals: safeJsonArray(uk.kanji.radicals),
+      heisigNumber: uk.kanji.heisigNumber,
+      heisigKeyword: uk.kanji.heisigKeyword,
+      primitives: safeJsonArray(uk.kanji.primitives),
+      mnemonic: uk.mnemonic,
+      status: uk.status,
+      _pool: "active" as const,
+    }));
 
     // Sort by Heisig frame order (nulls last)
     allKanji.sort((a, b) => (a.heisigNumber ?? 99999) - (b.heisigNumber ?? 99999));
@@ -133,17 +129,7 @@ export async function GET(req: Request) {
   }
 
   // Get user's kanji learning records
-  const where: {
-    userId: string;
-    repetitions?: { gt: number };
-    nextReview?: { lte: Date };
-    createdAt?: { gte: Date };
-    easeFactor?: { lt: number };
-    AND?: Array<{
-      timesReviewed?: { gte: number };
-      interval?: { lt: number };
-    }>;
-  } = { userId: user.id };
+  const where: Prisma.UserKanjiWhereInput = { userId: user.id };
 
   // If reviews only (learningRatio === 0) in due mode, exclude unstudied new cards
   if (studyMode === "due" && learningRatio === 0) {
@@ -157,7 +143,11 @@ export async function GET(req: Request) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     where.createdAt = { gte: sevenDaysAgo };
   } else if (studyMode === "struggling") {
-    where.easeFactor = { lt: 2.0 };
+    // FSRS no longer updates easeFactor, so difficulty is the live signal;
+    // unmigrated cards still fall back to their SM-2 ease.
+    where.AND = [
+      { OR: [{ difficulty: { gt: 7 } }, { difficulty: null, easeFactor: { lt: 2.0 } }] },
+    ];
   } else if (studyMode === "leeches") {
     where.AND = [
       { timesReviewed: { gte: 8 } },
@@ -316,7 +306,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  if (!body.cardId || body.grade === undefined || body.grade < 0 || body.grade > 3) {
+  const grade = Number(body.grade);
+  if (!body.cardId || body.grade === undefined || !Number.isInteger(grade) || grade < 0 || grade > 3) {
     return NextResponse.json({ error: "Missing cardId or grade." }, { status: 400 });
   }
 
@@ -335,12 +326,13 @@ export async function POST(req: Request) {
       status: userKanji.status,
       nextReview: userKanji.nextReview,
       lastReviewedAt: userKanji.lastReviewedAt,
+      firstLearnedAt: userKanji.firstLearnedAt,
       timesReviewed: userKanji.timesReviewed,
       difficulty: userKanji.difficulty,
       stability: userKanji.stability,
       retrievability: userKanji.retrievability,
     },
-    grade: body.grade as ReviewGrade,
+    grade: grade as ReviewGrade,
     cardType: "kanji",
     earlyReviewStrategy: body.earlyReviewStrategy,
     desiredRetention: body.desiredRetention,

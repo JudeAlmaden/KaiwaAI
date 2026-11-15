@@ -27,6 +27,8 @@ export type SessionMixOptions = {
   maxNewPerSession?: number;
   /** Session size cap (Goal / limit). */
   maxReviews?: number;
+  /** New cards already introduced today; subtracted from the daily ceiling. */
+  introducedToday?: number;
   /** Cards currently in progress — blocks intake when the cap is reached. */
   inProgress?: number;
   /** Max in-progress learning cards (0 or omitted = unlimited). */
@@ -66,8 +68,11 @@ export function projectSessionMix(
   const activeTarget =
     ratio === 0 ? 0 : Math.min(size, Math.max(1, Math.round(size * ratio)));
 
+  // The daily ceiling is what is left of it after today's introductions, exactly
+  // as the routes compute it — otherwise home promises cards the session refuses.
+  const dailyRemaining = Math.max(0, Math.max(0, options.maxNewCards) - (options.introducedToday ?? 0));
   const quota = Math.min(
-    Math.max(0, options.maxNewCards),
+    dailyRemaining,
     options.maxNewPerSession ?? Number.POSITIVE_INFINITY
   );
 

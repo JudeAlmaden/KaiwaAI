@@ -63,7 +63,11 @@ export async function GET(req: Request) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     where.createdAt = { gte: sevenDaysAgo };
   } else if (studyMode === "struggling") {
-    where.easeFactor = { lt: 2.0 };
+    // FSRS no longer updates easeFactor, so difficulty is the live signal;
+    // cards that predate migration still fall back to their SM-2 ease.
+    where.AND = [
+      { OR: [{ difficulty: { gt: 7 } }, { difficulty: null, easeFactor: { lt: 2.0 } }] },
+    ];
   } else if (studyMode === "leeches") {
     where.AND = [
       { timesReviewed: { gte: 8 } },
@@ -283,7 +287,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  if (!body.cardId || body.grade === undefined || body.grade < 0 || body.grade > 3) {
+  const grade = Number(body.grade);
+  if (!body.cardId || body.grade === undefined || !Number.isInteger(grade) || grade < 0 || grade > 3) {
     return NextResponse.json({ error: "Missing cardId or grade." }, { status: 400 });
   }
 
@@ -302,12 +307,13 @@ export async function POST(req: Request) {
       status: card.status,
       nextReview: card.nextReview,
       lastReviewedAt: card.lastReviewedAt,
+      firstLearnedAt: card.firstLearnedAt,
       timesReviewed: card.timesReviewed,
       difficulty: card.difficulty,
       stability: card.stability,
       retrievability: card.retrievability,
     },
-    grade: body.grade as ReviewGrade,
+    grade: grade as ReviewGrade,
     cardType: "flashcard",
     earlyReviewStrategy: body.earlyReviewStrategy,
     desiredRetention: body.desiredRetention,

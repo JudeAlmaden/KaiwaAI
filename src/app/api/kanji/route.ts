@@ -62,7 +62,8 @@ export async function GET(req: Request) {
   // Filter by group membership
   if (groupId) {
     const groupEntries = await prisma.kanjiGroupEntry.findMany({
-      where: { groupId },
+      // Same ownership check as the review route: a folder id is not a grant.
+      where: { groupId, group: { userId: user.id } },
       select: { kanjiId: true },
       orderBy: { order: "asc" },
     });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import type { Prisma } from "@/generated/prisma/client";
 import { composeSession } from "@/lib/session-composer";
 import { parseCardSource } from "@/lib/review/card-source";
 import {
@@ -42,19 +43,8 @@ export async function GET(req: Request) {
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
 
   // Build where clauses for both vocab and kanji
-  const vocabWhere: {
-    userId: string;
-    repetitions?: { gt: number };
-    nextReview?: { lte: Date };
-    createdAt?: { gte: Date };
-    easeFactor?: { lt: number };
-    AND?: Array<{
-      timesReviewed?: { gte: number };
-      interval?: { lt: number };
-    }>;
-  } = { userId: user.id };
-
-  const kanjiWhere: typeof vocabWhere = { userId: user.id };
+  const vocabWhere: Prisma.UserFlashcardWhereInput = { userId: user.id };
+  const kanjiWhere: Prisma.UserKanjiWhereInput = { userId: user.id };
 
   // If reviews only (learningRatio === 0) in due mode, exclude unstudied new cards
   if (studyMode === "due" && learningRatio === 0) {
@@ -71,8 +61,14 @@ export async function GET(req: Request) {
     vocabWhere.createdAt = { gte: sevenDaysAgo };
     kanjiWhere.createdAt = { gte: sevenDaysAgo };
   } else if (studyMode === "struggling") {
-    vocabWhere.easeFactor = { lt: 2.0 };
-    kanjiWhere.easeFactor = { lt: 2.0 };
+    // FSRS no longer updates easeFactor, so difficulty is the live signal;
+    // unmigrated cards still fall back to their SM-2 ease.
+    vocabWhere.AND = [
+      { OR: [{ difficulty: { gt: 7 } }, { difficulty: null, easeFactor: { lt: 2.0 } }] },
+    ];
+    kanjiWhere.AND = [
+      { OR: [{ difficulty: { gt: 7 } }, { difficulty: null, easeFactor: { lt: 2.0 } }] },
+    ];
   } else if (studyMode === "leeches") {
     vocabWhere.AND = [
       { timesReviewed: { gte: 8 } },

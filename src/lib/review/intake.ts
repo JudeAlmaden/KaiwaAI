@@ -77,7 +77,9 @@ export function describeIntake(options: {
   inProgress: number;
   maxLearningPool: number;
 }): IntakeStatus {
-  if (options.maxNewPerSession <= 0) return { allowance: 0, reason: "off" };
+  if (options.maxNewPerSession <= 0 || options.maxNewCards <= 0) {
+    return { allowance: 0, reason: "off" };
+  }
 
   if (isLearningPoolFull(options)) {
     return { allowance: 0, reason: "learning-pool" };
@@ -92,7 +94,7 @@ export function describeIntake(options: {
   return { allowance, reason: allowance > 0 ? "ready" : "daily-ceiling" };
 }
 
-/** Prisma filter for cards that had their first successful review today. */
+/** Prisma filter for cards first successfully reviewed today. */
 export function introducedTodayWhere(
   userId: string,
   now: Date = new Date(),
@@ -100,7 +102,6 @@ export function introducedTodayWhere(
 ) {
   return {
     userId,
-    repetitions: 1,
-    lastReviewedAt: { gte: startOfToday(now, timeZone) },
+    firstLearnedAt: { gte: startOfToday(now, timeZone) },
   };
 }

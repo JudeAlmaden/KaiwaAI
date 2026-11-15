@@ -44,35 +44,44 @@ export function dayLabel(dayKey: string, todayKey: string): string {
   });
 }
 
-/** Returns the UTC Date corresponding to midnight (start of day) for a dayKey in the given timezone. */
+/** Wall-clock reading of an instant in `timeZone`, expressed as a UTC epoch. */
+function wallClockAsUtc(instantMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(new Date(instantMs));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+}
+
+/**
+ * Returns the UTC Date corresponding to midnight (start of day) for a dayKey in
+ * the given timezone.
+ *
+ * The offset is resolved iteratively against the candidate instant rather than
+ * against UTC midnight, so a zone whose clocks change on the day still lands on
+ * its own midnight. Where midnight does not exist (spring-forward at 00:00) the
+ * nearest valid instant is returned.
+ */
 export function startOfDayInTimezone(dayKey: string, timeZone: string = "UTC"): Date {
   try {
     const [year, month, day] = dayKey.split("-").map(Number);
-    const targetUtc = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+    const midnightUtc = Date.UTC(year, month - 1, day, 0, 0, 0);
 
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-      second: "numeric",
-      hourCycle: "h23",
-    });
-    const parts = formatter.formatToParts(targetUtc);
-    const getPart = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-    const tzYear = getPart("year");
-    const tzMonth = getPart("month");
-    const tzDay = getPart("day");
-    const tzHour = getPart("hour");
-    const tzMinute = getPart("minute");
-    const tzSecond = getPart("second");
+    let guess = midnightUtc - (wallClockAsUtc(midnightUtc, timeZone) - midnightUtc);
+    for (let i = 0; i < 3; i++) {
+      const delta = midnightUtc - wallClockAsUtc(guess, timeZone);
+      if (delta === 0) break;
+      guess += delta;
+    }
 
-    const asUtcInstant = Date.UTC(tzYear, tzMonth - 1, tzDay, tzHour, tzMinute, tzSecond);
-    const offsetMs = asUtcInstant - targetUtc.getTime();
-
-    return new Date(targetUtc.getTime() - offsetMs);
+    return new Date(guess);
   } catch {
     return new Date(`${dayKey}T00:00:00Z`);
   }

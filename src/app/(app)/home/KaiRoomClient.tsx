@@ -310,6 +310,7 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
             maxNewCards: cfg.maxNewCards,
             maxNewPerSession: cfg.newPerSession,
             maxReviews: cfg.maxDailyReviews,
+            introducedToday: d.intake?.introducedToday ?? 0,
             inProgress: d.intake?.inProgress ?? 0,
             maxLearningPool: cfg.maxLearningPool,
           })

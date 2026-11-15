@@ -23,10 +23,17 @@ export const MAX_INTERVAL_DAYS = 3650;
 export type CardLifecycleState = {
   repetitions?: number | null;
   interval?: number | null;
+  /** Total grades applied. A lapsed card has repetitions 0 but reviews > 0. */
+  timesReviewed?: number | null;
 };
 
+/**
+ * Never studied — not merely back at repetitions 0 after a lapse. Treating a
+ * lapsed card as new made it consume new-card quota, appear in "new" counts,
+ * and vanish from the in-progress pool all at once.
+ */
 export function isNewCard(card: CardLifecycleState): boolean {
-  return (card.repetitions ?? 0) === 0;
+  return (card.repetitions ?? 0) === 0 && (card.timesReviewed ?? 0) === 0;
 }
 
 export function isGraduated(card: CardLifecycleState): boolean {
@@ -51,9 +58,11 @@ export function cardStatus(card: CardLifecycleState): CardStatus {
  * Kept as a value so query sites cannot invent their own definition.
  */
 export const LEARNING_CARD_WHERE = {
-  repetitions: { gt: 0 },
   OR: [
-    { repetitions: { lt: GRADUATED_REPETITIONS } },
-    { interval: { lt: GRADUATED_INTERVAL_DAYS } },
+    // Graded but not graduated.
+    { repetitions: { gt: 0, lt: GRADUATED_REPETITIONS } },
+    { repetitions: { gte: GRADUATED_REPETITIONS }, interval: { lt: GRADUATED_INTERVAL_DAYS } },
+    // Lapsed back to repetitions 0 — still in progress, so the pool cap counts it.
+    { repetitions: 0, timesReviewed: { gt: 0 } },
   ],
 };

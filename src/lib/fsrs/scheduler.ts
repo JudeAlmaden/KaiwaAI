@@ -266,8 +266,8 @@ export class FSRSScheduler {
     const w = params;
     const gradeAdjusted = grade + 1; // Map 0-3 to 1-4
     
-    // D' = D - w6 * (grade - 3)
-    const difficultyDelta = currentDifficulty - w[6] * (gradeAdjusted - 4);
+    // D' = D - w6 * (grade - 3)  — grade is 1-based here (0..3 → 1..4)
+    const difficultyDelta = currentDifficulty - w[6] * (gradeAdjusted - 3);
     
     // D'' = (1 - w7) * D' + w7 * D_init (mean reversion to initial difficulty)
     const difficulty = (1 - w[7]) * difficultyDelta + w[7] * w[4];

@@ -1,6 +1,9 @@
+import { isNewCard } from "./review/lifecycle";
+
 interface Card {
   id: string;
   repetitions: number;
+  timesReviewed?: number | null;
   easeFactor: number;
   interval: number;
   nextReview: Date;
@@ -44,6 +47,19 @@ export interface ComposeSessionOptions {
  *     cards reviewed in the last 10 minutes from active, so a second session
  *     started immediately after the first still gets review cards.
  */
+/**
+ * Active share of a session, in cards. Shared with the maintenance-window helper
+ * so the two cannot drift apart again.
+ */
+export function activeTargetFor(sessionSize: number, learningRatio: number): number {
+  const safeSize = Math.max(0, Math.floor(sessionSize));
+  const ratio = Math.max(
+    0,
+    Math.min(1.0, typeof learningRatio === "number" && !isNaN(learningRatio) ? learningRatio : 0.5)
+  );
+  return ratio === 0 ? 0 : Math.min(safeSize, Math.max(1, Math.round(safeSize * ratio)));
+}
+
 export function composeSession<T extends Card>(
   allCards: T[],
   sessionSize: number = 5,
@@ -67,8 +83,7 @@ export function composeSession<T extends Card>(
 
   // Target split: active gets round(size * ratio), at least one card when any new
   // cards are allowed; maintenance gets the rest.
-  const activeTarget =
-    ratio === 0 ? 0 : Math.min(safeSize, Math.max(1, Math.round(safeSize * ratio)));
+  const activeTarget = activeTargetFor(safeSize, ratio);
 
   // New-card intake: the session quota and the daily ceiling both apply.
   const newQuota = Math.min(
@@ -81,7 +96,7 @@ export function composeSession<T extends Card>(
   let newCardsAdded = 0;
 
   for (const card of allCards) {
-    const isNew = (card.repetitions ?? 0) === 0;
+    const isNew = isNewCard(card);
     const hasFsrs =
       card.difficulty != null &&
       card.stability != null &&

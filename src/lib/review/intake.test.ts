@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   describeIntake,
   dailyNewRemaining,
+  introducedTodayWhere,
   isLearningPoolFull,
   resolveNewAllowance,
   startOfToday,
@@ -88,6 +89,25 @@ describe("new-card intake", () => {
         maxLearningPool: 0,
       })
     ).toEqual({ allowance: 0, reason: "off" });
+  });
+
+  it("reports intake off when the daily ceiling is zero", () => {
+    expect(
+      describeIntake({
+        maxNewCards: 0,
+        maxNewPerSession: 3,
+        introducedToday: 0,
+        inProgress: 0,
+        maxLearningPool: 0,
+      })
+    ).toEqual({ allowance: 0, reason: "off" });
+  });
+
+  it("counts introductions by firstLearnedAt, not repetitions", () => {
+    const where = introducedTodayWhere("user-1", new Date("2026-11-14T12:00:00Z"), "Asia/Tokyo");
+    expect(where).toMatchObject({ userId: "user-1" });
+    expect("firstLearnedAt" in where).toBe(true);
+    expect(where).not.toHaveProperty("repetitions");
   });
 
   it("treats the learning-pool gate as full only at or above the cap", () => {

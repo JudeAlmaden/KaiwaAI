@@ -99,6 +99,22 @@ describe("projectSessionMix", () => {
     expect(mix.newCount).toBe(3);
   });
 
+  it("subtracts cards already introduced today from the daily ceiling", () => {
+    const mix = projectSessionMix(
+      { new: 40, review: 40 },
+      { learningRatio: 0.5, maxNewCards: 5, maxNewPerSession: 3, maxReviews: 20, introducedToday: 4 }
+    );
+    expect(mix.newCount).toBe(1);
+  });
+
+  it("projects no new cards once the daily ceiling is spent", () => {
+    const mix = projectSessionMix(
+      { new: 10, review: 10 },
+      { ...base, maxReviews: 10, maxNewCards: 20, introducedToday: 20 }
+    );
+    expect(mix).toEqual({ newCount: 0, reviewCount: 10, total: 10 });
+  });
+
   it("returns zeroes for an empty deck", () => {
     expect(projectSessionMix({ new: 0, review: 0 }, base)).toEqual({
       newCount: 0,

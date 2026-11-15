@@ -18,6 +18,7 @@ export interface ReviewableCard {
   status: string;
   nextReview: Date | null;
   lastReviewedAt: Date | null;
+  firstLearnedAt?: Date | null;
   timesReviewed: number;
   difficulty?: number | null;
   stability?: number | null;
@@ -34,6 +35,12 @@ export interface ReviewUpdatePayload {
   stability?: number;
   retrievability?: number;
   lastReviewedAt: Date;
+  /** False for practice reviews: they must not move the scheduling clock. */
+  touchLastReviewed?: boolean;
+  /** Set the first time a card is ever successfully graded. */
+  firstLearnedAt?: Date;
+  /** SM-2 fallback: drop stale FSRS state so the next review converts cleanly. */
+  clearFsrs?: boolean;
   timesReviewedIncrement: number;
 }
 
@@ -95,6 +102,11 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
 
   const isEarly = card.nextReview != null && new Date(card.nextReview) > now;
 
+  // Stamp the first successful grade exactly once. Counting `repetitions === 1`
+  // instead also counted old cards that had just lapsed back to zero.
+  const firstLearnedAt =
+    grade > 0 && card.repetitions === 0 && !card.firstLearnedAt ? now : undefined;
+
   if (isEarly && earlyReviewStrategy === "practice") {
     return {
       easeFactor: card.easeFactor,
@@ -105,7 +117,10 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       difficulty: card.difficulty ?? undefined,
       stability: card.stability ?? undefined,
       retrievability: card.retrievability ?? undefined,
-      lastReviewedAt: now,
+      lastReviewedAt: card.lastReviewedAt ?? now,
+      // Practising early must not shift lastReviewedAt: retrievability is
+      // measured from it, so touching it would weaken the next real review.
+      touchLastReviewed: false,
       timesReviewedIncrement: 0,
     };
   }
@@ -163,7 +178,9 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
     }
 
     const result = scheduler.schedule(state, grade as FSRSGrade, fsrsOptions);
-    const interval = sm2IntervalFromStability(result.stability, retention);
+    // A lapse is due again in 10 minutes, so the stored interval must not claim
+    // days — the two used to disagree and skew mastery/leech displays.
+    const interval = grade === 0 ? 0 : sm2IntervalFromStability(result.stability, retention);
     const repetitions = grade === 0 ? 0 : card.repetitions + 1;
 
     return {
@@ -177,6 +194,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       stability: result.stability,
       retrievability: result.retrievability,
       lastReviewedAt: now,
+      firstLearnedAt,
       timesReviewedIncrement: 1,
     };
   } catch (error) {
@@ -204,6 +222,10 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       status: fallback.status,
       nextReview: fallback.nextReview,
       lastReviewedAt: now,
+      firstLearnedAt,
+      // SM-2 wrote reps/interval; the old FSRS fields would no longer describe
+      // this card, so clear them and let the next review re-convert.
+      clearFsrs: true,
       timesReviewedIncrement: 1,
     };
   }
@@ -226,21 +248,32 @@ export function buildReviewPersistData(result: ReviewUpdatePayload) {
     repetitions: number;
     status: CardStatus;
     nextReview: Date;
-    lastReviewedAt: Date;
+    lastReviewedAt?: Date;
+    firstLearnedAt?: Date;
     timesReviewed?: { increment: number };
-    difficulty?: number;
-    stability?: number;
-    retrievability?: number;
+    difficulty?: number | null;
+    stability?: number | null;
+    retrievability?: number | null;
   } = {
     easeFactor: result.easeFactor,
     interval: result.interval,
     repetitions: result.repetitions,
     status: result.status,
     nextReview: result.nextReview,
-    lastReviewedAt: result.lastReviewedAt,
   };
 
-  if (result.difficulty !== undefined) {
+  if (result.touchLastReviewed !== false) {
+    data.lastReviewedAt = result.lastReviewedAt;
+  }
+  if (result.firstLearnedAt) {
+    data.firstLearnedAt = result.firstLearnedAt;
+  }
+
+  if (result.clearFsrs) {
+    data.difficulty = null;
+    data.stability = null;
+    data.retrievability = null;
+  } else if (result.difficulty !== undefined) {
     data.difficulty = result.difficulty;
     data.stability = result.stability;
     data.retrievability = result.retrievability;

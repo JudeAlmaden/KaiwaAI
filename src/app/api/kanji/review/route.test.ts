@@ -8,6 +8,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
+      createMany: vi.fn(),
     },
     kanjiGroupEntry: {
       findMany: vi.fn(),
@@ -156,7 +157,9 @@ describe("Kanji Review API - GET", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-123",
-          easeFactor: { lt: 2.0 },
+          AND: [
+            { OR: [{ difficulty: { gt: 7 } }, { difficulty: null, easeFactor: { lt: 2.0 } }] },
+          ],
         }),
         orderBy: [{ easeFactor: "asc" }, { createdAt: "asc" }],
       })
@@ -269,29 +272,31 @@ describe("Kanji Review API - GET", () => {
       { kanjiId: "k-1" }, // duplicate across folders
     ] as never);
 
-    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([
-      {
-        id: "uk-1",
-        userId: "user-123",
-        kanjiId: "k-1",
-        status: "learning",
-        mnemonic: "Story 1",
-        kanji: {
-          id: "k-1",
-          character: "一",
-          meanings: '["one"]',
-          readingsOn: '["イチ"]',
-          readingsKun: '["ひと"]',
-          radicals: '["一"]',
-          heisigNumber: 1,
-          heisigKeyword: "one",
-          primitives: '["floor", "ceiling"]',
-        },
-      } as never,
-    ]);
-
-    vi.mocked(prisma.kanji.findMany).mockResolvedValueOnce([
-      {
+    const ukOne = {
+      id: "uk-1",
+      userId: "user-123",
+      kanjiId: "k-1",
+      status: "learning",
+      mnemonic: "Story 1",
+      kanji: {
+        id: "k-1",
+        character: "一",
+        meanings: '["one"]',
+        readingsOn: '["イチ"]',
+        readingsKun: '["ひと"]',
+        radicals: '["一"]',
+        heisigNumber: 1,
+        heisigKeyword: "one",
+        primitives: '["floor", "ceiling"]',
+      },
+    };
+    const ukTwo = {
+      id: "uk-2",
+      userId: "user-123",
+      kanjiId: "k-2",
+      status: "new",
+      mnemonic: null,
+      kanji: {
         id: "k-2",
         character: "二",
         meanings: '["two"]',
@@ -301,8 +306,14 @@ describe("Kanji Review API - GET", () => {
         heisigNumber: 2,
         heisigKeyword: "two",
         primitives: null,
-      } as never,
-    ]);
+      },
+    };
+
+    // First lookup finds only the owned card; the route then scaffolds the
+    // missing one and re-reads, so both come back the second time.
+    vi.mocked(prisma.userKanji.findMany)
+      .mockResolvedValueOnce([ukOne] as never)
+      .mockResolvedValueOnce([ukOne, ukTwo] as never);
 
     const req = new Request("http://localhost/api/kanji/review?groupId=grp-1,grp-2");
     const response = await GET(req);
@@ -310,10 +321,20 @@ describe("Kanji Review API - GET", () => {
 
     expect(response.status).toBe(200);
     expect(prisma.kanjiGroupEntry.findMany).toHaveBeenCalledWith({
-      where: { groupId: { in: ["grp-1", "grp-2"] } },
+      where: {
+        groupId: { in: ["grp-1", "grp-2"] },
+        group: { userId: "user-123" },
+      },
       select: { kanjiId: true },
       orderBy: { order: "asc" },
     });
+    // Missing kanji are scaffolded so their grades resolve instead of 404ing.
+    expect(prisma.userKanji.createMany).toHaveBeenCalledWith({
+      data: [{ userId: "user-123", kanjiId: "k-2" }],
+      skipDuplicates: true,
+    });
+    expect(data.cards[0].id).toBe("uk-1");
+    expect(data.cards[1].id).toBe("uk-2");
     // Deduplicated 2 cards
     expect(data.cards).toHaveLength(2);
     expect(data.cards[0].character).toBe("一");

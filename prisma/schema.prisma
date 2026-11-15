@@ -249,6 +249,8 @@ model UserKanji {
   timesReviewed  Int       @default(0)
   nextReview     DateTime  @default(now())
   lastReviewedAt DateTime?
+  // When this card first crossed from never-graded to graded (set once).
+  firstLearnedAt DateTime?
 
   // FSRS v4 fields (null for unmigrated cards)
   difficulty     Float?
@@ -465,6 +467,8 @@ model UserFlashcard {
   exposures      Int             @default(0)
   nextReview     DateTime        @default(now())
   lastReviewedAt DateTime?
+  // When this card first crossed from never-graded to graded (set once).
+  firstLearnedAt DateTime?
 
   // FSRS v4 fields (null for unmigrated cards)
   difficulty     Float?
