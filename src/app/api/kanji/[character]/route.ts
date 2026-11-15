@@ -294,16 +294,9 @@ export async function DELETE(
     },
   });
 
-  try {
-    const userKanjiCount = await prisma.userKanji.count({ where: { kanjiId: kanji.id } });
-    const groupCount = await prisma.kanjiGroupEntry.count({ where: { kanjiId: kanji.id } });
-    if (userKanjiCount === 0 && groupCount === 0) {
-      await prisma.kanji.delete({ where: { id: kanji.id } });
-    }
-  } catch {
-    // Ignore if referenced elsewhere
-  }
-
+  // `Kanji` is the shared dictionary and has no owner, so dropping a card from
+  // one user's list must never delete the row: doing so removes the character
+  // from browse and search for everyone. Unreferenced rows simply stay put.
   return NextResponse.json({ success: true });
 }
 

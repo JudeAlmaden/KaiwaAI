@@ -22,14 +22,16 @@ export async function GET() {
     vocabIntroduced,
     kanjiIntroduced,
   ] = await Promise.all([
+    // `timesReviewed: 0` is part of the definition of new: a card that lapsed
+    // back to repetitions 0 is maintenance, not an introduction.
     prisma.userFlashcard.count({
-      where: { userId: user.id, repetitions: 0, nextReview: { lte: now } },
+      where: { userId: user.id, repetitions: 0, timesReviewed: 0, nextReview: { lte: now } },
     }),
     prisma.userFlashcard.count({
       where: { userId: user.id, repetitions: { gt: 0 }, nextReview: { lte: now } },
     }),
     prisma.userKanji.count({
-      where: { userId: user.id, repetitions: 0, nextReview: { lte: now } },
+      where: { userId: user.id, repetitions: 0, timesReviewed: 0, nextReview: { lte: now } },
     }),
     prisma.userKanji.count({
       where: { userId: user.id, repetitions: { gt: 0 }, nextReview: { lte: now } },

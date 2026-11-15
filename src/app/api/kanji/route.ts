@@ -3,6 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { getUserKanji, getVocabWithKanji } from "@/lib/kanji-db";
 
+// Query params come straight from the URL, so a bad value must never reach
+// Prisma as NaN (which throws) or as an unbounded page size.
+function intParam(raw: string | number | null, fallback: number, min: number, max: number): number {
+  const parsed = typeof raw === "number" ? raw : Number.parseInt(raw ?? "", 10);
+  return Number.isInteger(parsed) ? Math.min(Math.max(parsed, min), max) : fallback;
+}
+
 export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,8 +19,8 @@ export async function GET(req: Request) {
   const jlptLevel = url.searchParams.get("jlptLevel");
   const grade = url.searchParams.get("grade");
   const sortBy = url.searchParams.get("sortBy") || "frequency";
-  const limit = parseInt(url.searchParams.get("limit") || "500");
-  const offset = parseInt(url.searchParams.get("offset") || "0");
+  const limit = intParam(url.searchParams.get("limit"), 500, 1, 500);
+  const offset = intParam(url.searchParams.get("offset"), 0, 0, 1_000_000);
   const groupId = url.searchParams.get("groupId"); // filter by KanjiGroup
   const heisigLesson = url.searchParams.get("heisigLesson"); // filter by RTK lesson
 
@@ -33,9 +40,9 @@ export async function GET(req: Request) {
   };
   const where: KanjiWhere = {};
 
-  if (jlptLevel) where.jlptLevel = parseInt(jlptLevel);
-  if (grade) where.grade = parseInt(grade);
-  if (heisigLesson) where.heisigLesson = parseInt(heisigLesson);
+  if (jlptLevel) { const level = intParam(jlptLevel, 0, 1, 5); if (level) where.jlptLevel = level; }
+  if (grade) { const g = intParam(grade, 0, 1, 9); if (g) where.grade = g; }
+  if (heisigLesson) { const lesson = intParam(heisigLesson, 0, 1, 56); if (lesson) where.heisigLesson = lesson; }
 
   // Scope by source
   if (source === "vocab") {
@@ -257,8 +264,8 @@ export async function POST(req: Request) {
 
   const char = character.trim();
   const kw = (heisigKeyword || keyword || "").trim();
-  const lesson = heisigLesson ? Number(heisigLesson) : null;
-  const frame = heisigNumber ? Number(heisigNumber) : null;
+  const lesson = heisigLesson ? intParam(heisigLesson, 0, 1, 56) || null : null;
+  const frame = heisigNumber ? intParam(heisigNumber, 0, 1, 3000) || null : null;
   let primsJson: string | null = null;
   if (Array.isArray(primitives)) {
     primsJson = JSON.stringify(primitives.map(p => String(p).trim()).filter(Boolean));

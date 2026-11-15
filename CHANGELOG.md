@@ -6,6 +6,10 @@ All notable changes to KaiwaAI are documented in this file.
 
 ### Fixed
 
+- **The FSRS debug endpoint served any user's cards** — `GET /api/debug/fsrs-state` had no auth check at all (the project has no `middleware.ts`), so `?userId=` returned any account's review state and `?cardId=` returned any card by id. It now requires a session and only ever reports on the caller's own cards.
+- **Removing a kanji from your list deleted it from the shared dictionary** — both `DELETE /api/kanji/[character]` and `/learn` dropped the `Kanji` row once no one referenced it. `Kanji` has no owner column, so that permanently removed the character from browse and search for every user. The cleanup is gone.
+- **Home counted lapsed cards as new** — `/api/review/composition` split `due.new` on `repetitions: 0` alone, so a card that had lapsed was promised as new while the session delivered it as maintenance. The split now also requires `timesReviewed: 0`.
+- **Kanji browse accepted junk query numbers** — `?jlptLevel=N5` became `NaN` and threw a 500, and `limit`/`offset` were unclamped. Query params are now parsed to bounded integers, so bad input falls back to defaults.
 - **Good reviews made cards harder** — the FSRS difficulty update used `gradeAdjusted - 4` on a 1-based grade instead of `- 3`, so Good added +0.86 difficulty every review and Easy never lowered it. Difficulty pinned at 10, which cut stability growth (11 − D) from ~6 to 1; ten clean Good reviews produced a 183-day interval where 3,650 was correct. Good and Easy now behave as the model intends.
 - **Lapsed cards counted as new** — `isNewCard` treated `repetitions = 0` as "never studied", so a card that had lapsed consumed new-card quota, showed as "new", and dropped out of the in-progress pool at the same time. Newness now also requires `timesReviewed = 0`, and `LEARNING_CARD_WHERE` counts lapsed cards as in progress.
 - **Focus Guard could read another user's kanji folder** — the `groupId` branch of `/api/kanji/review` (and the folder filter on `/api/kanji`) queried group entries without an ownership check. Both are now scoped to `group: { userId }`.
@@ -25,6 +29,9 @@ All notable changes to KaiwaAI are documented in this file.
 - Modified: `src/lib/fsrs/scheduler.ts`, `src/lib/fsrs/apply-review.ts`, `src/lib/review/lifecycle.ts`, `src/lib/review/intake.ts`, `src/lib/review/composition.ts`, `src/lib/session-composer.ts`, `src/lib/review/maintenance-window.ts`, `src/lib/day.ts`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/api/kanji/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/(app)/home/KaiRoomClient.tsx`, `prisma/schema.prisma`
 - New: `prisma/migrations/20261114120000_add_first_learned_at/migration.sql`, `src/lib/fsrs/difficulty.test.ts`, `src/lib/fsrs/review-payload.test.ts`, `src/lib/review/lapsed-lifecycle.test.ts`
 - **Requires `npx prisma migrate deploy`** before the review routes run against the database (adds `UserFlashcard.firstLearnedAt` / `UserKanji.firstLearnedAt`).
+- Modified (refactor): `src/app/(app)/kanji/KanjiClient.tsx` — data loading and the filtering/sorting projections moved out of the component
+- New (refactor): `src/app/(app)/kanji/types.ts`, `src/app/(app)/kanji/useKanjiLibrary.ts`, `src/app/(app)/kanji/useKanjiView.ts`
+- Bench: `KanjiClient.tsx` 1,565 → 1,353 lines, with the view logic now unit-testable outside React
 - Tests: 693 passing (74 files) — lint/typecheck clean
 
 ## [2.4.0] - 2026-11-14

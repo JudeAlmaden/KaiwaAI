@@ -1,75 +1,21 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import AddKanjiModal from "./AddKanjiModal";
 import KanjiCoverageGrid from "./KanjiCoverageGrid";
 import { compressImageToDataUrl } from "@/lib/image-compress";
 import { speakJa, canSpeak } from "@/lib/speak";
-
-export type KanjiEntry = {
-  id: string;
-  order: number;
-  kanjiId: string;
-  character: string;
-  heisigNumber?: number | null;
-  heisigKeyword?: string | null;
-  customMeaning?: string | null;
-  mnemonic?: string | null;
-  primitives?: string[];
-  meanings: string[];
-  readingsOn?: string[];
-  readingsKun?: string[];
-  strokes: number;
-  isAdded: boolean;
-  status: string | null;
-};
-
-export type Folder = {
-  id: string;
-  name: string;
-  description?: string | null;
-  images?: string[];
-  imageCount?: number;
-  thumbnail?: string | null;
-  kind: string;
-  lessonNumber?: number | null;
-  order: number;
-  createdAt: string;
-  total: number;
-  added: number;
-  known: number;
-  completionPct: number;
-  entries: KanjiEntry[];
-};
-
-export type KanjiCard = {
-  id: string;
-  character: string;
-  meanings: string[];
-  readingsOn: string[];
-  readingsKun: string[];
-  strokes: number;
-  masteryPercent: number;
-  inReviews: boolean;
-  heisigNumber?: number | null;
-  heisigLesson?: number | null;
-  heisigKeyword?: string | null;
-  primitives?: string[];
-  hasMnemonic?: boolean;
-  learningStatus?: "new" | "learning" | "known" | null;
-  groupIds?: string[];
-  groups?: { id: string; name: string; lessonNumber?: number | null }[];
-};
-
-type ViewMode = "folders" | "all" | "coverage";
-type FilterMode = "All" | "Learning" | "Known";
+import { useKanjiLibrary } from "./useKanjiLibrary";
+import { useKanjiView } from "./useKanjiView";
+import type { FilterMode, Folder, ViewMode } from "./types";
 
 export default function KanjiClient() {
   const router = useRouter();
 
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [allKanji, setAllKanji] = useState<KanjiCard[]>([]);
+  const { folders, setFolders, allKanji, setAllKanji, loading, loadFolders, loadData } =
+    useKanjiLibrary();
+
   const [viewMode, setViewMode] = useState<ViewMode>("folders");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -77,7 +23,6 @@ export default function KanjiClient() {
   const [kanjiSortBy, setKanjiSortBy] = useState<"heisig" | "strokes" | "mastery" | "recent">("heisig");
   const [kanjiFilter, setKanjiFilter] = useState<FilterMode>("All");
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
 
   // Selected Kanji for Quick Detail Sheet
   const [selectedKanji, setSelectedKanji] = useState<{
@@ -95,8 +40,6 @@ export default function KanjiClient() {
     kanjiId?: string;
     groups?: { id: string; name: string; lessonNumber?: number | null }[];
   } | null>(null);
-
-
 
   // New Folder Modal state
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
@@ -124,179 +67,24 @@ export default function KanjiClient() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addModalFolderId, setAddModalFolderId] = useState<string | null>(null);
 
-  // Load all user folders
-  const loadFolders = useCallback(async () => {
-    try {
-      const res = await fetch("/api/kanji/groups");
-      if (res.ok) {
-        const data = await res.json();
-        setFolders(data.groups || []);
-      }
-    } catch (e) {
-      console.error("Failed to load folders:", e);
-    }
-  }, []);
+  const {
+    activeFolder,
+    stats,
+    filteredFolders,
+    activeFolderEntries,
+    unlistedKanjiCount,
+    filteredAllKanji,
+  } = useKanjiView({
+    folders,
+    allKanji,
+    selectedFolderId,
+    search,
+    folderSortBy,
+    kanjiSortBy,
+    kanjiFilter,
+    selectedFolderFilter,
+  });
 
-  // Load all learning kanji for the "All Kanji" view
-  const loadAllKanji = useCallback(async () => {
-    try {
-      const res = await fetch("/api/kanji?source=learning&limit=1000&sortBy=heisig");
-      if (res.ok) {
-        const data = await res.json();
-        setAllKanji(data.kanji || []);
-      }
-    } catch (e) {
-      console.error("Failed to load all kanji:", e);
-    }
-  }, []);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      await Promise.all([loadFolders(), loadAllKanji()]);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadFolders, loadAllKanji]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
-  }, [loadData]);
-
-  // Selected folder object
-  const activeFolder = useMemo(() => {
-    if (!selectedFolderId || selectedFolderId === "all-my-kanji") return null;
-    return folders.find((f) => f.id === selectedFolderId) || null;
-  }, [folders, selectedFolderId]);
-
-  // Overall stats
-  const stats = useMemo(() => {
-    const total = allKanji.length;
-    const known = allKanji.filter(
-      (k) => k.learningStatus === "known" || k.masteryPercent >= 80
-    ).length;
-    const learning = Math.max(0, total - known);
-    const pct = total > 0 ? Math.round((known / total) * 100) : 0;
-    return { total, known, learning, pct };
-  }, [allKanji]);
-
-  // Filtered and sorted folders
-  const filteredFolders = useMemo(() => {
-    let result = [...folders];
-    const q = search.trim().toLowerCase();
-
-    if (q) {
-      const lessonMatch = q.match(/^(?:l|lesson|#)?\s*(\d+)$/i);
-      const queryLessonNum = lessonMatch ? parseInt(lessonMatch[1], 10) : null;
-
-      result = result.filter((f) => {
-        if (queryLessonNum !== null && f.lessonNumber === queryLessonNum) return true;
-        if (f.name.toLowerCase().includes(q)) return true;
-        if (f.description && f.description.toLowerCase().includes(q)) return true;
-        return f.entries.some(
-          (e) =>
-            e.character.includes(q) ||
-            (e.heisigKeyword && e.heisigKeyword.toLowerCase().includes(q)) ||
-            (e.customMeaning && e.customMeaning.toLowerCase().includes(q)) ||
-            (e.mnemonic && e.mnemonic.toLowerCase().includes(q)) ||
-            (e.heisigNumber && (`#${e.heisigNumber}`.includes(q) || String(e.heisigNumber) === q)) ||
-            (e.primitives && e.primitives.some((p) => p.toLowerCase().includes(q))) ||
-            e.meanings.some((m) => m.toLowerCase().includes(q))
-        );
-      });
-    }
-
-    result.sort((a, b) => {
-      if (folderSortBy === "lesson") {
-        const la = a.lessonNumber ?? 99999;
-        const lb = b.lessonNumber ?? 99999;
-        if (la !== lb) return la - lb;
-        return a.order - b.order;
-      }
-      if (folderSortBy === "count") return b.entries.length - a.entries.length;
-      if (folderSortBy === "completion") return b.completionPct - a.completionPct;
-      if (folderSortBy === "recent") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      return 0;
-    });
-
-    return result;
-  }, [folders, search, folderSortBy]);
-
-  // Filtered entries inside the active folder
-  const activeFolderEntries = useMemo(() => {
-    if (!activeFolder) return [];
-    const q = search.trim().toLowerCase();
-    if (!q) return activeFolder.entries;
-    return activeFolder.entries.filter(
-      (e) =>
-        e.character.includes(q) ||
-        (e.heisigKeyword && e.heisigKeyword.toLowerCase().includes(q)) ||
-        (e.customMeaning && e.customMeaning.toLowerCase().includes(q)) ||
-        (e.mnemonic && e.mnemonic.toLowerCase().includes(q)) ||
-        (e.heisigNumber && (`#${e.heisigNumber}`.includes(q) || String(e.heisigNumber) === q)) ||
-        (e.primitives && e.primitives.some((p) => p.toLowerCase().includes(q))) ||
-        e.meanings.some((m) => m.toLowerCase().includes(q))
-    );
-  }, [activeFolder, search]);
-
-  // Count of kanji that do not belong to any folder
-  const unlistedKanjiCount = useMemo(() => {
-    return allKanji.filter((k) => !k.groupIds || k.groupIds.length === 0).length;
-  }, [allKanji]);
-
-  // Filtered & sorted list for "All My Kanji" view
-  const filteredAllKanji = useMemo(() => {
-    let result = [...allKanji];
-    const q = search.trim().toLowerCase();
-
-    if (kanjiFilter === "Learning") {
-      result = result.filter((k) => k.learningStatus !== "known" && k.masteryPercent < 80);
-    } else if (kanjiFilter === "Known") {
-      result = result.filter((k) => k.learningStatus === "known" || k.masteryPercent >= 80);
-    }
-
-    // Filter by Folder or Unlisted
-    if (selectedFolderFilter === "unlisted") {
-      result = result.filter((k) => !k.groupIds || k.groupIds.length === 0);
-    } else if (selectedFolderFilter !== "all") {
-      result = result.filter((k) => k.groupIds && k.groupIds.includes(selectedFolderFilter));
-    }
-
-    if (q) {
-      result = result.filter(
-        (k) =>
-          k.character.includes(q) ||
-          (k.heisigKeyword && k.heisigKeyword.toLowerCase().includes(q)) ||
-          k.meanings.some((m) => m.toLowerCase().includes(q)) ||
-          (k.heisigNumber && (`#${k.heisigNumber}`.includes(q) || String(k.heisigNumber) === q)) ||
-          (k.primitives && k.primitives.some((p) => p.toLowerCase().includes(q))) ||
-          k.readingsOn.some((r) => r.includes(q)) ||
-          k.readingsKun.some((r) => r.includes(q))
-      );
-    }
-
-    result.sort((a, b) => {
-      if (kanjiSortBy === "heisig") {
-        const aNum = a.heisigNumber ?? 99999;
-        const bNum = b.heisigNumber ?? 99999;
-        return aNum - bNum;
-      }
-      if (kanjiSortBy === "strokes") {
-        return a.strokes - b.strokes;
-      }
-      if (kanjiSortBy === "mastery") {
-        return b.masteryPercent - a.masteryPercent;
-      }
-      return a.character.localeCompare(b.character);
-    });
-
-    return result;
-  }, [allKanji, search, kanjiFilter, kanjiSortBy, selectedFolderFilter]);
-
-
-
-  // Delete Kanji completely from user's study deck
   const handleDeleteKanji = async (character: string) => {
     if (!window.confirm(`Are you sure you want to delete "${character}" from your study list?`)) {
       return;

@@ -293,16 +293,8 @@ export async function DELETE(
     },
   });
 
-  // If this was a custom-created kanji and has no other users, clean up the kanji row
-  try {
-    const userKanjiCount = await prisma.userKanji.count({ where: { kanjiId: kanji.id } });
-    const groupCount = await prisma.kanjiGroupEntry.count({ where: { kanjiId: kanji.id } });
-    if (userKanjiCount === 0 && groupCount === 0) {
-      await prisma.kanji.delete({ where: { id: kanji.id } });
-    }
-  } catch {
-    // Ignore if foreign key constraints prevent deletion (e.g. system seeded kanji)
-  }
-
+  // `Kanji` is the shared dictionary with no owner column, so this must not
+  // delete the row: the character would vanish from browse and search for every
+  // user. Unreferenced rows are left in place.
   return NextResponse.json({ ok: true });
 }

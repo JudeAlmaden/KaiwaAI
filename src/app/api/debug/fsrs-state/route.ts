@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth-helpers";
 import {
   createScheduler,
   DEFAULT_FSRS_PARAMETERS,
@@ -47,9 +48,9 @@ interface FsrsFields {
 
 type FsrsFieldsWithType = FsrsFields & { __t: CardType };
 
-async function loadCard(cardId: string): Promise<{ card: FsrsFields; type: CardType } | null> {
+async function loadCard(cardId: string, userId: string): Promise<{ card: FsrsFields; type: CardType } | null> {
   const uf = await prisma.userFlashcard.findUnique({
-    where: { id: cardId },
+    where: { id: cardId, userId },
     select: {
       id: true, difficulty: true, stability: true, retrievability: true,
       easeFactor: true, interval: true, repetitions: true, status: true,
@@ -58,7 +59,7 @@ async function loadCard(cardId: string): Promise<{ card: FsrsFields; type: CardT
   });
   if (uf) return { card: uf as FsrsFields, type: "flashcard" };
   const uk = await prisma.userKanji.findUnique({
-    where: { id: cardId },
+    where: { id: cardId, userId },
     select: {
       id: true, difficulty: true, stability: true, retrievability: true,
       easeFactor: true, interval: true, repetitions: true, status: true,
@@ -180,14 +181,23 @@ function buildCardInspection(card: FsrsFields, type: CardType, desiredRetention:
 }
 
 export async function GET(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(req.url);
   const cardId = searchParams.get("cardId");
-  const userId = searchParams.get("userId");
+  const requestedUserId = searchParams.get("userId");
+  // The card id and user id come from the query string, so neither is a grant:
+  // this endpoint may only ever report on the caller's own cards.
+  if (requestedUserId && requestedUserId !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const userId = user.id;
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
   const desiredRetention = getServerDesiredRetention();
 
   if (cardId) {
-    const loaded = await loadCard(cardId);
+    const loaded = await loadCard(cardId, user.id);
     if (!loaded) {
       return NextResponse.json(
         { error: "Card not found", cardId, hint: "Pass a UserFlashcard or UserKanji id" },
