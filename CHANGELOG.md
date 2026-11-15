@@ -2,7 +2,7 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
-## [Unreleased]
+## [2.4.1] - 2026-11-16
 
 ### Fixed
 
