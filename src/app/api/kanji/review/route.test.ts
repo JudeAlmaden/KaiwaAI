@@ -604,3 +604,31 @@ describe("Kanji Review API - POST", () => {
     );
   });
 });
+
+describe("Reviews-only due kanji — lapsed cards", () => {
+  const mockUser = { id: "user-123", email: "test@example.com" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps lapsed cards instead of filtering repetitions > 0", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValueOnce([]);
+
+    await GET(new Request("http://localhost/api/kanji/review?studyMode=due&learningRatio=0"));
+
+    expect(prisma.userKanji.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-123",
+          AND: [{ OR: [{ repetitions: { gt: 0 } }, { timesReviewed: { gt: 0 } }] }],
+        }),
+      })
+    );
+
+    const where = vi.mocked(prisma.userKanji.findMany).mock.calls[0][0]
+      ?.where as unknown as Record<string, unknown>;
+    expect(where).not.toHaveProperty("repetitions");
+  });
+});

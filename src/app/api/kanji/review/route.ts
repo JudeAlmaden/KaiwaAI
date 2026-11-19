@@ -8,8 +8,9 @@ import {
   mergeUniqueById,
   needsMaintenanceTopUp,
 } from "@/lib/review/maintenance-window";
-import { LEARNING_CARD_WHERE } from "@/lib/review/lifecycle";
-import { introducedTodayWhere, resolveNewAllowance } from "@/lib/review/intake";
+import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
+import { introducedTodayWhere, resolveNewAllowance, startOfToday } from "@/lib/review/intake";
+import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
 import {
   applyFsrsReview,
   buildReviewPersistData,
@@ -131,9 +132,10 @@ export async function GET(req: Request) {
   // Get user's kanji learning records
   const where: Prisma.UserKanjiWhereInput = { userId: user.id };
 
-  // If reviews only (learningRatio === 0) in due mode, exclude unstudied new cards
+  // Reviews only (learningRatio === 0) in due mode: exclude never-studied cards,
+  // but keep lapsed ones (repetitions 0 after "Again", timesReviewed > 0).
   if (studyMode === "due" && learningRatio === 0) {
-    where.repetitions = { gt: 0 };
+    where.AND = [STUDIED_CARD_WHERE];
   }
 
   if (studyMode === "due") {
@@ -182,11 +184,13 @@ export async function GET(req: Request) {
 
     // Weakest-first ordering lets a large new-card backlog fill the entire
     // window, so the maintenance pool never forms. Top it up separately.
-    const alreadyReviewsOnly =
-      (where as { repetitions?: unknown }).repetitions !== undefined;
-    if (!alreadyReviewsOnly && needsMaintenanceTopUp(allKanji, limit, learningRatio)) {
+    // Reviews-only sessions are already all studied cards; nothing to top up.
+    if (learningRatio > 0 && needsMaintenanceTopUp(allKanji, limit, learningRatio)) {
       const reviewed = await prisma.userKanji.findMany({
-        where: { ...where, repetitions: { gt: 0 } },
+        where: {
+          ...where,
+          AND: [...(Array.isArray(where.AND) ? where.AND : []), STUDIED_CARD_WHERE],
+        },
         include: {
           kanji: true,
         },

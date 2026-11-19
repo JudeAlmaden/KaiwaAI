@@ -15,8 +15,9 @@ import {
   mergeUniqueById,
   needsMaintenanceTopUp,
 } from "@/lib/review/maintenance-window";
-import { LEARNING_CARD_WHERE } from "@/lib/review/lifecycle";
-import { introducedTodayWhere, resolveNewAllowance } from "@/lib/review/intake";
+import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
+import { introducedTodayWhere, resolveNewAllowance, startOfToday } from "@/lib/review/intake";
+import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
 
 // Cards for review with various study modes:
 //   ?studyMode=due         — cards with nextReview in the past (default)
@@ -46,13 +47,16 @@ export async function GET(req: Request) {
   const rawNewPerSession = sp.get("newPerSession");
   const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
+  const rawMaxDaily = sp.get("maxDailyReviews");
+  const maxDailyReviews = rawMaxDaily !== null && !isNaN(parseInt(rawMaxDaily, 10)) ? parseInt(rawMaxDaily, 10) : undefined;
 
   // Build base where clause
   const where: Prisma.UserFlashcardWhereInput = { userId: user.id };
 
-  // If reviews only (learningRatio === 0) in due mode, exclude unstudied new cards
+  // Reviews only (learningRatio === 0) in due mode: exclude never-studied cards,
+  // but keep lapsed ones (repetitions 0 after "Again", timesReviewed > 0).
   if (studyMode === "due" && learningRatio === 0) {
-    where.repetitions = { gt: 0 };
+    where.AND = [STUDIED_CARD_WHERE];
   }
 
   // Apply study mode logic
@@ -137,9 +141,13 @@ export async function GET(req: Request) {
 
     // Weakest-first ordering lets a large new-card backlog fill the entire
     // window, so the maintenance pool never forms. Top it up separately.
-    if (!where.repetitions && needsMaintenanceTopUp(allCards, limit, learningRatio)) {
+    // Reviews-only sessions are already all studied cards; nothing to top up.
+    if (learningRatio > 0 && needsMaintenanceTopUp(allCards, limit, learningRatio)) {
       const reviewed = await prisma.userFlashcard.findMany({
-        where: { ...where, repetitions: { gt: 0 } },
+        where: {
+          ...where,
+          AND: [...(Array.isArray(where.AND) ? where.AND : []), STUDIED_CARD_WHERE],
+        },
         include: {
           word: true,
           wordForm: true,

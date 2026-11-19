@@ -54,6 +54,17 @@ export function cardStatus(card: CardLifecycleState): CardStatus {
 }
 
 /**
+ * Prisma filter for cards the learner has studied at least once.
+ *
+ * "Reviews only" sessions must use this and not `repetitions > 0`: a lapsed card
+ * (failed with "Again") has repetitions 0 but timesReviewed > 0, so the naive
+ * filter hides exactly the cards that need review most.
+ */
+export const STUDIED_CARD_WHERE = {
+  OR: [{ repetitions: { gt: 0 } }, { timesReviewed: { gt: 0 } }],
+};
+
+/**
  * Prisma filter for cards actively being learned (not new, not graduated).
  * Kept as a value so query sites cannot invent their own definition.
  */

@@ -8,12 +8,14 @@ import {
   mergeUniqueById,
   needsMaintenanceTopUp,
 } from "@/lib/review/maintenance-window";
-import { LEARNING_CARD_WHERE, isNewCard } from "@/lib/review/lifecycle";
+import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE, isNewCard } from "@/lib/review/lifecycle";
 import {
   introducedTodayWhere,
   isLearningPoolFull,
   resolveNewAllowance,
+  startOfToday,
 } from "@/lib/review/intake";
+import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
 
 function safeJsonArray(val: string | null | undefined): string[] {
   if (!val) return [];
@@ -41,15 +43,18 @@ export async function GET(req: Request) {
   const rawNewPerSession = sp.get("newPerSession");
   const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
+  const rawMaxDaily = sp.get("maxDailyReviews");
+  const maxDailyReviews = rawMaxDaily !== null && !isNaN(parseInt(rawMaxDaily, 10)) ? parseInt(rawMaxDaily, 10) : undefined;
 
   // Build where clauses for both vocab and kanji
   const vocabWhere: Prisma.UserFlashcardWhereInput = { userId: user.id };
   const kanjiWhere: Prisma.UserKanjiWhereInput = { userId: user.id };
 
-  // If reviews only (learningRatio === 0) in due mode, exclude unstudied new cards
+  // Reviews only (learningRatio === 0) in due mode: exclude never-studied cards,
+  // but keep lapsed ones (repetitions 0 after "Again", timesReviewed > 0).
   if (studyMode === "due" && learningRatio === 0) {
-    vocabWhere.repetitions = { gt: 0 };
-    kanjiWhere.repetitions = { gt: 0 };
+    vocabWhere.AND = [STUDIED_CARD_WHERE];
+    kanjiWhere.AND = [STUDIED_CARD_WHERE];
   }
 
   if (studyMode === "due") {
@@ -123,12 +128,16 @@ export async function GET(req: Request) {
     // Each type gets half the session, so each half needs its own maintenance
     // cards. Weakest-first windows otherwise return only new cards.
     const perTypeSession = Math.ceil(limit / 2);
+    // Reviews-only sessions are already all studied cards; nothing to top up.
     if (
-      !vocabWhere.repetitions &&
+      learningRatio > 0 &&
       needsMaintenanceTopUp(allVocab, perTypeSession, learningRatio)
     ) {
       const reviewedVocab = await prisma.userFlashcard.findMany({
-        where: { ...vocabWhere, repetitions: { gt: 0 } },
+        where: {
+          ...vocabWhere,
+          AND: [...(Array.isArray(vocabWhere.AND) ? vocabWhere.AND : []), STUDIED_CARD_WHERE],
+        },
         include: {
           word: true,
           wordForm: true,
@@ -140,11 +149,14 @@ export async function GET(req: Request) {
       allVocab = mergeUniqueById(allVocab, reviewedVocab ?? []);
     }
     if (
-      !kanjiWhere.repetitions &&
+      learningRatio > 0 &&
       needsMaintenanceTopUp(allKanji, perTypeSession, learningRatio)
     ) {
       const reviewedKanji = await prisma.userKanji.findMany({
-        where: { ...kanjiWhere, repetitions: { gt: 0 } },
+        where: {
+          ...kanjiWhere,
+          AND: [...(Array.isArray(kanjiWhere.AND) ? kanjiWhere.AND : []), STUDIED_CARD_WHERE],
+        },
         include: {
           kanji: true,
         },

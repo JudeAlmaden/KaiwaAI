@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { LEARNING_CARD_WHERE } from "@/lib/review/lifecycle";
-import { introducedTodayWhere } from "@/lib/review/intake";
+import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
+import { introducedTodayWhere, startOfToday } from "@/lib/review/intake";
 
 // Due cards split by class, so the home screen can show the mix a session will
 // actually contain ("6 review · 4 new") instead of one opaque number.
@@ -28,18 +28,25 @@ export async function GET() {
       where: { userId: user.id, repetitions: 0, timesReviewed: 0, nextReview: { lte: now } },
     }),
     prisma.userFlashcard.count({
-      where: { userId: user.id, repetitions: { gt: 0 }, nextReview: { lte: now } },
+      where: { userId: user.id, AND: [STUDIED_CARD_WHERE], nextReview: { lte: now } },
     }),
     prisma.userKanji.count({
       where: { userId: user.id, repetitions: 0, timesReviewed: 0, nextReview: { lte: now } },
     }),
     prisma.userKanji.count({
-      where: { userId: user.id, repetitions: { gt: 0 }, nextReview: { lte: now } },
+      where: { userId: user.id, AND: [STUDIED_CARD_WHERE], nextReview: { lte: now } },
     }),
     prisma.userFlashcard.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
     prisma.userKanji.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
     prisma.userFlashcard.count({ where: introducedTodayWhere(user.id, now, user.timezone) }),
     prisma.userKanji.count({ where: introducedTodayWhere(user.id, now, user.timezone) }),
+    // What the daily review ceiling has already spent today.
+    prisma.userFlashcard.count({
+      where: { userId: user.id, lastReviewedAt: { gte: startOfToday(now, user.timezone) } },
+    }),
+    prisma.userKanji.count({
+      where: { userId: user.id, lastReviewedAt: { gte: startOfToday(now, user.timezone) } },
+    }),
   ]);
 
   return NextResponse.json({

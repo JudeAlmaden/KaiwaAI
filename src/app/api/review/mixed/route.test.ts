@@ -365,3 +365,38 @@ describe("Mixed Review API - GET (/api/review/mixed)", () => {
     expect(brokenKanji.primitives).toEqual([]);
   });
 });
+
+describe("Reviews-only due sessions — lapsed cards (mixed)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("filters both halves by studied cards and skips the maintenance top-up", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+      id: "user-123",
+      email: "test@example.com",
+      timezone: "UTC",
+    } as never);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
+
+    const res = await GET(
+      new Request("http://localhost/api/review/mixed?studyMode=due&learningRatio=0&limit=10")
+    );
+    expect(res.status).toBe(200);
+
+    const studied = [{ OR: [{ repetitions: { gt: 0 } }, { timesReviewed: { gt: 0 } }] }];
+    const vocabWhere = vi.mocked(prisma.userFlashcard.findMany).mock.calls[0][0]
+      ?.where as unknown as Record<string, unknown>;
+    const kanjiWhere = vi.mocked(prisma.userKanji.findMany).mock.calls[0][0]
+      ?.where as unknown as Record<string, unknown>;
+
+    expect(vocabWhere.AND).toEqual(studied);
+    expect(kanjiWhere.AND).toEqual(studied);
+    expect(vocabWhere).not.toHaveProperty("repetitions");
+    expect(kanjiWhere).not.toHaveProperty("repetitions");
+    // Reviews-only already excludes new cards, so no second top-up query.
+    expect(vi.mocked(prisma.userFlashcard.findMany)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(prisma.userKanji.findMany)).toHaveBeenCalledTimes(1);
+  });
+});
