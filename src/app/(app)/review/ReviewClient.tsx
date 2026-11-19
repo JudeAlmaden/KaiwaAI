@@ -13,6 +13,7 @@ import { AppBlocker } from "@/plugins/app-blocker";
 import ReviewCard, { Card } from "./ReviewCard";
 import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from "@/lib/fallback-cards";
 import { getLearningConfig } from "@/lib/learning-config";
+import { mirrorBlockerDefaultsToLearning } from "@/lib/review/blocker-sync";
 import { resolveShowFurigana } from "@/lib/review/furigana";
 import type { FuriganaMode } from "@/lib/review/types";
 import {
@@ -106,6 +107,8 @@ export default function ReviewClient() {
   const handleUpdateAppBlockerConfig = async (update: Partial<import('@/plugins/app-blocker').AppBlockerConfig>) => {
     const next = { ...appBlockerConfig, ...update };
     setAppBlockerConfig(next);
+    // The Learning tab owns the same defaults; keep them in step.
+    mirrorBlockerDefaultsToLearning(update);
     try {
       await AppBlocker.setAppBlockerConfig(next);
     } catch (e) {

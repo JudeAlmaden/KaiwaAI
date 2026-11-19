@@ -252,7 +252,7 @@ export default function StandaloneAppLockPage() {
         const resolvedLearningRatio: number =
           urlLearningRatio !== null && !isNaN(parseFloat(urlLearningRatio))
             ? parseFloat(urlLearningRatio)
-            : (savedConfig?.learningRatio ?? 0.5);
+            : (savedConfig?.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.5);
 
         setPractice(practiceEnabled);
         setEarlyReviewStrategy(earlyStrategy);

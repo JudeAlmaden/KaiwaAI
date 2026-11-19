@@ -14,6 +14,8 @@ All notable changes to KaiwaAI are documented in this file.
 
 - **Reviews-only sessions hid lapsed cards** — `studyMode=due` with a zero review mix added `repetitions > 0`, which also excludes a card you just failed (repetitions 0, timesReviewed > 0). Those are learning cards and the ones most in need of review, so "Due reviews" served everything except them. All three review routes and the composition counts now use one `STUDIED_CARD_WHERE` filter, and the maintenance top-up no longer re-introduces the same filter.
 
+- **Learning defaults and Focus Guard drifted apart** — each surface wrote only the keys it happened to know (direction and review mix on one side, furigana on the other) and neither re-read the other, so a learner who changed a default in one tab reviewed with the other tab's value. Writes now mirror both ways through a single mapping, which also covers the early-review strategy, and the app-lock page falls back to `defaultLearningRatio` instead of a hard-coded 0.5.
+
 ## [2.4.1] - 2026-11-16
 
 ### Fixed

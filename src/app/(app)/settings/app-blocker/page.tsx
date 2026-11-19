@@ -272,6 +272,9 @@ export default function AppBlockerSettings() {
     if (updates.noDueAction !== undefined) setNoDueAction(updates.noDueAction);
     if (updates.earlyReviewStrategy !== undefined) setEarlyReviewStrategy(updates.earlyReviewStrategy);
 
+    // Keep the Learning tab's copies of these defaults in step with this page.
+    mirrorBlockerDefaultsToLearning(updates);
+
     try {
       // count has its own legacy setter; mirror in config too
       if (updates.count !== undefined) {

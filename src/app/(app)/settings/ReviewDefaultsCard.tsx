@@ -9,6 +9,7 @@ import {
 import type { FuriganaMode, ReviewDirection } from "@/lib/review/types";
 import { describeIntake } from "@/lib/review/intake";
 import { getAutoSaveWords, setAutoSaveWords } from "@/lib/model-config";
+import { blockerUpdatesForLearningDefaults } from "@/lib/review/blocker-sync";
 import { AppBlocker } from "@/plugins/app-blocker";
 import { Chip, Surface, Toggle } from "../ui";
 
@@ -78,18 +79,8 @@ export default function ReviewDefaultsCard() {
     setConfig(next);
 
     // Sync review defaults to AppBlocker so Focus Guard inherits them
-    const appBlockerUpdates: Record<string, unknown> = {};
-    if (updates.defaultFuriganaMode !== undefined) {
-      appBlockerUpdates.furiganaMode = updates.defaultFuriganaMode;
-      appBlockerUpdates.showFurigana = updates.defaultFuriganaMode !== "never";
-    }
-    if (updates.defaultDirection !== undefined) {
-      appBlockerUpdates.direction = updates.defaultDirection;
-    }
-    if (updates.defaultLearningRatio !== undefined) {
-      appBlockerUpdates.learningRatio = updates.defaultLearningRatio;
-    }
-
+    // (direction, mix, furigana and early-review strategy, mapped in one place).
+    const appBlockerUpdates = blockerUpdatesForLearningDefaults(updates);
     if (Object.keys(appBlockerUpdates).length > 0) {
       AppBlocker.setAppBlockerConfig(appBlockerUpdates).catch(() => {});
     }
