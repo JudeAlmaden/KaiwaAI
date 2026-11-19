@@ -7,6 +7,9 @@ All notable changes to KaiwaAI are documented in this file.
 ### Added
 
 - **Focus Guard session plans** — the separate "Pool" and "Focus" rows (5 × 5 combinations, most of which were unreachable in practice) are replaced by six named plans: Due reviews, Gentle, Due + new, Study ahead, Weak cards and Leeches. Each plan pins both `studyMode` and `learningRatio`, so the label always describes what the session does; the plan picker is shared by the interception modal and the rules editor, a saved non-plan mix shows a Custom badge with the old rows underneath, and `resolvePlan()` maps legacy configs deterministically (percent comparison, not an epsilon). The config shape, native plugin payload and review API are unchanged.
+### Fixed
+
+- **Settings tabs scrolled sideways on phones** — the tab strip carried both `flex-1` and `shrink-0`, so at 390 px the four tabs needed 388 px inside a 338 px container and the last two scrolled out of view (with a visible scrollbar). The strip is now a 2×2 grid below `sm` and a single flex row above it.
 ## [2.4.1] - 2026-11-16
 
 ### Fixed

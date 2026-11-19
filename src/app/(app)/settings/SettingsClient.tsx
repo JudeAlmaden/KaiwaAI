@@ -30,12 +30,12 @@ export default function SettingsClient({ email }: { email: string }) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-5 sm:px-8 min-w-0">
       {/* Tabs */}
-      <div className="flex gap-1.5 sm:gap-2 rounded-2xl border-2 border-border bg-card p-1.5 overflow-x-auto no-scrollbar">
+      <div className="grid grid-cols-2 gap-1.5 sm:flex sm:gap-2 rounded-2xl border-2 border-border bg-card p-1.5">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex flex-1 items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+            className={`flex min-w-0 items-center justify-center gap-1.5 sm:flex-1 sm:gap-2 rounded-xl px-2 sm:px-4 py-2 text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
               tab === t.id
                 ? "bg-indigo-ai text-white shadow-sm"
                 : "text-muted hover:bg-indigo-ai/5 hover:text-foreground"
