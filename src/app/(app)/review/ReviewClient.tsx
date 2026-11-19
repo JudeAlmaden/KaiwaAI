@@ -264,7 +264,20 @@ export default function ReviewClient() {
   }, [activePool, setup.reviewType, handleGenerateMnemonic]);
 
   const refreshDueCount = useCallback(() => {
-    fetch("/api/review/mixed?studyMode=due&limit=200")
+    // Ask with the same composition inputs the session will use, so the badge
+    // cannot promise cards the session won't serve (e.g. new cards while the
+    // Learning tab's review mix is "Reviews only").
+    const learningCfg = getLearningConfig();
+    const params = new URLSearchParams({
+      studyMode: "due",
+      limit: "200",
+      learningRatio: String(learningCfg.defaultLearningRatio ?? 0.5),
+      maxLearningPool: String(learningCfg.maxLearningPool),
+      maxNewCards: String(learningCfg.maxNewCards),
+      newPerSession: String(learningCfg.newPerSession),
+      maxDailyReviews: String(learningCfg.maxDailyReviews),
+    });
+    fetch(`/api/review/mixed?${params}`)
       .then((r) => r.json())
       .then((d) => setDueCount(d.cards?.length ?? 0))
       .catch(() => setDueCount(0));

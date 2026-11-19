@@ -16,6 +16,8 @@ All notable changes to KaiwaAI are documented in this file.
 
 - **Learning defaults and Focus Guard drifted apart** — each surface wrote only the keys it happened to know (direction and review mix on one side, furigana on the other) and neither re-read the other, so a learner who changed a default in one tab reviewed with the other tab's value. Writes now mirror both ways through a single mapping, which also covers the early-review strategy, and the app-lock page falls back to `defaultLearningRatio` instead of a hard-coded 0.5.
 
+- **The due-review badge promised cards the session would not serve** — it asked `/api/review/mixed` for `studyMode=due&limit=200` and nothing else, so the count ignored the review mix, the new-card quota and the largest learning pool. With "Reviews only" selected, for example, the badge counted new cards the session then refused. The badge now sends the same composition inputs as the session it counts.
+
 ## [2.4.1] - 2026-11-16
 
 ### Fixed
