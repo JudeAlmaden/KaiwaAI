@@ -1,11 +1,13 @@
 'use client';
 
 import { ShieldCheck } from '@phosphor-icons/react';
+import type { BlockerStudyMode } from '@/plugins/app-blocker/definitions';
+import { getPlan, resolvePlan } from '@/lib/review/session-plan';
 
 type AppBlockerCardProps = {
   isMonitoring: boolean;
   requirementCount: number;
-  studyMode?: string;
+  studyMode?: BlockerStudyMode;
   learningRatio?: number;
   reviewType?: string;
   onClick: () => void;
@@ -19,23 +21,7 @@ export default function AppBlockerCard({
   reviewType = 'vocabulary',
   onClick,
 }: AppBlockerCardProps) {
-  const focusLabel =
-    Math.abs(learningRatio - 1.0) < 0.05
-      ? 'All New'
-      : Math.abs(learningRatio - 0.7) < 0.05
-      ? '70/30'
-      : '50/50';
-
-  const poolLabel =
-    studyMode === 'due'
-      ? 'Due'
-      : studyMode === 'recent'
-      ? 'Recent'
-      : studyMode === 'struggling'
-      ? 'Struggling'
-      : studyMode === 'leeches'
-      ? 'Leeches'
-      : 'All Cards';
+  const planLabel = getPlan(resolvePlan(studyMode, learningRatio))?.label ?? 'Custom mix';
 
   const typeLabel =
     reviewType === 'kanji' ? 'Kanji' : reviewType === 'mixed' ? 'Mixed' : 'Vocab';
@@ -80,10 +66,7 @@ export default function AppBlockerCard({
         {/* Config Summary Pills */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="px-2 py-0.5 rounded-lg bg-indigo-ai/10 text-indigo-ai border border-indigo-ai/20 text-[10px] font-extrabold">
-            {poolLabel}
-          </span>
-          <span className="px-2 py-0.5 rounded-lg bg-card border border-border text-foreground text-[10px] font-extrabold">
-            {focusLabel}
+            {planLabel}
           </span>
           <span className="px-2 py-0.5 rounded-lg bg-card border border-border text-muted text-[10px] font-extrabold">
             {typeLabel}

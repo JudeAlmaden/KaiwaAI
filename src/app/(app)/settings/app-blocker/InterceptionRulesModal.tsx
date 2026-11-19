@@ -7,6 +7,7 @@ import type {
   BlockerStudyMode,
   BlockerNoDueAction,
 } from '@/plugins/app-blocker/definitions';
+import SessionPlanPicker from './SessionPlanPicker';
 
 export interface InterceptionRulesModalProps {
   isOpen: boolean;
@@ -24,14 +25,6 @@ export interface InterceptionRulesModalProps {
   isMonitoring?: boolean;
   onToggleMonitoring?: () => void;
 }
-
-const STUDY_MODES: { id: BlockerStudyMode; label: string; hint: string }[] = [
-  { id: 'due', label: 'Due', hint: 'SRS scheduled now' },
-  { id: 'all', label: 'All', hint: 'Any card (study ahead)' },
-  { id: 'recent', label: 'Recent', hint: 'Added in 7 days' },
-  { id: 'struggling', label: 'Struggling', hint: 'Low ease factor' },
-  { id: 'leeches', label: 'Leeches', hint: 'Stuck short-interval' },
-];
 
 export default function InterceptionRulesModal({
   isOpen,
@@ -228,60 +221,18 @@ export default function InterceptionRulesModal({
                 </div>
               </div>
 
-              {/* Pool (study mode) */}
-              <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
+              {/* Session plan: one control for pool + new/review mix */}
+              <div className="flex flex-col gap-2 px-3 py-2.5 bg-card">
                 <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-foreground shrink-0">Pool</span>
-                  <span className="text-[9px] text-muted">Card selection</span>
+                  <span className="text-xs font-semibold text-foreground shrink-0">Session</span>
+                  <span className="text-[9px] text-muted">What you study when blocked</span>
                 </div>
-                <div className="flex gap-1 flex-wrap justify-end">
-                  {STUDY_MODES.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      title={m.hint}
-                      onClick={() => onUpdateAppBlockerConfig({ studyMode: m.id })}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                        studyMode === m.id
-                          ? 'bg-indigo-ai text-white'
-                          : 'text-muted hover:text-foreground'
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
+                <SessionPlanPicker
+                  studyMode={studyMode}
+                  learningRatio={learningRatio}
+                  onChange={(updates) => onUpdateAppBlockerConfig(updates)}
+                />
               </div>
-
-              {/* Focus (learning ratio): how much of the session is new vs review */}
-              <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-semibold text-foreground shrink-0">Focus</span>
-                    <span className="text-[9px] text-muted">New vs review mix</span>
-                  </div>
-                  <div className="flex gap-1 flex-wrap justify-end">
-                    {[
-                      { ratio: 0.0, label: 'Reviews' },
-                      { ratio: 0.2, label: 'Gentle' },
-                      { ratio: 0.5, label: '50/50' },
-                      { ratio: 0.7, label: '70%' },
-                      { ratio: 1.0, label: 'All New' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.ratio}
-                        type="button"
-                        onClick={() => onUpdateAppBlockerConfig({ learningRatio: opt.ratio })}
-                        className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                          Math.abs((learningRatio ?? 0.5) - opt.ratio) < 0.05
-                            ? 'bg-indigo-ai text-white'
-                            : 'text-muted hover:text-foreground'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
             </div>
           </div>
 

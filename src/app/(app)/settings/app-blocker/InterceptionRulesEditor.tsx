@@ -8,6 +8,7 @@ import type {
 } from "@/plugins/app-blocker/definitions";
 import type { ContentType, EarlyReviewStrategy, ReviewDirection } from "@/lib/review/types";
 import { getLearningConfig } from "@/lib/learning-config";
+import SessionPlanPicker from "./SessionPlanPicker";
 
 export interface InterceptionRulesState {
   count: number;
@@ -29,14 +30,6 @@ type InterceptionRulesEditorProps = {
   showUseDefaultsToggle?: boolean;
   onCountChange?: (count: number) => void;
 };
-
-const STUDY_MODES: { id: BlockerStudyMode; label: string; hint: string }[] = [
-  { id: "due", label: "Due", hint: "SRS scheduled now" },
-  { id: "all", label: "All", hint: "Any card (study ahead)" },
-  { id: "recent", label: "Recent", hint: "Added in 7 days" },
-  { id: "struggling", label: "Struggling", hint: "Low ease / hard cards" },
-  { id: "leeches", label: "Leeches", hint: "Stuck on short intervals" },
-];
 
 function Segmented({
   active,
@@ -227,22 +220,12 @@ export default function InterceptionRulesEditor({
         </div>
 
         <div className="space-y-2">
-          <SectionTitle>Pool</SectionTitle>
-          <div className="flex flex-wrap gap-1">
-            {STUDY_MODES.map((m) => (
-              <Segmented
-                key={m.id}
-                active={values.studyMode === m.id}
-                onClick={() => onChange({ studyMode: m.id })}
-                className="px-2 py-1"
-              >
-                {m.label}
-              </Segmented>
-            ))}
-          </div>
-          <p className="text-[10px] text-muted">
-            {STUDY_MODES.find((m) => m.id === values.studyMode)?.hint}
-          </p>
+          <SectionTitle>Session</SectionTitle>
+          <SessionPlanPicker
+            studyMode={values.studyMode}
+            learningRatio={values.learningRatio}
+            onChange={(updates) => onChange({ ...updates, useReviewDefaults: false })}
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -258,32 +241,6 @@ export default function InterceptionRulesEditor({
             {values.practice ? "On — no SRS updates" : "Off"}
           </Segmented>
         </div>
-
-        {values.learningRatio != null && (
-          <div className="space-y-1.5">
-            <SectionTitle>Learning ratio</SectionTitle>
-            <div className="grid grid-cols-5 gap-1">
-              {[0, 0.2, 0.5, 0.7, 1].map((r) => (
-                <Segmented
-                  key={r}
-                  active={values.learningRatio === r}
-                  onClick={() => onChange({ learningRatio: r, useReviewDefaults: false })}
-                >
-                  {r === 0 ? "Reviews" : r === 1 ? "All new" : `${Math.round(r * 100)}%`}
-                </Segmented>
-              ))}
-            </div>
-            <p className="text-[10px] text-muted">
-              {values.learningRatio === 0
-                ? "Reviews only: no brand-new unstudied words on app intercept."
-                : values.learningRatio <= 0.2
-                ? "Gentle: mostly reviews with at most 1–2 new words."
-                : values.learningRatio === 1
-                ? "All new: prioritize new words."
-                : "Balanced: 50% new words, 50% reviews."}
-            </p>
-          </div>
-        )}
 
         <div className="space-y-1.5">
           <SectionTitle>Early review strategy</SectionTitle>
