@@ -160,7 +160,7 @@ export default function StandaloneAppLockPage() {
 
     try {
       const res = await fetch(
-        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&maxNewCards=${maxNewCards}&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}`
+        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&maxNewCards=${maxNewCards}&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}&maxDailyReviews=${learningCfg.maxDailyReviews}`
       );
       if (res.ok) {
         const data = await res.json();

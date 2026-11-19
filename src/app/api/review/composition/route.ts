@@ -21,6 +21,8 @@ export async function GET() {
     kanjiInProgress,
     vocabIntroduced,
     kanjiIntroduced,
+    vocabReviewedToday,
+    kanjiReviewedToday,
   ] = await Promise.all([
     // `timesReviewed: 0` is part of the definition of new: a card that lapsed
     // back to repetitions 0 is maintenance, not an introduction.
@@ -61,5 +63,7 @@ export async function GET() {
       inProgress: vocabInProgress + kanjiInProgress,
       introducedToday: vocabIntroduced + kanjiIntroduced,
     },
+    // Feeds the daily review ceiling (Max daily reviews).
+    reviewedToday: vocabReviewedToday + kanjiReviewedToday,
   });
 }

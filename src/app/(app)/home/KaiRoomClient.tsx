@@ -25,6 +25,7 @@ import {
 import type { DailyWord } from "@/lib/kai-word";
 import { formatComposition, projectSessionMix } from "@/lib/review/composition";
 import { getLearningConfig } from "@/lib/learning-config";
+import { remainingDailyReviews } from "@/lib/review/daily-cap";
 import { canSpeak, speakJa } from "@/lib/speak";
 import KaiAvatar, { type KaiAvatarHandle } from "./KaiAvatar";
 import KaiSpeechBubble from "./KaiSpeechBubble";
@@ -309,7 +310,8 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
             learningRatio: cfg.defaultLearningRatio,
             maxNewCards: cfg.maxNewCards,
             maxNewPerSession: cfg.newPerSession,
-            maxReviews: cfg.maxDailyReviews,
+            // Sessions stop at the daily ceiling, so the projection must too.
+            maxReviews: remainingDailyReviews(cfg.maxDailyReviews, d.reviewedToday ?? 0),
             introducedToday: d.intake?.introducedToday ?? 0,
             inProgress: d.intake?.inProgress ?? 0,
             maxLearningPool: cfg.maxLearningPool,

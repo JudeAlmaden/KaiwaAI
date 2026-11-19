@@ -34,7 +34,7 @@ export async function GET(req: Request) {
 
   const sp = new URL(req.url).searchParams;
   const studyMode = sp.get("studyMode") ?? "due";
-  const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
+  let limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
   const rawRatio = sp.get("learningRatio");
   const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
   const rawMaxNew = sp.get("maxNewCards");
@@ -83,6 +83,33 @@ export async function GET(req: Request) {
       { timesReviewed: { gte: 8 } },
       { interval: { lt: 7 } }
     ];
+  }
+
+  // Daily ceiling: shrink the session to what is left of today's review goal.
+  // The ceiling is per learner, so vocab and kanji reviews share it.
+  if (maxDailyReviews !== undefined) {
+    const [reviewedVocab, reviewedKanji] = await Promise.all([
+      prisma.userFlashcard.count({
+        where: {
+          userId: user.id,
+          lastReviewedAt: { gte: startOfToday(new Date(), user.timezone) },
+        },
+      }),
+      prisma.userKanji.count({
+        where: {
+          userId: user.id,
+          lastReviewedAt: { gte: startOfToday(new Date(), user.timezone) },
+        },
+      }),
+    ]);
+    limit = clampSessionToDailyCap(
+      limit,
+      remainingDailyReviews(
+        maxDailyReviews,
+        (Number(reviewedVocab) || 0) + (Number(reviewedKanji) || 0)
+      )
+    );
+    if (limit === 0) return NextResponse.json({ cards: [] });
   }
 
   // Use session composition for all standard review modes

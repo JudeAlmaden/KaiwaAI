@@ -8,6 +8,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
@@ -672,6 +673,106 @@ describe("Review API - POST", () => {
       expect.objectContaining({
         where: { id: "other-user-card", userId: "user-123" },
       })
+    );
+  });
+});
+
+describe("Reviews-only due sessions — lapsed cards", () => {
+  const mockUser = { id: "user-123", email: "test@example.com" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps lapsed cards instead of filtering repetitions > 0", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
+
+    const req = new Request(
+      "http://localhost/api/flashcards/review?studyMode=due&learningRatio=0"
+    );
+    await GET(req);
+
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-123",
+          AND: [{ OR: [{ repetitions: { gt: 0 } }, { timesReviewed: { gt: 0 } }] }],
+        }),
+      })
+    );
+
+    const where = vi.mocked(prisma.userFlashcard.findMany).mock.calls[0][0]
+      ?.where as unknown as Record<string, unknown>;
+    // A bare `repetitions > 0` filter hides lapsed cards; it must not be used.
+    expect(where).not.toHaveProperty("repetitions");
+  });
+});
+
+describe("Daily review ceiling", () => {
+  const mockUser = { id: "user-123", email: "test@example.com", timezone: "UTC" };
+
+  const dueCard = (i: number) => ({
+    id: `card-${i}`,
+    userId: "user-123",
+    status: "learning",
+    easeFactor: 2.5,
+    repetitions: 2,
+    timesReviewed: 2,
+    interval: 5,
+    nextReview: new Date(Date.now() - 60_000),
+    lastReviewedAt: new Date(Date.now() - 3 * 86_400_000),
+    createdAt: new Date("2026-01-01"),
+    word: { dictionary: `語${i}`, reading: "ご", meanings: '["word"]', partOfSpeech: "noun" },
+    wordForm: null,
+    phrase: null,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shrinks the session to what is left of today's ceiling", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    vi.mocked(prisma.userFlashcard.count).mockResolvedValueOnce(7);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce(
+      Array.from({ length: 10 }, (_, i) => dueCard(i)) as never
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/flashcards/review?limit=10&maxDailyReviews=10")
+    );
+    const data = await res.json();
+
+    // 10-card ceiling, 7 already reviewed today → at most 3 cards.
+    expect(data.cards.length).toBeLessThanOrEqual(3);
+    expect(data.cards.length).toBeGreaterThan(0);
+  });
+
+  it("serves nothing once the ceiling is used up", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    vi.mocked(prisma.userFlashcard.count).mockResolvedValueOnce(10);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce(
+      Array.from({ length: 10 }, (_, i) => dueCard(i)) as never
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/flashcards/review?limit=10&maxDailyReviews=10")
+    );
+
+    expect(await res.json()).toEqual({ cards: [] });
+    expect(prisma.userFlashcard.findMany).not.toHaveBeenCalled();
+  });
+
+  it("ignores the ceiling when the setting is absent", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([]);
+
+    await GET(new Request("http://localhost/api/flashcards/review?limit=10"));
+
+    expect(prisma.userFlashcard.count).not.toHaveBeenCalled();
+    expect(prisma.userFlashcard.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 40 })
     );
   });
 });

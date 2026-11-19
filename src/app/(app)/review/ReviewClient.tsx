@@ -302,6 +302,7 @@ export default function ReviewClient() {
       maxLearningPool: String(learningCfg.maxLearningPool),
       maxNewCards: String(learningCfg.maxNewCards),
       newPerSession: String(learningCfg.newPerSession),
+      maxDailyReviews: String(learningCfg.maxDailyReviews),
     });
     if (setup.studyMode === "new") params.set("status", "new");
     if (setup.practice) params.set("practice", "true");
@@ -353,6 +354,7 @@ export default function ReviewClient() {
       maxLearningPool: String(learningCfg.maxLearningPool),
       maxNewCards: String(learningCfg.maxNewCards),
       newPerSession: String(learningCfg.newPerSession),
+      maxDailyReviews: String(learningCfg.maxDailyReviews),
     });
     if (s.studyMode === "new") params.set("status", "new");
     if (s.practice) params.set("practice", "true");

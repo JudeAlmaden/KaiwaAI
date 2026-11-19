@@ -18,6 +18,8 @@ All notable changes to KaiwaAI are documented in this file.
 
 - **The due-review badge promised cards the session would not serve** — it asked `/api/review/mixed` for `studyMode=due&limit=200` and nothing else, so the count ignored the review mix, the new-card quota and the largest learning pool. With "Reviews only" selected, for example, the badge counted new cards the session then refused. The badge now sends the same composition inputs as the session it counts.
 
+- **Max daily reviews was never enforced** — the setting only shrank the home-screen projection, so a session started from the review screen, Focus Guard or the app-lock notification served a full batch past the ceiling. The three review routes now clamp `limit` to what remains of today's goal (counted from `lastReviewedAt` in the learner's timezone, shared across vocab and kanji) and return an empty batch once it is spent.
+
 ## [2.4.1] - 2026-11-16
 
 ### Fixed

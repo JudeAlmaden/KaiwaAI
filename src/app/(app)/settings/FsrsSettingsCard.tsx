@@ -58,6 +58,9 @@ export default function FsrsSettingsCard() {
             className="w-full rounded-2xl border-2 border-border bg-background px-3 py-2 text-sm"
           />
         </label>
+        <p className="mt-2 text-xs text-muted">
+          Sessions stop once you have reviewed this many cards in a day (your timezone).
+        </p>
       </div>
 
       <div className="mt-5 border-t-2 border-border pt-4 space-y-2">
