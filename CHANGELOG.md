@@ -2,22 +2,19 @@
 
 All notable changes to KaiwaAI are documented in this file.
 
-## [Unreleased]
+## [2.4.2] - 2026-11-19
 
 ### Added
 
 - **Focus Guard session plans** — the separate "Pool" and "Focus" rows (5 × 5 combinations, most of which were unreachable in practice) are replaced by six named plans: Due reviews, Gentle, Due + new, Study ahead, Weak cards and Leeches. Each plan pins both `studyMode` and `learningRatio`, so the label always describes what the session does; the plan picker is shared by the interception modal and the rules editor, a saved non-plan mix shows a Custom badge with the old rows underneath, and `resolvePlan()` maps legacy configs deterministically (percent comparison, not an epsilon). The config shape, native plugin payload and review API are unchanged.
+
 ### Fixed
 
 - **Settings tabs scrolled sideways on phones** — the tab strip carried both `flex-1` and `shrink-0`, so at 390 px the four tabs needed 388 px inside a 338 px container and the last two scrolled out of view (with a visible scrollbar). The strip is now a 2×2 grid below `sm` and a single flex row above it.
 - **Focus Guard showed up on desktop** — nothing gated the feature: the sidebar item was hard-coded and `/settings/app-blocker` rendered the whole blocker/permissions UI on any platform, while only the debug widgets and the Mobile-tab embed honoured `NEXT_PUBLIC_APP_BLOCKER_DEBUG`. Availability is now one rule (Android, or the debug flag, or local dev): the nav item is filtered out, the page shows an "Android only" card instead of the blocker, and both use a hydration-safe hook.
-
 - **Reviews-only sessions hid lapsed cards** — `studyMode=due` with a zero review mix added `repetitions > 0`, which also excludes a card you just failed (repetitions 0, timesReviewed > 0). Those are learning cards and the ones most in need of review, so "Due reviews" served everything except them. All three review routes and the composition counts now use one `STUDIED_CARD_WHERE` filter, and the maintenance top-up no longer re-introduces the same filter.
-
 - **Learning defaults and Focus Guard drifted apart** — each surface wrote only the keys it happened to know (direction and review mix on one side, furigana on the other) and neither re-read the other, so a learner who changed a default in one tab reviewed with the other tab's value. Writes now mirror both ways through a single mapping, which also covers the early-review strategy, and the app-lock page falls back to `defaultLearningRatio` instead of a hard-coded 0.5.
-
 - **The due-review badge promised cards the session would not serve** — it asked `/api/review/mixed` for `studyMode=due&limit=200` and nothing else, so the count ignored the review mix, the new-card quota and the largest learning pool. With "Reviews only" selected, for example, the badge counted new cards the session then refused. The badge now sends the same composition inputs as the session it counts.
-
 - **Max daily reviews was never enforced** — the setting only shrank the home-screen projection, so a session started from the review screen, Focus Guard or the app-lock notification served a full batch past the ceiling. The three review routes now clamp `limit` to what remains of today's goal (counted from `lastReviewedAt` in the learner's timezone, shared across vocab and kanji) and return an empty batch once it is spent.
 
 ## [2.4.1] - 2026-11-16
