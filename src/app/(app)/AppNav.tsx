@@ -17,6 +17,7 @@ import {
 import Kai from "../Kai";
 import LogoutButton from "../LogoutButton";
 import { useUnreadKaiMessages } from "@/hooks/useUnreadKaiMessages";
+import { useAppBlockerSupported } from "@/lib/app-blocker-platform";
 
 function isNavActive(pathname: string, currentTab: string | null, href: string) {
   // Settings exact match - don't highlight when on /settings/app-blocker
@@ -81,6 +82,11 @@ function SidebarNav({
 }) {
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
+  // Focus Guard is Android-only; keep it out of the desktop sidebar.
+  const appBlockerEnabled = useAppBlockerSupported();
+  const systemNav = appBlockerEnabled
+    ? SYSTEM_NAV
+    : SYSTEM_NAV.filter((item) => item.href !== "/settings/app-blocker");
 
   return (
     <>
@@ -145,7 +151,7 @@ function SidebarNav({
           System &amp; Focus
         </p>
         <nav className="flex flex-col gap-1">
-          {SYSTEM_NAV.map((item) => {
+          {systemNav.map((item) => {
             const active = isNavActive(pathname, currentTab, item.href);
             const Icon = item.icon;
 

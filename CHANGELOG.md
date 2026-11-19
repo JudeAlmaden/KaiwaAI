@@ -10,6 +10,8 @@ All notable changes to KaiwaAI are documented in this file.
 ### Fixed
 
 - **Settings tabs scrolled sideways on phones** — the tab strip carried both `flex-1` and `shrink-0`, so at 390 px the four tabs needed 388 px inside a 338 px container and the last two scrolled out of view (with a visible scrollbar). The strip is now a 2×2 grid below `sm` and a single flex row above it.
+- **Focus Guard showed up on desktop** — nothing gated the feature: the sidebar item was hard-coded and `/settings/app-blocker` rendered the whole blocker/permissions UI on any platform, while only the debug widgets and the Mobile-tab embed honoured `NEXT_PUBLIC_APP_BLOCKER_DEBUG`. Availability is now one rule (Android, or the debug flag, or local dev): the nav item is filtered out, the page shows an "Android only" card instead of the blocker, and both use a hydration-safe hook.
+
 ## [2.4.1] - 2026-11-16
 
 ### Fixed

@@ -5,7 +5,10 @@ import { usePathname } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { AppBlocker, type AppInfo, type AppBlockerConfig } from '@/plugins/app-blocker';
 import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
+import Link from 'next/link';
 import { getLearningConfig } from '@/lib/learning-config';
+import { mirrorBlockerDefaultsToLearning } from '@/lib/review/blocker-sync';
+import { useAppBlockerSupported } from '@/lib/app-blocker-platform';
 import PageHeader from '@/app/(app)/PageHeader';
 import Kai from '@/app/Kai';
 
@@ -69,6 +72,7 @@ export default function AppBlockerSettings() {
 
   // Debug mode — available on PC during development or when NEXT_PUBLIC_APP_BLOCKER_DEBUG is true
   const isAndroid = Capacitor.getPlatform() === 'android';
+  const appBlockerSupported = useAppBlockerSupported();
   const debugEnabled =
     process.env.NEXT_PUBLIC_APP_BLOCKER_DEBUG === 'true' ||
     (process.env.NODE_ENV === 'development' && !isAndroid);
@@ -361,6 +365,40 @@ export default function AppBlockerSettings() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
         <Kai size={64} className="animate-bounce" />
         <p className="text-sm font-bold text-muted font-display">Kai is preparing your settings...</p>
+      </div>
+    );
+  }
+
+  // Desktop browsers have no native interceptor. Only reachable here via an old
+  // link or a bookmark, so point the learner back to Settings.
+  if (!appBlockerSupported) {
+    return (
+      <div className="pb-28 sm:pb-10">
+        {isStandalonePage && (
+          <PageHeader
+            title="App Blocker"
+            jp="アプリブロッカー"
+            subtitle="Intercept distracting apps while studying Japanese."
+          />
+        )}
+        <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-8">
+          <section className="space-y-3 rounded-3xl border-2 border-border bg-card p-5 shadow-xs">
+            <h2 className="font-display text-base font-bold text-foreground">
+              Focus Guard is Android only
+            </h2>
+            <p className="text-sm text-muted">
+              Intercepting apps needs the native blocker and Android permissions (Usage Access,
+              Display Over Apps), so it only runs in the KaiwaAI mobile app. Your review settings
+              and decks sync over.
+            </p>
+            <Link
+              href="/settings"
+              className="inline-flex rounded-xl border-2 border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-muted/10"
+            >
+              Back to Settings
+            </Link>
+          </section>
+        </div>
       </div>
     );
   }

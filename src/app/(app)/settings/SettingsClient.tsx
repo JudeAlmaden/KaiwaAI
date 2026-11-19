@@ -11,14 +11,14 @@ import UserSettingsTab from "./UserSettingsTab";
 import AppBlockerSettings from "./app-blocker/page";
 import LearningResetCard from "./LearningResetCard";
 import MobileAppDownloadCard from "./MobileAppDownloadCard";
-import { Capacitor } from "@capacitor/core";
 import { User, Brain, BookOpen, DeviceMobile } from "@phosphor-icons/react";
+import { useAppBlockerSupported } from "@/lib/app-blocker-platform";
 
 type Tab = "user" | "ai" | "learning" | "mobile";
 
 export default function SettingsClient({ email }: { email: string }) {
   const [tab, setTab] = useState<Tab>("user");
-  const isAndroid = Capacitor.getPlatform() === "android";
+  const appBlockerEnabled = useAppBlockerSupported();
 
   const tabs: { id: Tab; label: string; Icon: typeof User }[] = [
     { id: "user", label: "User", Icon: User },
@@ -73,9 +73,7 @@ export default function SettingsClient({ email }: { email: string }) {
       {tab === "mobile" && (
         <div className="flex flex-col gap-5">
           <MobileAppDownloadCard />
-          {(isAndroid || process.env.NEXT_PUBLIC_APP_BLOCKER_DEBUG === "true" || process.env.NODE_ENV === "development") && (
-            <AppBlockerSettings />
-          )}
+          {appBlockerEnabled && <AppBlockerSettings />}
         </div>
       )}
     </div>
