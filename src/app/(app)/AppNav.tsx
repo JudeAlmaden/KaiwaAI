@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   GearSix,
   Sparkle,
+  SidebarSimple,
 } from "@phosphor-icons/react";
 import Kai from "../Kai";
 import LogoutButton from "../LogoutButton";
@@ -107,7 +108,10 @@ function SidebarNav({
     <>
       {/* Study Navigation Group */}
       <div className="space-y-1">
-        {!collapsed && (
+        {collapsed ? (
+          /* Keep the label's height so the icon rail lines up with the full sidebar. */
+          <span className="block h-[15px]" aria-hidden="true" />
+        ) : (
           <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
             Study &amp; Practice
           </p>
@@ -140,7 +144,7 @@ function SidebarNav({
                 {/* Unread indicator */}
                 {isChat && (
                   <span
-                    className={`absolute h-2 w-2 rounded-full bg-sakura animate-pulse ${collapsed ? "right-1.5 top-1.5" : "right-9"
+                    className={`absolute h-2 w-2 rounded-full bg-sakura animate-pulse ${collapsed ? "right-1 top-1 ring-2 ring-card" : "right-9"
                       }`}
                     aria-label="Unread messages from Kai"
                   />
@@ -149,7 +153,7 @@ function SidebarNav({
                 {/* Due count pill */}
                 {isDue &&
                   (collapsed ? (
-                    <span className="absolute right-0 top-0 rounded-full bg-amber px-1 text-[9px] font-extrabold text-white ring-2 ring-card">
+                    <span className="absolute right-0.5 top-0.5 rounded-full bg-amber px-1 text-[9px] font-extrabold text-white ring-2 ring-card">
                       {dueCount}
                     </span>
                   ) : (
@@ -174,7 +178,9 @@ function SidebarNav({
 
       {/* System Navigation Group */}
       <div className="space-y-1 pt-1 border-t border-border/60">
-        {!collapsed && (
+        {collapsed ? (
+          <span className="block h-[15px]" aria-hidden="true" />
+        ) : (
           <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
             System &amp; Focus
           </p>
@@ -218,6 +224,8 @@ function SidebarNav({
   );
 }
 
+const SIDEBAR_PREF_KEY = "kaiwa:sidebar-expanded";
+
 /** Desktop modern sidebar (lg+). */
 export function Sidebar({
   email,
@@ -241,11 +249,35 @@ export function Sidebar({
 
   // Inside /chat the rail already holds the inbox, so the sidebar folds to an
   // icon strip on lg and gives that width back to the list and the messages.
-  const collapsed = pathname === "/chat" || pathname.startsWith("/chat/");
+  // The toggle below lets the learner pin either state everywhere it applies.
+  const isChatRoute = pathname === "/chat" || pathname.startsWith("/chat/");
+  const [expandedPref, setExpandedPref] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(SIDEBAR_PREF_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (saved !== null) setExpandedPref(saved === "1");
+    } catch {
+      // Private mode / storage disabled: keep the route default.
+    }
+  }, []);
+
+  const collapsed = expandedPref === null ? isChatRoute : !expandedPref;
+
+  function toggleSidebar() {
+    const nextExpanded = collapsed;
+    setExpandedPref(nextExpanded);
+    try {
+      window.localStorage.setItem(SIDEBAR_PREF_KEY, nextExpanded ? "1" : "0");
+    } catch {
+      // Persisting the preference is best-effort.
+    }
+  }
 
   return (
     <aside
-      className={`relative z-30 hidden shrink-0 flex-col justify-between border-r-2 border-border bg-card/60 py-5 backdrop-blur-xl lg:flex ${
+      className={`relative z-30 hidden shrink-0 flex-col justify-between border-r-2 border-border bg-card/60 py-5 backdrop-blur-xl transition-[width] duration-200 ease-out lg:flex ${
         collapsed ? "w-[72px] px-2" : "w-64 px-3.5"
       }`}
     >
@@ -269,7 +301,7 @@ export function Sidebar({
             href="/chat"
             aria-label="Talk to Kai"
             title={collapsed ? "Talk to Kai" : undefined}
-            className={`group flex items-center justify-center gap-2 rounded-2xl bg-indigo-ai font-display text-xs font-bold text-white shadow-md shadow-indigo-ai/25 transition-all hover:bg-indigo-ai/90 active:scale-[0.98] ${collapsed ? "h-10 w-10" : "p-2.5"
+            className={`group flex items-center justify-center gap-2 rounded-2xl bg-indigo-ai font-display text-xs font-bold text-white shadow-md shadow-indigo-ai/25 transition-all hover:bg-indigo-ai/90 active:scale-[0.98] ${collapsed ? "h-9 w-9" : "p-2.5"
               }`}
           >
             <Sparkle size={15} weight="fill" className="text-sakura group-hover:rotate-12 transition-transform" />
@@ -289,7 +321,7 @@ export function Sidebar({
       </div>
 
       {/* Bottom section: Learner Profile & Streak Card */}
-      <div className="space-y-2 pt-3 border-t-2 border-border">
+      <div className="relative space-y-2 pt-3 border-t-2 border-border">
         {/* User + Streak + Logout card */}
         {collapsed ? (
           <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-bg/60 p-2 backdrop-blur-sm">
@@ -338,6 +370,22 @@ export function Sidebar({
           </div>
         </div>
         )}
+
+        {/* Floating collapse handle, sitting on the divider above the profile. */}
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="absolute -top-4 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border-2 border-border bg-card text-muted shadow-md outline-none transition-colors hover:border-indigo-ai hover:text-indigo-ai focus-visible:ring-2 focus-visible:ring-indigo-ai/40"
+        >
+          <SidebarSimple
+            size={16}
+            weight="bold"
+            className={collapsed ? "" : "rotate-180"}
+          />
+        </button>
       </div>
     </aside>
   );
