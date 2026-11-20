@@ -1,7 +1,12 @@
 "use client";
 
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import {
+  Archive,
+  ArrowCounterClockwise,
+  MagnifyingGlass,
+} from "@phosphor-icons/react/dist/ssr";
 import Avatar from "./Avatar";
 import Kai from "../../Kai";
 import { isUnread } from "@/lib/chat-cache";
@@ -23,19 +28,41 @@ function relativeTime(iso?: string): string {
   return `${Math.floor(d / 7)}w`;
 }
 
+/**
+ * One inbox row. The action is a single, named control instead of an ellipsis
+ * menu: swipe left on phones, hover/focus the icon on desktop. Archived rows
+ * use the same row with a Restore action.
+ */
 export function ConversationRow({
   convo,
   onHide,
+  onUnhide,
+  archived = false,
   active = false,
 }: {
   convo: Conversation;
-  onHide: (id: string) => void;
+  onHide?: (id: string) => void;
+  onUnhide?: (id: string) => void;
+  archived?: boolean;
   active?: boolean;
 }) {
+  const [offset, setOffset] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const offsetRef = useRef(0);
+  const suppressClick = useRef(false);
+
   const personaMember = convo.members.find((m) => m.kind === "persona");
   const isAi = convo.kind === "persona";
   const isGroup = convo.kind === "group";
   const unread = isUnread(convo.id, convo.lastAt, convo.lastMessage?.fromMe ?? false);
+
+  // Kai is the app's companion, not an inbox item to put away: archiving that
+  // thread just brings back the "start chatting" hero for the same chat. Only
+  // human conversations get an archive action; Kai can be muted or deleted.
+  const hasAction = archived || !isAi;
+  const actionLabel = archived ? "Restore" : "Archive chat";
+  const ActionIcon = archived ? ArrowCounterClockwise : Archive;
 
   const avatar = isGroup ? (
     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-ai/20 to-sakura/20 text-2xl">
@@ -54,91 +81,168 @@ export function ConversationRow({
     : "Tap to start chatting";
   const time = relativeTime(convo.lastAt);
 
+  function runAction() {
+    if (archived) onUnhide?.(convo.id);
+    else onHide?.(convo.id);
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    if (!hasAction) return;
+    start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    offsetRef.current = 0;
+    suppressClick.current = false;
+    setSwiping(false);
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!hasAction) return;
+    const s = start.current;
+    if (!s) return;
+    const dx = e.touches[0].clientX - s.x;
+    const dy = e.touches[0].clientY - s.y;
+    if (!swiping) {
+      // Only claim the gesture once it is clearly horizontal and leftward.
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      setSwiping(true);
+      suppressClick.current = true;
+    }
+    const next = Math.max(-96, Math.min(0, dx));
+    offsetRef.current = next;
+    setOffset(next);
+  }
+
+  function finishSwipe() {
+    if (offsetRef.current <= -56) runAction();
+    offsetRef.current = 0;
+    setOffset(0);
+    setSwiping(false);
+    start.current = null;
+    if (suppressClick.current) {
+      setTimeout(() => {
+        suppressClick.current = false;
+      }, 250);
+    }
+  }
+
+  function cancelSwipe() {
+    offsetRef.current = 0;
+    setOffset(0);
+    setSwiping(false);
+    start.current = null;
+  }
+
   return (
-    <Link
-      href={`/chat/c/${convo.id}`}
-      className={`group relative flex items-center gap-3 rounded-2xl border-2 px-3.5 py-3 transition-all ${
-        active
-          ? "border-border bg-indigo-ai/10 pl-4"
-          : "border-border bg-card hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md"
-      }`}
-    >
-      {active && (
-        <span className="absolute inset-y-2.5 left-0 w-1 rounded-r-full bg-indigo-ai" />
+    <div className="relative overflow-hidden rounded-2xl">
+      {/* Only while the row is actually sliding; behind the translucent
+          selected row it used to show through as stray uppercase text. */}
+      {hasAction && offset < 0 && (
+        <div
+          className={`pointer-events-none absolute inset-0 flex items-center justify-end rounded-2xl pr-4 text-[11px] font-extrabold uppercase tracking-wide ${
+            archived ? "bg-mint/10 text-mint" : "bg-indigo-ai/10 text-indigo-ai"
+          }`}
+          aria-hidden="true"
+        >
+          <ActionIcon size={15} weight="bold" className="mr-1.5" />
+          {actionLabel}
+        </div>
       )}
-      <div className="relative">
-        {avatar}
-        {isAi && (
-          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai text-[8px] text-white ring-2 ring-card">
-            ✨
-          </span>
-        )}
-      </div>
 
-      <span className="relative min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className={`truncate ${unread ? "font-extrabold" : "font-bold"}`}>
-            {convo.name}
-          </span>
-          {isAi && isMood(convo.mood) && (
-            <span
-              className="shrink-0 text-sm leading-none"
-              title={`Mood: ${MOOD_LABEL[convo.mood]}`}
-              aria-label={`Mood: ${MOOD_LABEL[convo.mood]}`}
-            >
-              {MOOD_EMOJI[convo.mood]}
-            </span>
-          )}
-          {isGroup && (
-            <span className="rounded-full bg-indigo-ai/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-indigo-ai">
-              Group
-            </span>
-          )}
-          {time && (
-            <span
-              className={`ml-auto shrink-0 text-[11px] font-semibold ${
-                unread ? "text-indigo-ai" : "text-muted/70"
-              }`}
-            >
-              {time}
-            </span>
-          )}
-        </span>
-        <span className="mt-0.5 flex items-center gap-2">
-          <span
-            className={`min-w-0 flex-1 truncate text-xs ${
-              !convo.lastMessage
-                ? "italic text-muted/60"
-                : unread
-                  ? "font-bold text-foreground"
-                  : "text-muted"
-            }`}
-          >
-            {preview}
-          </span>
-          {unread && (
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-sakura" aria-label="Unread" />
-          )}
-        </span>
-      </span>
-
-      <button
+      <Link
+        href={`/chat/c/${convo.id}`}
         onClick={(e) => {
+          if (!suppressClick.current) return;
           e.preventDefault();
           e.stopPropagation();
-          onHide(convo.id);
         }}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-indigo-ai/10 hover:text-indigo-ai"
-        aria-label="Hide conversation"
-        title="Hide conversation"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={finishSwipe}
+        onTouchCancel={cancelSwipe}
+        className={`group relative flex touch-pan-y items-center gap-3 rounded-2xl border-2 px-3.5 py-3 transition-all ${
+          swiping ? "transition-none" : ""
+        } ${
+          active
+            ? "border-indigo-ai/40 bg-indigo-ai/10 pl-4"
+            : "border-border bg-card hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md"
+        }`}
+        style={offset !== 0 ? { transform: `translateX(${offset}px)` } : undefined}
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="8" cy="3" r="1.5" />
-          <circle cx="8" cy="8" r="1.5" />
-          <circle cx="8" cy="13" r="1.5" />
-        </svg>
-      </button>
-    </Link>
+        {active && (
+          <span className="absolute inset-y-2.5 left-0 w-1 rounded-r-full bg-indigo-ai" />
+        )}
+        <div className="relative">
+          {avatar}
+          {isAi && (
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai text-[8px] text-white ring-2 ring-card">
+              ✨
+            </span>
+          )}
+        </div>
+
+        <span className="relative min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className={`truncate ${unread ? "font-extrabold" : "font-bold"}`}>
+              {convo.name}
+            </span>
+            {isAi && isMood(convo.mood) && (
+              <span
+                className="shrink-0 text-sm leading-none"
+                title={`Mood: ${MOOD_LABEL[convo.mood]}`}
+                aria-label={`Mood: ${MOOD_LABEL[convo.mood]}`}
+              >
+                {MOOD_EMOJI[convo.mood]}
+              </span>
+            )}
+            {isGroup && (
+              <span className="rounded-full bg-indigo-ai/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-indigo-ai">
+                Group
+              </span>
+            )}
+            {time && (
+              <span
+                className={`ml-auto shrink-0 text-[11px] font-semibold ${
+                  unread ? "text-indigo-ai" : "text-muted/70"
+                }`}
+              >
+                {time}
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 flex items-center gap-2">
+            <span
+              className={`min-w-0 flex-1 truncate text-xs ${
+                !convo.lastMessage
+                  ? "italic text-muted/60"
+                  : unread
+                    ? "font-bold text-foreground"
+                    : "text-muted"
+              }`}
+            >
+              {preview}
+            </span>
+            {unread && (
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-sakura" aria-label="Unread" />
+            )}
+          </span>
+        </span>
+
+        {hasAction && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runAction();
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted/50 transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+            aria-label={actionLabel}
+            title={actionLabel}
+          >
+            <ActionIcon size={16} weight="bold" />
+          </button>
+        )}
+      </Link>
+    </div>
   );
 }
 
@@ -153,7 +257,8 @@ export function KaiHeroCard({
   loading: boolean;
 }) {
   const kaiPersona = personas.find(
-    (p) => p.builtin && p.name.trim().toLowerCase() === "kai"
+    (p) =>
+      p.kind === "kai" || (p.builtin && p.name.trim().toLowerCase() === "kai")
   );
 
   if (!kaiPersona) {
@@ -227,7 +332,8 @@ export function InboxSearchRow({
 
 /**
  * The inbox itself: pinned Kai, search, rows and empty state. Shared by the
- * phone hub page and the desktop rail so the two can't drift.
+ * phone hub page and the desktop rail so the two can't drift. Archived chats
+ * are a sibling tab rather than a section stacked above the conversations.
  */
 export default function InboxList({
   convos,
@@ -236,6 +342,8 @@ export default function InboxList({
   query,
   onStartPersona,
   onHide,
+  onUnhide,
+  hiddenConvos,
   onNewChat,
   activeId,
 }: {
@@ -245,83 +353,161 @@ export default function InboxList({
   query: string;
   onStartPersona: (personaId: string) => void;
   onHide: (id: string) => void;
+  onUnhide?: (id: string) => void;
+  hiddenConvos?: Conversation[] | null;
   onNewChat: () => void;
   activeId?: string;
 }) {
+  const [view, setView] = useState<"chats" | "archived">("chats");
   const q = query.trim().toLowerCase();
-  const filtered = convos
-    ? q
-      ? convos.filter(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            (c.lastMessage?.content ?? "").toLowerCase().includes(q)
-        )
-      : convos
-    : null;
+  const matches = (c: Conversation) =>
+    !q ||
+    c.name.toLowerCase().includes(q) ||
+    (c.lastMessage?.content ?? "").toLowerCase().includes(q);
+
+  const filtered = convos ? convos.filter(matches) : null;
+  const filteredArchived = hiddenConvos ? hiddenConvos.filter(matches) : null;
+
+  const archivedCount = hiddenConvos?.length ?? 0;
+  const archivedHasUnread = (hiddenConvos ?? []).some((c) =>
+    isUnread(c.id, c.lastAt, c.lastMessage?.fromMe ?? false)
+  );
+  const tabsVisible = !!onUnhide && archivedCount > 0;
+  const showingArchived = tabsVisible && view === "archived";
+
   const hasKaiThread = !!convos?.some(
     (c) => c.kind === "persona" && c.name.trim().toLowerCase() === "kai"
   );
+
   return (
     <div className="flex flex-col gap-3">
-      {!hasKaiThread && (
-        <KaiHeroCard
-          onStartChat={onStartPersona}
-          personas={personas}
-          loading={starting}
-        />
-      )}
-
-      {convos === null && (
-        <div className="flex flex-col gap-2">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 rounded-2xl border-2 border-border px-4 py-3"
-            >
-              <span className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-border/50" />
-              <span className="flex-1 space-y-2">
-                <span className="block h-3 w-1/3 animate-pulse rounded bg-border/50" />
-                <span className="block h-2.5 w-2/3 animate-pulse rounded bg-border/40" />
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {convos?.length === 0 && (
-        <div className="rounded-2xl border-2 border-dashed border-border px-4 py-6 text-center">
-          <p className="text-sm font-bold">No conversations yet</p>
-          <p className="mt-0.5 text-xs text-muted">
-            Start with Kai, a friend, or a group.
-          </p>
+      {tabsVisible && (
+        <div className="grid grid-cols-2 gap-1 rounded-full border-2 border-border bg-card p-1">
           <button
-            onClick={onNewChat}
-            className="mt-3 rounded-full bg-indigo-ai px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-indigo-deep"
+            type="button"
+            onClick={() => setView("chats")}
+            aria-pressed={!showingArchived}
+            className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${
+              !showingArchived
+                ? "bg-indigo-ai text-white shadow-sm"
+                : "text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
+            }`}
           >
-            New chat
+            Chats
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("archived")}
+            aria-pressed={showingArchived}
+            className={`relative flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${
+              showingArchived
+                ? "bg-indigo-ai text-white shadow-sm"
+                : "text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
+            }`}
+          >
+            Archived
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[9px] font-extrabold ${
+                showingArchived
+                  ? "bg-white/20 text-white"
+                  : "bg-muted/15 text-muted"
+              }`}
+            >
+              {archivedCount}
+            </span>
+            {archivedHasUnread && (
+              <span
+                className="absolute right-2 top-1 h-1.5 w-1.5 rounded-full bg-sakura"
+                aria-label="Unread in Archived"
+              />
+            )}
           </button>
         </div>
       )}
 
-      {convos && convos.length > 0 && (
-        <p className="px-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-          Conversations
-        </p>
-      )}
+      {showingArchived ? (
+        filteredArchived && filteredArchived.length > 0 ? (
+          filteredArchived.map((c) => (
+            <ConversationRow
+              key={c.id}
+              convo={c}
+              archived
+              onUnhide={onUnhide}
+              active={activeId === c.id}
+            />
+          ))
+        ) : (
+          <p className="py-6 text-center text-sm text-muted">
+            {q ? (
+              <>No archived chats match &ldquo;{query}&rdquo;.</>
+            ) : (
+              "Nothing archived yet."
+            )}
+          </p>
+        )
+      ) : (
+        <>
+          {!hasKaiThread && (
+            <KaiHeroCard
+              onStartChat={onStartPersona}
+              personas={personas}
+              loading={starting}
+            />
+          )}
 
-      {filtered?.map((c) => (
-        <ConversationRow
-          key={c.id}
-          convo={c}
-          onHide={onHide}
-          active={activeId === c.id}
-        />
-      ))}
+          {convos === null && (
+            <div className="flex flex-col gap-2">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 rounded-2xl border-2 border-border px-4 py-3"
+                >
+                  <span className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-border/50" />
+                  <span className="flex-1 space-y-2">
+                    <span className="block h-3 w-1/3 animate-pulse rounded bg-border/50" />
+                    <span className="block h-2.5 w-2/3 animate-pulse rounded bg-border/40" />
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
-      {filtered?.length === 0 && convos && convos.length > 0 && (
-        <p className="py-6 text-center text-sm text-muted">
-          No conversations match &ldquo;{query}&rdquo;.
-        </p>
+          {convos?.length === 0 && (
+            <div className="rounded-2xl border-2 border-dashed border-border px-4 py-6 text-center">
+              <p className="text-sm font-bold">No conversations yet</p>
+              <p className="mt-0.5 text-xs text-muted">
+                Start with Kai, a friend, or a group.
+              </p>
+              <button
+                onClick={onNewChat}
+                className="mt-3 rounded-full bg-indigo-ai px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-indigo-deep"
+              >
+                New chat
+              </button>
+            </div>
+          )}
+
+          {convos && convos.length > 0 && (
+            <p className="px-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
+              Conversations
+            </p>
+          )}
+
+          {filtered?.map((c) => (
+            <ConversationRow
+              key={c.id}
+              convo={c}
+              onHide={onHide}
+              active={activeId === c.id}
+            />
+          ))}
+
+          {filtered?.length === 0 && convos && convos.length > 0 && (
+            <p className="py-6 text-center text-sm text-muted">
+              No conversations match &ldquo;{query}&rdquo;.
+            </p>
+          )}
+        </>
       )}
     </div>
   );

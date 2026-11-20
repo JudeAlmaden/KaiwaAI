@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cacheKeys, readCache, writeCache } from "@/lib/chat-cache";
+import { normalizePersonaRole } from "@/lib/persona-role";
 
 export type Conversation = {
   id: string;
@@ -23,6 +24,11 @@ export type Persona = {
   avatar: string;
   builtin: boolean;
   mine: boolean;
+  /** "kai" | "kai_mode" | "custom" — modes are Kai's attitudes, not people. */
+  kind?: string;
+  /** Short attitude label for a Kai mode (e.g. "Calm"). */
+  label?: string | null;
+  modeOfId?: string | null;
 };
 
 /**
@@ -32,25 +38,34 @@ export type Persona = {
 export function useInbox() {
   const router = useRouter();
   const [convos, setConvos] = useState<Conversation[] | null>(null);
+  const [hiddenConvos, setHiddenConvos] = useState<Conversation[] | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [starting, setStarting] = useState(false);
 
   const reloadConvos = useCallback(() => {
-    fetch("/api/groups")
-      .then((r) => r.json())
-      .then((d) => {
-        const list: Conversation[] = d.groups ?? [];
+    Promise.all([
+      fetch("/api/groups").then((r) => r.json()),
+      fetch("/api/groups?hidden=1")
+        .then((r) => r.json())
+        .catch(() => ({ groups: [] })),
+    ])
+      .then(([visible, hidden]) => {
+        const list: Conversation[] = visible.groups ?? [];
         setConvos(list);
         writeCache(cacheKeys.convos, list);
+        setHiddenConvos(hidden.groups ?? []);
       })
-      .catch(() => setConvos((c) => c ?? []));
+      .catch(() => {
+        setConvos((c) => c ?? []);
+        setHiddenConvos((h) => h ?? []);
+      });
   }, []);
 
   const reloadPersonas = useCallback(() => {
     fetch("/api/personas")
       .then((r) => r.json())
       .then((d) => {
-        const list: Persona[] = d.personas ?? [];
+        const list: Persona[] = (d.personas ?? []).map(normalizePersonaRole);
         setPersonas(list);
         writeCache(cacheKeys.personas, list);
       })
@@ -63,7 +78,9 @@ export function useInbox() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (cachedC) setConvos(cachedC);
     const cachedP = readCache<Persona[]>(cacheKeys.personas);
-    if (cachedP) setPersonas(cachedP);
+    // Normalize old cache entries too: before the personalities migration they
+    // had no `kind`, which made Kai's attitudes look like people in the sheets.
+    if (cachedP) setPersonas(cachedP.map(normalizePersonaRole));
     reloadConvos();
     reloadPersonas();
   }, [reloadConvos, reloadPersonas]);
@@ -92,21 +109,45 @@ export function useInbox() {
 
   const hideConvo = useCallback(
     (id: string) => {
+      const target = convos?.find((c) => c.id === id);
       setConvos((cur) => cur?.filter((c) => c.id !== id) ?? null);
+      if (target) {
+        setHiddenConvos((cur) =>
+          cur?.some((c) => c.id === id) ? cur : [...(cur ?? []), target]
+        );
+      }
       fetch(`/api/groups/${id}/hide`, { method: "POST" }).catch(() => {
         reloadConvos();
       });
     },
-    [reloadConvos]
+    [convos, reloadConvos]
+  );
+
+  const unhideConvo = useCallback(
+    (id: string) => {
+      const target = hiddenConvos?.find((c) => c.id === id);
+      setHiddenConvos((cur) => cur?.filter((c) => c.id !== id) ?? null);
+      if (target) {
+        setConvos((cur) =>
+          cur?.some((c) => c.id === id) ? cur : [...(cur ?? []), target]
+        );
+      }
+      fetch(`/api/groups/${id}/hide`, { method: "DELETE" }).catch(() => {
+        reloadConvos();
+      });
+    },
+    [hiddenConvos, reloadConvos]
   );
 
   return {
     convos,
+    hiddenConvos,
     personas,
     starting,
     reloadConvos,
     reloadPersonas,
     hideConvo,
+    unhideConvo,
     startPersonaChat,
   };
 }

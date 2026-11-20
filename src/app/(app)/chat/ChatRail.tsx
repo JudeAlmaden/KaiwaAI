@@ -22,8 +22,15 @@ export default function ChatRail({
   strangerEnabled?: boolean;
 }) {
   const pathname = usePathname();
-  const { convos, personas, starting, hideConvo, startPersonaChat } =
-    useInboxContext();
+  const {
+    convos,
+    hiddenConvos,
+    personas,
+    starting,
+    hideConvo,
+    unhideConvo,
+    startPersonaChat,
+  } = useInboxContext();
   const { pending } = usePeopleContext();
 
   const [query, setQuery] = useState("");
@@ -85,6 +92,8 @@ export default function ChatRail({
             query={query}
             onStartPersona={startPersonaChat}
             onHide={hideConvo}
+            onUnhide={unhideConvo}
+            hiddenConvos={hiddenConvos}
             onNewChat={() => setWrite({ mode: "people", focusSearch: true })}
             activeId={activeId}
           />

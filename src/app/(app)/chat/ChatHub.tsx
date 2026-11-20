@@ -28,8 +28,15 @@ export default function ChatHub({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { convos, personas, starting, hideConvo, startPersonaChat } =
-    useInboxContext();
+  const {
+    convos,
+    hiddenConvos,
+    personas,
+    starting,
+    hideConvo,
+    unhideConvo,
+    startPersonaChat,
+  } = useInboxContext();
   const { pending } = usePeopleContext();
   const { start: startMatching } = useMatchQueueContext();
 
@@ -163,6 +170,8 @@ export default function ChatHub({
               query={query}
               onStartPersona={startPersonaChat}
               onHide={hideConvo}
+              onUnhide={unhideConvo}
+              hiddenConvos={hiddenConvos}
               onNewChat={openWrite}
             />
             <MeetRow strangerEnabled={strangerEnabled} />
