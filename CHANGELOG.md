@@ -4,6 +4,8 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.4.3] - 2026-11-21
+
 ### Added
 
 - **Conversation memory** — every group and friend DM now has its own memory bucket (`Memory.chatId`) instead of sending you to Kai's global diary. The group menu opens **Group memory** and keeps Kai's global memory as a second entry; a DM opens **Chat memory**. Notes are per user (only the signed-in member sees them), dedupe runs inside their own bucket, auto-saved suggestions from a group land there, and `GET /api/chat/context` injects the conversation's notes alongside the persona's global memory. `/memory?chat=<id>` renders the scoped diary with a link back to persona memories.
