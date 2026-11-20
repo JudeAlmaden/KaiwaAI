@@ -157,11 +157,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ group: existing, reused: true, request: !isFriend });
     }
 
-    if (!isFriend) {
+    const chatName = (target.name || target.email).slice(0, 60);
+
+    if (isFriend) {
+      const chat = await prisma.chat.create({
+        data: {
+          name: chatName,
+          kind: "dm",
+          ownerId: user.id,
+          members: {
+            create: [
+              { kind: "user", userId: user.id, status: "accepted" },
+              { kind: "user", userId: target.id, status: "accepted" },
+            ],
+          },
+        },
+      });
+      return NextResponse.json({
+        group: { id: chat.id, name: chat.name, kind: "dm" },
+        request: false,
+      });
+    }
+
+    // The budget check and the insert must commit together, or two simultaneous
+    // requests both read four and both create a sixth. The advisory lock is
+    // transaction-scoped and keyed on the sender, so concurrent requests from
+    // one account queue up behind it (and it can't leak through the pooler).
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id})::bigint)`;
+
       // Counted from the DM rows themselves so the limit holds across
       // serverless instances and a decline cannot reset it. Chats with someone
       // who is already a friend are not requests, so they don't spend budget.
-      const recentDms = await prisma.chat.findMany({
+      const recentDms = await tx.chat.findMany({
         where: {
           ownerId: user.id,
           kind: "dm",
@@ -179,7 +207,7 @@ export async function POST(req: Request) {
         ),
       ];
       const friendRows = others.length
-        ? await prisma.friendship.findMany({
+        ? await tx.friendship.findMany({
             where: {
               status: "accepted",
               OR: [
@@ -203,33 +231,37 @@ export async function POST(req: Request) {
         // is deleted), which still counts, so declining can't reset the budget.
         return otherIds.length === 0 || otherIds.some((id) => !friendIds.has(id));
       }).length;
-      if (sent >= MAX_MESSAGE_REQUESTS_PER_HOUR) {
-        return NextResponse.json(
-          {
-            error: `You can send ${MAX_MESSAGE_REQUESTS_PER_HOUR} message requests an hour. Try again later.`,
-          },
-          { status: 429 }
-        );
-      }
-    }
 
-    const chat = await prisma.chat.create({
-      data: {
-        name: (target.name || target.email).slice(0, 60),
-        kind: "dm",
-        ownerId: user.id,
-        members: {
-          create: [
-            { kind: "user", userId: user.id, status: "accepted" },
-            { kind: "user", userId: target.id, status: isFriend ? "accepted" : "pending" },
-          ],
+      if (sent >= MAX_MESSAGE_REQUESTS_PER_HOUR) return { limited: true } as const;
+
+      const chat = await tx.chat.create({
+        data: {
+          name: chatName,
+          kind: "dm",
+          ownerId: user.id,
+          members: {
+            create: [
+              { kind: "user", userId: user.id, status: "accepted" },
+              { kind: "user", userId: target.id, status: "pending" },
+            ],
+          },
         },
-      },
+      });
+      return { limited: false as const, chat };
     });
 
+    if (result.limited) {
+      return NextResponse.json(
+        {
+          error: `You can send ${MAX_MESSAGE_REQUESTS_PER_HOUR} message requests an hour. Try again later.`,
+        },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json({
-      group: { id: chat.id, name: chat.name, kind: "dm" },
-      request: !isFriend,
+      group: { id: result.chat.id, name: result.chat.name, kind: "dm" },
+      request: true,
     });
   }
 

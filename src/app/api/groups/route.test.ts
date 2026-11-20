@@ -3,14 +3,22 @@ import { POST } from "./route";
 import { prisma } from "@/lib/prisma";
 import * as authHelpers from "@/lib/auth-helpers";
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
+vi.mock("@/lib/prisma", () => {
+  const prisma = {
     user: { findFirst: vi.fn() },
     friendship: { findFirst: vi.fn(), findMany: vi.fn() },
     chat: { findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn() },
     chatMember: { findFirst: vi.fn() },
-  },
-}));
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
+  };
+  // Run interactive transactions against the same mock, so the tx client and
+  // the base client share their spies.
+  prisma.$transaction.mockImplementation((run: (tx: typeof prisma) => unknown) =>
+    Promise.resolve(run(prisma))
+  );
+  return { prisma };
+});
 
 vi.mock("@/lib/auth-helpers", () => ({
   getCurrentUser: vi.fn(),
@@ -71,6 +79,21 @@ describe("/api/groups POST - message requests", () => {
         },
       }),
     });
+  });
+
+  it("does not take a lock for a friend DM", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(them as never);
+    vi.mocked(prisma.friendship.findFirst).mockResolvedValue({ id: "f1" } as never);
+    vi.mocked(prisma.chat.create).mockResolvedValue({
+      id: "dm6",
+      name: "Hana",
+      kind: "dm",
+    } as never);
+
+    const res = await post({ email: "hana@example.com" });
+
+    expect(res.status).toBe(200);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("adds a friend as an accepted member, so the DM opens without a request", async () => {
@@ -167,6 +190,23 @@ describe("/api/groups POST - message requests", () => {
 
     expect(res.status).toBe(200);
     expect(prisma.chat.findMany).not.toHaveBeenCalled();
+  });
+
+  it("serializes the budget check and the insert with a per-sender lock", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(them as never);
+    vi.mocked(prisma.friendship.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.chat.create).mockResolvedValue({
+      id: "dm5",
+      name: "Hana",
+      kind: "dm",
+    } as never);
+
+    const res = await post({ email: "hana@example.com" });
+
+    expect(res.status).toBe(200);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.chat.create).toHaveBeenCalledTimes(1);
   });
 
   it("404s on an address no account uses", async () => {
