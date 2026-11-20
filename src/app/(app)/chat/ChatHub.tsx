@@ -169,14 +169,6 @@ export default function ChatHub({
           </div>
         </div>
 
-        {/* One compose action for the whole hub; the island nav stays put. */}
-        <button
-          onClick={openWrite}
-          aria-label="New chat"
-          className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-ai text-white shadow-xl shadow-indigo-ai/35 ring-4 ring-bg transition-transform active:scale-95"
-        >
-          <PencilSimple size={22} weight="bold" />
-        </button>
       </div>
 
       {/* Desktop: the rail holds the inbox, so `/chat` itself is the empty pane. */}
