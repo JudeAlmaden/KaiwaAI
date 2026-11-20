@@ -93,7 +93,20 @@ model Persona {
   chatMembers ChatMember[]
   memories    Memory[]
 
+  // "kai" | "kai_mode" | "custom". A Kai mode is a personality layered over
+  // Kai's base voice, not a separate character.
+  kind     String  @default("custom")
+  // Short attitude label for a Kai mode ("Calm", "Playful"); the old persona
+  // names stay in `name` only so legacy chats keep rendering.
+  label    String?
+  modeOfId String?
+  modeOf   Persona? @relation("KaiModes", fields: [modeOfId], references: [id], onDelete: SetNull)
+  modes    Persona[] @relation("KaiModes")
+
+  activeModeChats Chat[] @relation("ChatActiveMode")
+
   @@index([userId])
+  @@index([modeOfId])
 }
 
 // Symmetric friendship modeled as a directed request that gets accepted.
@@ -144,9 +157,15 @@ model Chat {
   members  ChatMember[]
   messages Message[]
 
+  // Which Kai personality is speaking in this conversation (kind "persona"
+  // only). Null = Kai's base voice.
+  activeModeId String?
+  activeMode   Persona? @relation("ChatActiveMode", fields: [activeModeId], references: [id], onDelete: SetNull)
+
   // Conversation lists and the message-request cap filter owner first, then
   // kind/recency.
   @@index([ownerId, kind, createdAt])
+  @@index([activeModeId])
 }
 
 // A participant in a group: either a human user OR an AI persona.
@@ -162,6 +181,8 @@ model ChatMember {
   status    String   @default("accepted") // pending | accepted
   // Whether this member has hidden the conversation from their chat list
   hidden    Boolean  @default(false)
+  // Optional per-group display name (the owner or the member can set it).
+  nickname  String?
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   personaId String?

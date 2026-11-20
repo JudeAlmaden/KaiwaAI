@@ -11,6 +11,8 @@ type Persona = {
   avatar: string;
   builtin: boolean;
   mine: boolean;
+  kind?: string;
+  label?: string | null;
 };
 
 export default function PersonaManager({
@@ -36,7 +38,7 @@ export default function PersonaManager({
     <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"}`}>
       <PersonaShell plain={compact}>
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold">AI personas</h2>
+          <h2 className="font-display text-lg font-bold">Your personas</h2>
           <button
             onClick={() => {
               setCreating(true);
@@ -48,9 +50,15 @@ export default function PersonaManager({
           </button>
         </div>
         <p className="mt-1 text-sm text-muted">
-          Chat 1:1 with any persona, or add one to a group. Make your own and
-          rename it however you like.
+          Characters you made. Kai&apos;s attitudes are chosen inside a chat, not
+          here.
         </p>
+        {personas.length === 0 && (
+          <p className="mt-2 text-xs text-muted">
+            You haven&apos;t made a persona yet. Create one to message them or add
+            them to a group.
+          </p>
+        )}
 
         <div
           className={

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { personaSystemPrompt, KAI_SEED, STARTER_PERSONAS } from "./personas";
+import { personaSystemPrompt, composePersonaPersonality, KAI_SEED, STARTER_PERSONAS } from "./personas";
 
 describe("personaSystemPrompt", () => {
   it("includes the persona's personality and a default level", () => {
@@ -25,6 +25,22 @@ describe("personaSystemPrompt", () => {
   });
 });
 
+describe("composePersonaPersonality", () => {
+  it("appends a Kai personality over the base voice", () => {
+    const out = composePersonaPersonality("You are Kai.", {
+      personality: "You are Hana, a patient grammar coach.",
+    });
+    expect(out).toContain("You are Kai.");
+    expect(out).toContain("patient grammar coach");
+    expect(out.indexOf("You are Kai.")).toBeLessThan(out.indexOf("patient grammar coach"));
+  });
+
+  it("is a no-op without a mode", () => {
+    expect(composePersonaPersonality("base", null)).toBe("base");
+    expect(composePersonaPersonality("base", { personality: "   " })).toBe("base");
+  });
+});
+
 describe("persona seeds", () => {
   it("Kai is well-formed", () => {
     expect(KAI_SEED.name).toBe("Kai");
@@ -36,6 +52,14 @@ describe("persona seeds", () => {
       expect(s.name.length).toBeGreaterThan(0);
       expect(s.personality.length).toBeGreaterThan(20);
       expect(s.avatar.length).toBeGreaterThan(0);
+      expect(s.label?.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("attitude prompts speak as Kai, not as another character", () => {
+    for (const s of STARTER_PERSONAS) {
+      expect(s.personality).toMatch(/^Speak as Kai/);
+      expect(s.personality).not.toContain(`You are ${s.name}`);
     }
   });
 });

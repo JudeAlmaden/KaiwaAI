@@ -16,6 +16,8 @@ import { validateTokens } from "@/lib/tokenization";
 import { applyEnrichments } from "@/lib/dictionary-enrich";
 import { enrichTokensFromDb } from "@/lib/dictionary-enrich-db";
 import { resolveReplyFields, serializeMessage } from "@/lib/message-serialize";
+import { composePersonaPersonality } from "@/lib/personas";
+import { normalizePersonaRole } from "@/lib/persona-role";
 
 export async function DELETE(
   _req: Request,
@@ -30,6 +32,20 @@ export async function DELETE(
     select: { id: true },
   });
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
+
+  // Clearing a group wipes the transcript for every member, so only the owner
+  // may do it. A 1:1 conversation is the member's own to clear.
+  const chat = await prisma.chat.findUnique({
+    where: { id },
+    select: { kind: true, ownerId: true },
+  });
+  if (!chat) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (chat.kind === "group" && chat.ownerId !== user.id) {
+    return NextResponse.json(
+      { error: "Only the group owner can clear messages." },
+      { status: 403 }
+    );
+  }
 
   await prisma.message.deleteMany({ where: { chatId: id } });
   return NextResponse.json({ ok: true });
@@ -122,7 +138,7 @@ export async function POST(
 
   const me = await prisma.chatMember.findFirst({
     where: { chatId: id, userId: user.id, kind: "user", status: "accepted" },
-    select: { id: true },
+    select: { id: true, nickname: true },
   });
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
 
@@ -152,19 +168,12 @@ export async function POST(
     );
   }
 
-  const senderName = user.name || user.email;
+  // New messages carry the group nickname; older rows keep their stored name.
+  const senderName = me.nickname || user.name || user.email;
 
-  const hiddenMembers = await prisma.chatMember.findMany({
-    where: { chatId: id, hidden: true, kind: "user" },
-    select: { id: true },
-  });
-
-  if (hiddenMembers.length > 0) {
-    await prisma.chatMember.updateMany({
-      where: { id: { in: hiddenMembers.map((m) => m.id) } },
-      data: { hidden: false },
-    });
-  }
+  // Archived conversations stay archived when new messages arrive. The inbox
+  // shows their unread state on the Archived tab instead of resurrecting the
+  // row, so archiving is a real, durable choice.
 
   const replyFields = await resolveReplyFields(
     (qid) =>
@@ -198,10 +207,41 @@ export async function POST(
 
   const group = await prisma.chat.findUnique({
     where: { id },
-    include: {
-      members: { where: { kind: "persona" }, include: { persona: true } },
+    // Explicit select: the default would include columns added by a migration
+    // that may not be applied yet.
+    select: {
+      kind: true,
+      apiKeyEnc: true,
+      members: {
+        where: { kind: "persona" },
+        include: {
+          persona: {
+            select: {
+              id: true,
+              name: true,
+              avatar: true,
+              personality: true,
+              builtin: true,
+            },
+          },
+        },
+      },
     },
   });
+
+  // The attitude column arrives with the personalities migration; ignore its
+  // absence instead of failing every group message.
+  let activeMode: { personality: string } | null = null;
+  try {
+    activeMode = (
+      await prisma.chat.findUnique({
+        where: { id },
+        select: { activeMode: { select: { personality: true } } },
+      })
+    )?.activeMode ?? null;
+  } catch {
+    activeMode = null;
+  }
 
   const moodUpdate = await bumpMoodOnUserReply(id, group?.kind ?? "group");
   const newMessages = [rowToMsg(humanMsg, user.id)];
@@ -254,11 +294,18 @@ export async function POST(
   }
 
   if (personaMember?.persona && keys.length > 0) {
+    // Server fallback generation must speak in the same voice the client uses:
+    // a Kai personality is layered over Kai's base prompt.
+    const personaKind = normalizePersonaRole({
+      name: personaMember.persona.name,
+      builtin: personaMember.persona.builtin,
+    }).kind;
+    const kaiMode = personaKind === "kai" ? activeMode : null;
     const persona: ConvPersona = {
       memberId: personaMember.id,
       personaId: personaMember.persona.id,
       name: personaMember.persona.name,
-      personality: personaMember.persona.personality,
+      personality: composePersonaPersonality(personaMember.persona.personality, kaiMode),
       avatar: personaMember.persona.avatar,
     };
 
@@ -280,7 +327,7 @@ export async function POST(
       include: { user: { select: { name: true, email: true } } },
     });
     const others = humanNames
-      .map((h) => h.user?.name || h.user?.email || "")
+      .map((h) => h.nickname || h.user?.name || h.user?.email || "")
       .filter((n) => n && n !== persona.name);
 
     try {

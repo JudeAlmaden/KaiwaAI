@@ -31,3 +31,25 @@ export const PROACTIVE = {
   // Minimum gap between proactive openers so she doesn't spam an idle tab.
   openerCooldown: 120_000,
 } as const;
+
+// Per-conversation mute for Kai's proactive openers/follow-ups. Local to this
+// browser, like the global proactive toggle above.
+const MUTED_PREFIX = "kaiwa_chat_muted_";
+
+export function isKaiChatMuted(chatId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(MUTED_PREFIX + chatId) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setKaiChatMuted(chatId: string, muted: boolean) {
+  try {
+    if (muted) localStorage.setItem(MUTED_PREFIX + chatId, "1");
+    else localStorage.removeItem(MUTED_PREFIX + chatId);
+  } catch {
+    // Private mode / quota: the mute just won't persist.
+  }
+}

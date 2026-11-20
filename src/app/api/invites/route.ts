@@ -11,10 +11,17 @@ export async function GET() {
     where: { userId: user.id, kind: "user", status: "pending" },
     include: {
       chat: {
-        include: {
+        // Explicit select: the default would include every Chat column, so a
+        // pending migration could 500 the whole invite list.
+        select: {
+          kind: true,
+          name: true,
           owner: { select: { name: true, email: true } },
           members: {
-            include: { persona: { select: { name: true, avatar: true } } },
+            select: {
+              kind: true,
+              persona: { select: { name: true, avatar: true } },
+            },
           },
         },
       },

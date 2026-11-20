@@ -22,20 +22,33 @@ function dmBetween(aId: string, bId: string) {
 }
 
 // GET: conversations the user belongs to (persona chats, DMs, groups).
-export async function GET() {
+export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // ?hidden=1 lists the chats the user hid, so they can be restored.
+  const showHidden =
+    new URL(req.url).searchParams.get("hidden") === "1";
 
   const memberships = await prisma.chatMember.findMany({
     where: { 
       userId: user.id, 
       kind: "user", 
       status: "accepted",
-      hidden: false, // Don't show hidden conversations
+      hidden: showHidden,
     },
     include: {
       chat: {
-        include: {
+        // Explicit select: the default would include columns added by a
+        // migration that may not be applied yet.
+        select: {
+          id: true,
+          name: true,
+          kind: true,
+          ownerId: true,
+          apiKeyEnc: true,
+          mood: true,
+          createdAt: true,
           members: {
             include: {
               user: { select: { id: true, name: true, email: true } },
@@ -61,6 +74,12 @@ export async function GET() {
   const groups = memberships
     .map((m) => {
       const last = m.chat.messages[0];
+      // A nickname is the member's name in this group only, so it also replaces
+      // the denormalized name on their messages.
+      const lastNickname =
+        last?.senderKind === "user" && last.senderUserId
+          ? m.chat.members.find((mem) => mem.userId === last.senderUserId)?.nickname
+          : null;
       return {
         id: m.chat.id,
         name: m.chat.name,
@@ -71,7 +90,7 @@ export async function GET() {
         lastMessage: last
           ? {
               content: last.content,
-              senderName: last.senderName,
+              senderName: lastNickname ?? last.senderName,
               fromMe: last.senderUserId === user.id,
             }
           : null,
@@ -79,9 +98,10 @@ export async function GET() {
         members: m.chat.members.map((mem) => ({
           kind: mem.kind,
           name:
-            mem.kind === "user"
+            mem.nickname ??
+            (mem.kind === "user"
               ? mem.user?.name || mem.user?.email
-              : mem.persona?.name,
+              : mem.persona?.name),
           avatar: mem.kind === "persona" ? mem.persona?.avatar : null,
         })),
       };
@@ -102,6 +122,7 @@ export async function POST(req: Request) {
     name?: string;
     friendIds?: string[];
     personaId?: string | null;
+    modeId?: string | null;
     email?: string;
   };
   try {
@@ -302,17 +323,85 @@ export async function POST(req: Request) {
     );
   }
 
-  // Validate the single persona is available to the user.
+  const modeId =
+    typeof body.modeId === "string" && body.modeId ? body.modeId : null;
+
+  // Validate the single AI participant. A Kai personality is not a character:
+  // sending one as personaId resolves to Kai and becomes the chat's attitude.
   let validPersonaId: string | null = null;
   let personaName: string | null = null;
+  let validModeId: string | null = null;
+  if (modeId && !personaId) {
+    return NextResponse.json(
+      { error: "Pick Kai to choose an attitude." },
+      { status: 400 }
+    );
+  }
+  let supportsModes = true;
   if (personaId) {
-    const persona = await prisma.persona.findFirst({
-      where: { id: personaId, OR: [{ builtin: true }, { userId: user.id }] },
-      select: { id: true, name: true },
-    });
+    let persona: {
+      id: string;
+      name: string;
+      kind: string;
+      builtin: boolean;
+    } | null = null;
+    try {
+      persona = (await prisma.persona.findFirst({
+        where: { id: personaId, OR: [{ builtin: true }, { userId: user.id }] },
+        select: { id: true, name: true, kind: true, builtin: true },
+      })) as typeof persona;
+    } catch {
+      // Personalities migration not applied: fall back to the legacy shape.
+      supportsModes = false;
+      const legacy = await prisma.persona.findFirst({
+        where: { id: personaId, OR: [{ builtin: true }, { userId: user.id }] },
+        select: { id: true, name: true, builtin: true },
+      });
+      if (legacy) {
+        persona = {
+          ...legacy,
+          kind:
+            legacy.builtin && legacy.name.toLowerCase() === "kai"
+              ? "kai"
+              : "custom",
+        };
+      }
+    }
+    if (persona?.kind === "kai_mode") {
+      // Attitudes are not participants: pick Kai and send its id as modeId.
+      return NextResponse.json(
+        { error: "Pick Kai and an attitude, not an attitude as a person." },
+        { status: 400 }
+      );
+    }
     if (persona) {
       validPersonaId = persona.id;
       personaName = persona.name;
+      if (modeId) {
+        if (!supportsModes) {
+          return NextResponse.json(
+            { error: "Kai's attitudes need the personalities migration." },
+            { status: 503 }
+          );
+        }
+        if (persona.kind !== "kai") {
+          return NextResponse.json(
+            { error: "Only Kai has attitudes." },
+            { status: 400 }
+          );
+        }
+        const mode = await prisma.persona.findFirst({
+          where: { id: modeId, kind: "kai_mode", modeOfId: persona.id },
+          select: { id: true },
+        });
+        if (!mode) {
+          return NextResponse.json(
+            { error: "That isn't one of Kai's attitudes." },
+            { status: 400 }
+          );
+        }
+        validModeId = mode.id;
+      }
     }
   }
 
@@ -335,7 +424,17 @@ export async function POST(req: Request) {
         },
         select: { id: true, name: true, kind: true },
       });
-      if (existing) return NextResponse.json({ group: existing, reused: true });
+      if (existing) {
+        // Reopening Kai from New chat with a chosen attitude applies it, but
+        // never clears an attitude the user already set.
+        if (validModeId && supportsModes) {
+          await prisma.chat.update({
+            where: { id: existing.id },
+            data: { activeModeId: validModeId },
+          });
+        }
+        return NextResponse.json({ group: existing, reused: true });
+      }
     }
 
     // A DM is one conversation per friend pair, however often it is opened.
@@ -357,6 +456,7 @@ export async function POST(req: Request) {
     }
 
     const group = await prisma.chat.create({
+      select: { id: true, name: true, kind: true },
       data: {
         name: name.slice(0, 60),
         kind,
@@ -364,6 +464,9 @@ export async function POST(req: Request) {
         // A persona conversation can run on the owner's personal stored key, if
         // they have one, so they don't have to set it twice.
         apiKeyEnc: kind === "persona" ? user.geminiKeyEnc : null,
+        // Group chats own the personality; 1:1 Kai chats too. Omitted before
+        // the personalities migration (the column does not exist yet).
+        ...(supportsModes ? { activeModeId: validModeId } : {}),
         members: {
           create: [
             // Owner joins immediately. A DM's friend is already spoken for;

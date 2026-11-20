@@ -4,19 +4,48 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DotsThree } from "@phosphor-icons/react/dist/ssr";
 import ModelSwitcher from "../../chat/ModelSwitcher";
+import type { KaiModeInfo } from "./group-types";
 
 // Conversation options: profile, quest, clear, delete.
 export default function ConvMenu({
   isOwner,
   personaId,
+  isGroup = false,
+  personaKind,
   showModelPicker = false,
   canStartQuest = false,
   onStartQuest,
   onClear,
   onDelete,
+  kai,
+  mute,
+  onOpenSettings,
 }: {
   isOwner: boolean;
   personaId?: string | null;
+  /** A real group (people + maybe Kai), not a 1:1 conversation. */
+  isGroup?: boolean;
+  /** "kai" | "kai_mode" | "custom" — decides how the memory entry reads. */
+  personaKind?: string | null;
+  /** Group management (name, members, Kai) — groups only. */
+  onOpenSettings?: () => void;
+  /** Kai's attitude controls; 1:1 Kai chats only (groups use Group settings). */
+  kai?: {
+    modes: KaiModeInfo[];
+    activeMode: KaiModeInfo | null;
+    canEdit: boolean;
+    canAdd: boolean;
+    canRemove: boolean;
+    busy: boolean;
+    onSelect: (modeId: string | null) => void;
+    onAdd: () => void;
+    onRemove: () => void;
+  } | null;
+  /** Per-chat proactive mute; 1:1 Kai chats only. */
+  mute?: {
+    muted: boolean;
+    onToggle: () => void;
+  } | null;
   showModelPicker?: boolean;
   canStartQuest?: boolean;
   onStartQuest?: () => void;
@@ -51,6 +80,26 @@ export default function ConvMenu({
     }
   }
 
+  const isKaiGroup = isGroup && personaKind === "kai";
+  const canClear = !isGroup || isOwner;
+  const clearTitle = isGroup ? "Clear the group's messages?" : "Clear all messages?";
+  const clearNote = isGroup
+    ? "Removes every message for everyone in this group. Saved memories are kept. This can't be undone."
+    : "Removes the messages for everyone. Saved memories are kept. This can't be undone.";
+  const deleteTitle = isGroup
+    ? isOwner
+      ? "Delete this group?"
+      : "Hide this group?"
+    : "Delete conversation?";
+  const deleteNote = isGroup
+    ? isOwner
+      ? "Permanently deletes the group, its members and every message for everyone. This can't be undone."
+      : "Removes this group from your list only — you stay a member. Leave it from Group settings."
+    : isOwner
+      ? "Permanently deletes the conversation and all its messages for everyone. This can't be undone."
+      : "Removes this conversation from your list. Find it in Archived.";
+  const deleteLabel = isGroup && !isOwner ? "Hide group" : "Delete conversation";
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -72,6 +121,133 @@ export default function ConvMenu({
             </div>
           )}
 
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onOpenSettings();
+              }}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
+            >
+              <span className="text-lg">⚙️</span>
+              <span>
+                <span className="block text-sm font-bold">Group settings</span>
+                <span className="block text-xs text-muted">
+                  Name, members, and Kai.
+                </span>
+              </span>
+            </button>
+          )}
+
+          {kai && kai.canEdit && kai.modes.length > 0 && (
+            <div className="border-b border-border/60 px-3 py-2.5">
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                Kai&apos;s attitude
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  disabled={kai.busy}
+                  onClick={() => {
+                    if (!kai.busy && kai.activeMode) kai.onSelect(null);
+                  }}
+                  className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-60 ${
+                    !kai.activeMode
+                      ? "border-indigo-ai text-indigo-ai"
+                      : "border-border text-muted hover:border-indigo-ai"
+                  }`}
+                >
+                  🦊 Default
+                </button>
+                {kai.modes.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    disabled={kai.busy}
+                    onClick={() => {
+                      if (!kai.busy && kai.activeMode?.id !== mode.id)
+                        kai.onSelect(mode.id);
+                    }}
+                    className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-60 ${
+                      kai.activeMode?.id === mode.id
+                        ? "border-indigo-ai text-indigo-ai"
+                        : "border-border text-muted hover:border-indigo-ai"
+                    }`}
+                  >
+                    {mode.avatar} {mode.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[10px] text-muted">
+                Applies to everyone in this chat.
+              </p>
+            </div>
+          )}
+
+          {mute && (
+            <button
+              type="button"
+              onClick={() => {
+                mute.onToggle();
+                setOpen(false);
+              }}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
+            >
+              <span className="text-lg">{mute.muted ? "🔕" : "🔔"}</span>
+              <span>
+                <span className="block text-sm font-bold">
+                  {mute.muted ? "Unmute Kai" : "Mute Kai"}
+                </span>
+                <span className="block text-xs text-muted">
+                  {mute.muted
+                    ? "Kai can speak first again in this chat."
+                    : "Kai won't start messages on her own here."}
+                </span>
+              </span>
+            </button>
+          )}
+
+          {kai && kai.canAdd && (
+            <button
+              type="button"
+              disabled={kai.busy}
+              onClick={() => {
+                setOpen(false);
+                kai.onAdd();
+              }}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5 disabled:opacity-60"
+            >
+              <span className="text-lg">🦊</span>
+              <span>
+                <span className="block text-sm font-bold">Add Kai to this group</span>
+                <span className="block text-xs text-muted">
+                  Kai can join the conversation when @mentioned.
+                </span>
+              </span>
+            </button>
+          )}
+
+          {kai && kai.canRemove && (
+            <button
+              type="button"
+              disabled={kai.busy}
+              onClick={() => {
+                setOpen(false);
+                kai.onRemove();
+              }}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5 disabled:opacity-60"
+            >
+              <span className="text-lg">🚪</span>
+              <span>
+                <span className="block text-sm font-bold">Remove Kai</span>
+                <span className="block text-xs text-muted">
+                  Take Kai out of this group; messages are kept.
+                </span>
+              </span>
+            </button>
+          )}
+
           {personaId && (
             <Link
               href={`/memory?persona=${encodeURIComponent(personaId)}`}
@@ -80,9 +256,15 @@ export default function ConvMenu({
             >
               <span className="text-lg">📔</span>
               <span>
-                <span className="block text-sm font-bold">Open full diary</span>
+                <span className="block text-sm font-bold">
+                  {isGroup ? (isKaiGroup ? "Kai's memory" : "Open full diary") : "Open full diary"}
+                </span>
                 <span className="block text-xs text-muted">
-                  All memories across personas — different from the quick profile above.
+                  {isGroup
+                    ? isKaiGroup
+                      ? "Kai's saved memories — shared with every Kai chat, not only this group."
+                      : "This persona's saved memories — shared across their chats."
+                    : "All memories across personas — different from the quick profile above."}
                 </span>
               </span>
             </Link>
@@ -99,47 +281,52 @@ export default function ConvMenu({
             >
               <span className="text-lg">🎭</span>
               <span>
-                <span className="block text-sm font-bold">Start a quest</span>
+                <span className="block text-sm font-bold">
+                  {isGroup ? "Start a quest with Kai" : "Start a quest"}
+                </span>
                 <span className="block text-xs text-muted">
-                  Roleplay scenario in this chat.
+                  {isGroup
+                    ? "Roleplay objectives that run in this group; Kai leads the scene."
+                    : "Roleplay scenario in this chat."}
                 </span>
               </span>
             </button>
           )}
 
-          {confirm === "clear" ? (
-            <ConfirmRow
-              title="Clear all messages?"
-              note="Removes the messages for everyone. Saved memories are kept. This can't be undone."
-              actionLabel={busy === "clear" ? "Clearing…" : "Clear"}
-              onConfirm={() => run("clear")}
-              onCancel={() => setConfirm(null)}
-              disabled={busy !== null}
-            />
-          ) : (
-            <button
-              onClick={() => setConfirm("clear")}
-              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
-            >
-              <span className="text-lg">🧹</span>
-              <span>
-                <span className="block text-sm font-bold">Clear messages</span>
-                <span className="block text-xs text-muted">
-                  Empty this conversation, keep it in your list.
+          {canClear &&
+            (confirm === "clear" ? (
+              <ConfirmRow
+                title={clearTitle}
+                note={clearNote}
+                actionLabel={busy === "clear" ? "Clearing…" : "Clear"}
+                onConfirm={() => run("clear")}
+                onCancel={() => setConfirm(null)}
+                disabled={busy !== null}
+              />
+            ) : (
+              <button
+                onClick={() => setConfirm("clear")}
+                className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
+              >
+                <span className="text-lg">🧹</span>
+                <span>
+                  <span className="block text-sm font-bold">Clear messages</span>
+                  <span className="block text-xs text-muted">
+                    {isGroup
+                      ? "Empty this group for everyone, keep it in the list."
+                      : "Empty this conversation, keep it in your list."}
+                  </span>
                 </span>
-              </span>
-            </button>
-          )}
+              </button>
+            ))}
 
           {confirm === "delete" ? (
             <ConfirmRow
-              title="Delete conversation?"
-              note={
-                isOwner
-                  ? "Permanently deletes the conversation and all its messages for everyone. This can't be undone."
-                  : "Removes this conversation from your list. Reappears if someone messages you."
+              title={deleteTitle}
+              note={deleteNote}
+              actionLabel={
+                busy === "delete" ? "Deleting…" : isGroup && !isOwner ? "Hide" : "Delete"
               }
-              actionLabel={busy === "delete" ? "Deleting…" : "Delete"}
               onConfirm={() => run("delete")}
               onCancel={() => setConfirm(null)}
               disabled={busy !== null}
@@ -152,12 +339,16 @@ export default function ConvMenu({
               <span className="text-lg">🗑️</span>
               <span>
                 <span className="block text-sm font-bold text-sakura">
-                  Delete conversation
+                  {deleteLabel}
                 </span>
                 <span className="block text-xs text-muted">
-                  {isOwner
-                    ? "Remove it for everyone, permanently."
-                    : "Remove from your list."}
+                  {isGroup
+                    ? isOwner
+                      ? "Remove the group for everyone, permanently."
+                      : "Removes it from your list; you stay a member."
+                    : isOwner
+                      ? "Remove it for everyone, permanently."
+                      : "Remove from your list."}
                 </span>
               </span>
             </button>

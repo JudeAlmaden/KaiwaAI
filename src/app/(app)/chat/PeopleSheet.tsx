@@ -272,13 +272,14 @@ export default function PeopleSheet({
             )}
 
             <div ref={personasRef} className="flex flex-col gap-2">
-              <p className="px-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-                AI personas
-              </p>
               <PersonaManager
                 compact
                 showChat={false}
-                personas={filteredPersonas}
+                // Kai's attitudes are chosen inside a chat; People only manages
+                // the characters the user actually created.
+                personas={filteredPersonas.filter(
+                  (p) => p.kind !== "kai" && p.kind !== "kai_mode"
+                )}
                 onChange={reloadPersonas}
               />
             </div>

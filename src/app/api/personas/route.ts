@@ -16,6 +16,10 @@ export async function GET() {
       blurb: p.blurb,
       avatar: p.avatar,
       builtin: p.builtin,
+      // "kai" | "kai_mode" | "custom" — kai modes are personalities, not people.
+      kind: p.kind,
+      label: p.label,
+      modeOfId: p.modeOfId,
       mine: p.userId === user.id,
     })),
   });
@@ -51,6 +55,9 @@ export async function POST(req: Request) {
       avatar: (body.avatar ?? "🤖").trim().slice(0, 8) || "🤖",
       builtin: false,
     },
+    // Explicit select: the default would include columns added by a migration
+    // that may not be applied yet.
+    select: { id: true, name: true, blurb: true, avatar: true, builtin: true },
   });
 
   return NextResponse.json({

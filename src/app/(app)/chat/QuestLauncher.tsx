@@ -11,6 +11,7 @@ import {
   type GeneratedQuest,
 } from "@/lib/quests";
 import { hasAnyKey } from "@/lib/api-keys";
+import { normalizePersonaRole } from "@/lib/persona-role";
 
 type QuestContext = {
   level: string;
@@ -104,8 +105,16 @@ export default function QuestLauncher({
         const personasRes = await fetch("/api/personas");
         const { personas } = await personasRes.json();
         const kai = (
-          personas as { id: string; name: string; builtin: boolean }[]
-        ).find((p) => p.builtin && p.name.toLowerCase() === "kai");
+          personas as {
+            id: string;
+            name: string;
+            builtin: boolean;
+            kind?: string;
+            label?: string | null;
+          }[]
+        )
+          .map(normalizePersonaRole)
+          .find((p) => p.kind === "kai");
         if (!kai) throw new Error("Kai persona not found");
 
         const convRes = await fetch("/api/groups", {

@@ -6,6 +6,8 @@ export type PersonaSeed = {
   blurb: string;
   personality: string;
   avatar: string;
+  /** Short attitude label for a Kai personality (never a character name). */
+  label?: string;
 };
 
 // Kai's voice, factored out of the old hardcoded chat prompt so it can be
@@ -24,26 +26,42 @@ export const KAI_SEED: PersonaSeed = {
 export const STARTER_PERSONAS: PersonaSeed[] = [
   {
     name: "Hana",
+    label: "Calm",
     blurb: "Calm, patient grammar coach",
     personality:
-      "You are Hana, a calm and patient Japanese teacher. You explain grammar clearly and gently, love correct particles, and encourage precision without being strict. You speak warmly but a little more formally than a close friend.",
+      "Speak as Kai in a calm, patient way: explain grammar clearly and gently, choose particles precisely, and encourage accuracy without being strict. Keep Kai warm, but a little more measured and formal than usual.",
     avatar: "🌸",
   },
   {
     name: "Riku",
+    label: "Playful",
     blurb: "Energetic slang & casual speech buddy",
     personality:
-      "You are Riku, an energetic, casual Japanese friend who loves teaching slang, casual speech, and how young people actually talk. You're funny, a bit cheeky, and keep things fun. You use casual Japanese and explain the vibe behind phrases.",
+      "Speak as Kai in a playful, casual way: use slang and casual Japanese, be a little cheeky, and keep things fun. Explain the vibe behind phrases, and stay recognizably Kai rather than becoming a different person.",
     avatar: "⚡",
   },
   {
     name: "Sora",
+    label: "Thoughtful",
     blurb: "Thoughtful conversation partner",
     personality:
-      "You are Sora, a thoughtful, soft-spoken conversation partner. You ask good questions, talk about culture and daily life, and help the user practice real conversation. You're curious and a great listener.",
+      "Speak as Kai in a thoughtful, soft-spoken way: ask good questions, slow down, and let the conversation breathe. Stay curious and listen closely, and keep Kai warm rather than distant.",
     avatar: "🌙",
   },
 ];
+
+/**
+ * Layer a Kai personality over Kai's base voice. A mode changes how Kai talks,
+ * never the rules, so this only appends the mode's character text.
+ */
+export function composePersonaPersonality(
+  base: string,
+  mode?: { personality: string } | null
+): string {
+  const overlay = mode?.personality?.trim();
+  if (!overlay) return base;
+  return `${base}\n\nFor this conversation, speak with this personality layered on top of your own voice:\n${overlay}`;
+}
 
 /** Build the shared behavior rules appended to any persona's prompt in chat. */
 export function personaSystemPrompt(

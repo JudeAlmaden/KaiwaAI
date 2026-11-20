@@ -7,8 +7,14 @@ vi.mock("@/lib/prisma", () => {
   const prisma = {
     user: { findFirst: vi.fn() },
     friendship: { findFirst: vi.fn(), findMany: vi.fn() },
-    chat: { findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn() },
+    chat: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+    },
     chatMember: { findFirst: vi.fn() },
+    persona: { findFirst: vi.fn(), findUnique: vi.fn() },
     $executeRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -39,6 +45,77 @@ function post(body: unknown) {
     })
   );
 }
+
+describe("/api/groups POST - Kai personalities", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(me as never);
+    vi.mocked(prisma.chat.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.friendship.findMany).mockResolvedValue([]);
+  });
+
+  it("rejects a personality as a chat participant", async () => {
+    vi.mocked(prisma.persona.findFirst).mockResolvedValue({
+      id: "hana1",
+      name: "Hana",
+      kind: "kai_mode",
+      modeOfId: "kai1",
+    } as never);
+
+    const res = await post({ personaId: "hana1" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Pick Kai/);
+    expect(prisma.chat.create).not.toHaveBeenCalled();
+  });
+
+  it("stores a chosen attitude for a group with friends", async () => {
+    vi.mocked(prisma.friendship.findMany).mockResolvedValue([
+      { requesterId: "me", addresseeId: "them" },
+    ] as never);
+    vi.mocked(prisma.persona.findFirst)
+      // persona lookup
+      .mockResolvedValueOnce({
+        id: "kai1",
+        name: "Kai",
+        kind: "kai",
+        modeOfId: null,
+      } as never)
+      // mode lookup
+      .mockResolvedValueOnce({ id: "riku1" } as never);
+    vi.mocked(prisma.chat.create).mockResolvedValue({
+      id: "group1",
+      name: "Group chat",
+      kind: "group",
+    } as never);
+
+    const res = await post({
+      friendIds: ["them"],
+      personaId: "kai1",
+      modeId: "riku1",
+    });
+    expect(res.status).toBe(200);
+    expect(prisma.chat.create).toHaveBeenCalledWith({
+      select: { id: true, name: true, kind: true },
+      data: expect.objectContaining({
+        kind: "group",
+        activeModeId: "riku1",
+      }),
+    });
+  });
+
+  it("rejects a personality on a custom persona", async () => {
+    vi.mocked(prisma.persona.findFirst).mockResolvedValue({
+      id: "mine1",
+      name: "Mine",
+      kind: "custom",
+      modeOfId: null,
+    } as never);
+
+    const res = await post({ personaId: "mine1", modeId: "hana1", friendIds: ["them"] });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Only Kai has attitudes/);
+  });
+});
 
 describe("/api/groups POST - message requests", () => {
   beforeEach(() => {

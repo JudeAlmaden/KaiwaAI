@@ -19,7 +19,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const persona = await prisma.persona.findUnique({ where: { id } });
+  const persona = await prisma.persona.findUnique({
+    where: { id },
+    select: { id: true, builtin: true, userId: true },
+  });
   if (!persona) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   // Built-in presets are read-only; only the owner can edit a custom persona.
@@ -43,7 +46,11 @@ export async function PATCH(
       : {}),
   };
 
-  const updated = await prisma.persona.update({ where: { id }, data: patch });
+  const updated = await prisma.persona.update({
+    where: { id },
+    data: patch,
+    select: { id: true, name: true, blurb: true, avatar: true },
+  });
   return NextResponse.json({
     persona: {
       id: updated.id,
@@ -65,7 +72,10 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const persona = await prisma.persona.findUnique({ where: { id } });
+  const persona = await prisma.persona.findUnique({
+    where: { id },
+    select: { id: true, builtin: true, userId: true },
+  });
   if (!persona || persona.builtin || persona.userId !== user.id) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }

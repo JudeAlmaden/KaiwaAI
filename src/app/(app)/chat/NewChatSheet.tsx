@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Chip } from "../ui";
 import QuestLauncher from "./QuestLauncher";
-import { useInboxContext, usePeopleContext } from "./InboxProvider";
+import { usePeopleContext } from "./InboxProvider";
 import { personLabel } from "./usePeople";
 
 export type ComposeMode = "people" | "group";
@@ -34,13 +34,11 @@ export default function NewChatSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { personas } = useInboxContext();
   const { friends } = usePeopleContext();
 
   const [mode, setMode] = useState<ComposeMode>(initialMode);
   const [query, setQuery] = useState("");
   const [pickedFriends, setPickedFriends] = useState<Set<string>>(new Set());
-  const [personaId, setPersonaId] = useState<string | null>(null);
   const [groupName, setGroupName] = useState("");
   const [requestEmail, setRequestEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -77,7 +75,6 @@ export default function NewChatSheet({
   }
 
   async function create(payload: {
-    personaId?: string | null;
     friendIds?: string[];
     name?: string;
     email?: string;
@@ -111,11 +108,7 @@ export default function NewChatSheet({
   const visibleFriends = q
     ? list.filter((entry) => personLabel(entry.user).toLowerCase().includes(q))
     : list;
-  const visiblePersonas = q
-    ? personas.filter((persona) => persona.name.toLowerCase().includes(q))
-    : personas;
-  const nothingMatches =
-    q.length > 0 && visibleFriends.length === 0 && visiblePersonas.length === 0;
+  const nothingMatches = q.length > 0 && visibleFriends.length === 0;
 
   return (
     <div
@@ -205,28 +198,6 @@ export default function NewChatSheet({
                   request below.
                 </p>
               )}
-
-              {visiblePersonas.length > 0 && (
-                <p className="mt-2 px-1 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-                  AI personas
-                </p>
-              )}
-              {visiblePersonas.map((persona) => (
-                <button
-                  key={persona.id}
-                  onClick={() => void create({ personaId: persona.id })}
-                  disabled={busy}
-                  className="flex items-center gap-2.5 rounded-2xl px-2 py-2 text-left transition-colors hover:bg-indigo-ai/10 disabled:opacity-60"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-base">
-                    {persona.avatar}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold">
-                    {persona.name}
-                  </span>
-                  <span className="shrink-0 text-indigo-ai">→</span>
-                </button>
-              ))}
 
               {nothingMatches && (
                 <p className="px-1 py-2 text-xs text-muted">
@@ -321,27 +292,6 @@ export default function NewChatSheet({
                 )}
               </div>
 
-              <div>
-                <p className="mb-1.5 px-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-                  AI persona (one, optional)
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {visiblePersonas.map((persona) => (
-                    <Chip
-                      key={persona.id}
-                      active={personaId === persona.id}
-                      onClick={() =>
-                        setPersonaId((cur) =>
-                          cur === persona.id ? null : persona.id
-                        )
-                      }
-                    >
-                      {persona.avatar} {persona.name}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-
               <input
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
@@ -354,10 +304,9 @@ export default function NewChatSheet({
                   void create({
                     name: groupName.trim(),
                     friendIds: [...pickedFriends],
-                    personaId,
                   })
                 }
-                disabled={busy || (pickedFriends.size === 0 && !personaId)}
+                disabled={busy || pickedFriends.size === 0}
                 className="w-full rounded-full bg-indigo-ai py-2.5 text-sm font-bold text-white disabled:opacity-40"
               >
                 {busy ? "Creating…" : "Create group"}

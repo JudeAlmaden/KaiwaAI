@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { normalizePersonaRole } from "@/lib/persona-role";
 import { useSearchParams } from "next/navigation";
 import Kai from "../../Kai";
 import PageHeader from "../PageHeader";
@@ -30,7 +31,7 @@ export default function MemoryClient() {
   const [draft, setDraft] = useState("");
   const [category, setCategory] = useState("fact");
   const [personas, setPersonas] = useState<
-    { id: string; name: string; avatar: string; builtin: boolean }[]
+    { id: string; name: string; avatar: string; builtin: boolean; kind?: string }[]
   >([]);
   const [activePersona, setActivePersona] = useState("");
   const searchParams = useSearchParams();
@@ -48,7 +49,10 @@ export default function MemoryClient() {
     fetch("/api/personas")
       .then((r) => r.json())
       .then((d) => {
-        const list = d.personas ?? [];
+        // Attitudes share Kai's memory, so only Kai and custom personas get tabs.
+        const list = (d.personas ?? [])
+          .map(normalizePersonaRole)
+          .filter((p: { kind?: string }) => p.kind !== "kai_mode");
         setPersonas(list);
         setActivePersona((cur) => {
           if (cur) return cur;
@@ -59,8 +63,8 @@ export default function MemoryClient() {
             return requestedPersona;
           }
           const kai = list.find(
-            (p: { builtin: boolean; name: string }) =>
-              p.builtin && p.name === "Kai"
+            (p: { builtin: boolean; name: string; kind?: string }) =>
+              p.kind === "kai" || (p.builtin && p.name === "Kai")
           );
           return kai?.id ?? list[0]?.id ?? "";
         });
@@ -79,7 +83,8 @@ export default function MemoryClient() {
   const active = personas.find((p) => p.id === activePersona);
   const activeName = active?.name ?? "Persona";
   const isKai =
-    !!active?.builtin && active.name.trim().toLowerCase() === "kai";
+    active?.kind === "kai" ||
+    (!!active?.builtin && active.name.trim().toLowerCase() === "kai");
 
   const sortedMemories = useMemo(() => {
     if (!memories) return null;
@@ -119,7 +124,7 @@ export default function MemoryClient() {
       <PageHeader
         title="Persona Memory"
         jp="日記"
-        subtitle="What each persona remembers about you. Edit anytime."
+        subtitle="What Kai (in every attitude) and your personas remember about you. Edit anytime."
         compact
       />
 

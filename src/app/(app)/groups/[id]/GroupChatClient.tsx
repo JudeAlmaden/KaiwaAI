@@ -10,7 +10,12 @@ import {
   type PromptContext,
 } from "@/lib/gemini";
 import { getAutoMemory } from "@/lib/model-config";
-import { getProactiveChat, PROACTIVE } from "@/lib/proactive-config";
+import {
+  getProactiveChat,
+  isKaiChatMuted,
+  setKaiChatMuted,
+  PROACTIVE,
+} from "@/lib/proactive-config";
 import { checkJapaneseGrammar, hasJapanese } from "@/lib/grammar-check";
 import Avatar from "../../chat/Avatar";
 import ModelSwitcher from "../../chat/ModelSwitcher";
@@ -18,6 +23,7 @@ import MemorySuggestions from "../../chat/MemorySuggestions";
 import PersonaProfileDrawer from "../../chat/PersonaProfileDrawer";
 import QuestLauncher from "../../chat/QuestLauncher";
 import GroupKeyDialog from "./GroupKeyDialog";
+import GroupSettings from "./GroupSettings";
 import ConvMenu from "./ConvMenu";
 import GroupBubble from "./GroupBubble";
 import QuestStrip from "./QuestStrip";
@@ -52,11 +58,13 @@ import { hasAnyKey } from "@/lib/api-keys";
 export default function GroupChatClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [group, setGroup] = useState<GroupInfo | null>(null);
+  const [modeBusy, setModeBusy] = useState(false);
   const [messages, setMessages] = useState<GMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showQuestPicker, setShowQuestPicker] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -71,6 +79,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [atBottom, setAtBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [questState, setQuestState] = useState<ActiveQuestState | null>(null);
+  const [muted, setMuted] = useState(false);
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
 
   const handleSavedWord = useCallback((w: string) => {
@@ -118,6 +127,12 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     const state = loadQuestForConv(groupId);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (state) setQuestState(state);
+  }, [groupId]);
+
+  // Per-chat mute is a browser preference; it only gates Kai speaking first.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMuted(isKaiChatMuted(groupId));
   }, [groupId]);
 
   // Poll for new messages every 3 seconds for user-to-user chats
@@ -272,6 +287,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const canBeProactive = () =>
     group?.kind === "persona" &&
     !!group.persona?.personality &&
+    !muted &&
     getProactiveChat() &&
     hasAnyKey() &&
     canBeProactiveForMood(chatMood);
@@ -725,6 +741,51 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
 
   const personaCount = group?.members.filter((m) => m.kind === "persona").length ?? 0;
 
+  // Group-owned attitude: the owner switches it for everyone; the server
+  // revalidates and returns the composed prompt so the next reply uses it.
+  async function changeMode(nextModeId: string | null) {
+    setModeBusy(true);
+    try {
+      const res = await fetch(`/api/groups/${groupId}/mode`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modeId: nextModeId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        activeMode?: GroupInfo["activeMode"];
+        personality?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't change Kai's attitude.");
+        return;
+      }
+      setGroup((g) =>
+        g
+          ? {
+              ...g,
+              activeMode: data.activeMode ?? null,
+              persona:
+                g.persona && data.personality
+                  ? { ...g.persona, personality: data.personality }
+                  : g.persona,
+            }
+          : g
+      );
+    } finally {
+      setModeBusy(false);
+    }
+  }
+
+  function toggleMute() {
+    const next = !muted;
+    setMuted(next);
+    setKaiChatMuted(groupId, next);
+    // Arming/disarming the idle opener takes effect immediately.
+    if (next) clearProactiveTimers();
+    else scheduleIdleOpener();
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* header */}
@@ -777,11 +838,16 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               </p>
             ) : (
               <p className="truncate text-[11px] sm:text-xs text-muted">
-                {group?.members.map((m) => m.name).filter(Boolean).join(", ")}
+                {group?.members
+                  .filter((m) => m.status !== "pending")
+                  .map((m) => m.name)
+                  .filter(Boolean)
+                  .join(", ")}
               </p>
             )}
           </div>
         </div>
+
 
         {group?.clientGenerated && (
           <div className="hidden sm:block">
@@ -800,9 +866,36 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           <ConvMenu
             isOwner={group.isOwner}
             personaId={group.persona?.id ?? null}
+            isGroup={group.kind === "group"}
+            personaKind={group.persona?.kind ?? null}
+            kai={
+              group.kind !== "group" && group.persona?.kind === "kai"
+                ? {
+                    modes: group.kaiModes ?? [],
+                    activeMode: group.activeMode ?? null,
+                    canEdit: group.isOwner,
+                    canAdd: false,
+                    canRemove: false,
+                    busy: modeBusy,
+                    onSelect: (modeId: string | null) => void changeMode(modeId),
+                    onAdd: () => {},
+                    onRemove: () => {},
+                  }
+                : null
+            }
+            mute={
+              group.kind === "persona" && group.persona?.kind === "kai"
+                ? { muted, onToggle: toggleMute }
+                : null
+            }
+            onOpenSettings={
+              group.kind === "group" ? () => setShowSettings(true) : undefined
+            }
             showModelPicker={!!group.clientGenerated}
             canStartQuest={
-              !!group.persona && (!questState || !!questState.completed)
+              !!group.persona &&
+              (group.kind !== "group" || group.persona.kind === "kai") &&
+              (!questState || !!questState.completed)
             }
             onStartQuest={
               group.persona ? () => setShowQuestPicker(true) : undefined
@@ -1037,6 +1130,15 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           </div>
         </div>
       </div>
+
+      {showSettings && group && group.kind === "group" && (
+        <GroupSettings
+          group={group}
+          onClose={() => setShowSettings(false)}
+          onReload={load}
+          onLeft={() => router.push("/chat")}
+        />
+      )}
 
       {showKey && group && (
         <GroupKeyDialog
