@@ -28,7 +28,7 @@ export default function SettingsClient({ email }: { email: string }) {
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-5 sm:px-8 min-w-0">
+    <div className="mx-auto flex w-full max-w-2xl min-w-0 flex-col gap-5 px-4 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] sm:px-8 sm:pb-8">
       {/* Tabs */}
       <div className="grid grid-cols-2 gap-1.5 sm:flex sm:gap-2 rounded-2xl border-2 border-border bg-card p-1.5">
         {tabs.map((t) => (

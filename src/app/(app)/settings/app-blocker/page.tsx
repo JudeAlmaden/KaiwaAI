@@ -376,7 +376,7 @@ export default function AppBlockerSettings() {
   // link or a bookmark, so point the learner back to Settings.
   if (!appBlockerSupported) {
     return (
-      <div className="pb-28 sm:pb-10">
+      <div className="pb-[calc(7rem+env(safe-area-inset-bottom,0px))] sm:pb-10">
         {isStandalonePage && (
           <PageHeader
             title="App Blocker"
@@ -407,7 +407,7 @@ export default function AppBlockerSettings() {
   }
 
   return (
-    <div className={isStandalonePage ? "pb-28 sm:pb-10" : ""}>
+    <div className={isStandalonePage ? "pb-[calc(7rem+env(safe-area-inset-bottom,0px))] sm:pb-10" : ""}>
       {isStandalonePage && (
         <PageHeader
           title="App Blocker"

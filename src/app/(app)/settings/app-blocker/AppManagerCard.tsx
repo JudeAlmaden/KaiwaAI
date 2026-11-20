@@ -109,7 +109,7 @@ export default function AppManagerCard({
           <p className="text-xs font-bold text-foreground">No apps found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[360px] overflow-y-auto pr-0.5">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:max-h-[360px] sm:overflow-y-auto sm:pr-0.5">
           {displayedApps.map((app) => {
             const isBlocked = blockedApps.includes(app.packageName);
             return (

@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   GearSix,
   Sparkle,
+  Users,
+  Globe,
 } from "@phosphor-icons/react";
 import Kai from "../Kai";
 import LogoutButton from "../LogoutButton";
@@ -47,7 +49,11 @@ function isNavActive(pathname: string, currentTab: string | null, href: string) 
 }
 
 function isConversationRoute(pathname: string) {
-  return pathname.startsWith("/chat/c/");
+  // Full-screen conversations: the tab bar would sit on top of the composer.
+  return (
+    pathname.startsWith("/chat/c/") ||
+    pathname.startsWith("/chat/strangers/")
+  );
 }
 
 type NavLinkItem = {
@@ -75,10 +81,12 @@ function SidebarNav({
   pathname,
   dueCount,
   hasUnreadKai,
+  strangerEnabled,
 }: {
   pathname: string;
   dueCount: number | null;
   hasUnreadKai: boolean;
+  strangerEnabled: boolean;
 }) {
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
@@ -145,6 +153,57 @@ function SidebarNav({
         </nav>
       </div>
 
+      {/* People — places that aren't conversations: contacts, and the one-shot
+          stranger matching action. Mobile keeps both inside the compose sheet. */}
+      <div className="space-y-1 pt-1 border-t border-border/60">
+        <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
+          People
+        </p>
+        <nav className="flex flex-col gap-1">
+          <Link
+            href="/friends"
+            className={`group relative flex items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold transition-all ${
+              pathname.startsWith("/friends")
+                ? "bg-indigo-ai text-white shadow-sm"
+                : "text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
+            }`}
+          >
+            <Users
+              size={20}
+              weight={pathname.startsWith("/friends") ? "fill" : "duotone"}
+              className={
+                pathname.startsWith("/friends")
+                  ? "text-white"
+                  : "text-indigo-ai/70"
+              }
+            />
+            <span>Friends</span>
+            <span
+              className={`ml-auto font-jp text-[11px] ${
+                pathname.startsWith("/friends")
+                  ? "text-white/70"
+                  : "text-muted/40"
+              }`}
+            >
+              友達
+            </span>
+          </Link>
+
+          {strangerEnabled && (
+            <Link
+              href="/chat?queue=1"
+              className="group relative flex items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold text-muted transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai"
+            >
+              <Globe size={20} weight="duotone" className="text-indigo-ai/70" />
+              <span>Meet a stranger</span>
+              <span className="ml-auto font-jp text-[11px] text-muted/40">
+                出会い
+              </span>
+            </Link>
+          )}
+        </nav>
+      </div>
+
       {/* System Navigation Group */}
       <div className="space-y-1 pt-1 border-t border-border/60">
         <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
@@ -186,7 +245,15 @@ function SidebarNav({
 }
 
 /** Desktop modern sidebar (lg+). */
-export function Sidebar({ email, streak }: { email: string; streak: number }) {
+export function Sidebar({
+  email,
+  streak,
+  strangerEnabled = false,
+}: {
+  email: string;
+  streak: number;
+  strangerEnabled?: boolean;
+}) {
   const pathname = usePathname();
   const hasUnreadKai = useUnreadKaiMessages();
   const [dueCount, setDueCount] = useState<number | null>(null);
@@ -233,6 +300,7 @@ export function Sidebar({ email, streak }: { email: string; streak: number }) {
             pathname={pathname}
             dueCount={dueCount}
             hasUnreadKai={hasUnreadKai}
+            strangerEnabled={strangerEnabled}
           />
         </Suspense>
       </div>

@@ -1,143 +1,85 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MagnifyingGlass, PencilSimple } from "@phosphor-icons/react/dist/ssr";
-import FriendsPanel from "../groups/FriendsPanel";
-import PersonaManager from "./PersonaManager";
-import QuestLauncher from "./QuestLauncher";
-import NewChat from "./NewChat";
-import Avatar from "./Avatar";
-import Kai from "../../Kai";
+import { PencilSimple, Users } from "@phosphor-icons/react/dist/ssr";
 import PageHeader from "../PageHeader";
-import { cacheKeys, readCache, writeCache, isUnread } from "@/lib/chat-cache";
-import { MOOD_EMOJI, MOOD_LABEL, isMood } from "@/lib/mood";
+import InboxList from "./InboxList";
+import ComposeSheet, { type ComposeMode } from "./ComposeSheet";
+import StrangerQueueModal from "./strangers/StrangerQueueModal";
+import { useInbox } from "./useInbox";
+import { isUnread } from "@/lib/chat-cache";
 
-type Conversation = {
-  id: string;
-  name: string;
-  kind: string; // persona | dm | group
-  isOwner: boolean;
-  hasKey: boolean;
-  lastMessage: { content: string; senderName: string; fromMe?: boolean } | null;
-  lastAt?: string;
-  mood?: string;
-  members: { kind: string; name?: string | null; avatar?: string | null }[];
-};
-
-type Persona = {
-  id: string;
-  name: string;
-  blurb: string;
-  avatar: string;
-  builtin: boolean;
-  mine: boolean;
-};
-
-export default function ChatHub() {
+/**
+ * Phone hub (`/chat`). On desktop the inbox lives in the rail
+ * (`(inbox)/layout.tsx`), so this page only renders the empty right-hand pane.
+ */
+export default function ChatHub({
+  strangerEnabled = false,
+}: {
+  strangerEnabled?: boolean;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [convos, setConvos] = useState<Conversation[] | null>(null);
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const tabParam = searchParams.get("tab");
-  const tab: "chats" | "ai" | "friends" =
-    tabParam === "ai" || tabParam === "friends" || tabParam === "chats"
-      ? tabParam
-      : "chats";
-  const [composing, setComposing] = useState(false);
-  const [pending, setPending] = useState(0);
-  const [starting, setStarting] = useState(false);
-  const [query, setQuery] = useState("");
+  const {
+    convos,
+    personas,
+    pending,
+    starting,
+    hideConvo,
+    startPersonaChat,
+  } = useInbox();
 
-  function setTab(next: "chats" | "ai" | "friends") {
+  // The tab bar is gone; `?compose=` opens a specific intent, and `?tab=ai|meet`
+  // keeps pre-reset links working for one release.
+  const tabParam = searchParams.get("tab");
+  const legacyCompose: ComposeMode | null =
+    tabParam === "ai" || tabParam === "meet" ? tabParam : null;
+  const composeParam = searchParams.get("compose") ?? legacyCompose;
+  const wantsQuests = composeParam === "quest";
+  const composeIntent: ComposeMode | null = wantsQuests
+    ? "ai"
+    : composeParam === "ai" ||
+        composeParam === "friend" ||
+        composeParam === "group" ||
+        (composeParam === "meet" && strangerEnabled)
+      ? composeParam
+      : null;
+
+  const [composeOpen, setComposeOpen] = useState(
+    () => composeIntent !== null && searchParams.get("queue") !== "1"
+  );
+  const [composeMode, setComposeMode] = useState<ComposeMode>(
+    composeIntent ?? "ai"
+  );
+  const [query, setQuery] = useState("");
+  // A room's "Next" hands over `?queue=1`, so the dialog opens on arrival
+  // instead of flashing the inbox for a frame.
+  const [queueOpen, setQueueOpen] = useState(
+    () => strangerEnabled && searchParams.get("queue") === "1"
+  );
+
+  // Drop the handover params once they have opened their dialog, so a refresh
+  // never re-queues or reopens the sheet.
+  useEffect(() => {
+    const hasCompose =
+      searchParams.has("compose") || tabParam === "ai" || tabParam === "meet";
+    if (!searchParams.has("queue") && !hasCompose) return;
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "chats") params.delete("tab");
-    else params.set("tab", next);
+    params.delete("queue");
+    params.delete("compose");
+    if (params.get("tab") === "ai" || params.get("tab") === "meet") {
+      params.delete("tab");
+    }
     const qs = params.toString();
     router.replace(qs ? `/chat?${qs}` : "/chat", { scroll: false });
-  }
+  }, [searchParams, router, tabParam]);
 
-  const loadConvos = useCallback(() => {
-    fetch("/api/groups")
-      .then((r) => r.json())
-      .then((d) => {
-        const list: Conversation[] = d.groups ?? [];
-        setConvos(list);
-        writeCache(cacheKeys.convos, list);
-      })
-      .catch(() => setConvos((c) => c ?? []));
-  }, []);
-
-  const loadPersonas = useCallback(() => {
-    fetch("/api/personas")
-      .then((r) => r.json())
-      .then((d) => {
-        const list: Persona[] = d.personas ?? [];
-        setPersonas(list);
-        writeCache(cacheKeys.personas, list);
-      })
-      .catch(() => { });
-  }, []);
-
-  const loadPending = useCallback(() => {
-    Promise.all([
-      fetch("/api/friends").then((r) => r.json()).catch(() => ({})),
-      fetch("/api/invites").then((r) => r.json()).catch(() => ({})),
-    ]).then(([f, i]) => {
-      setPending((f.incoming?.length ?? 0) + (i.invites?.length ?? 0));
-    });
-  }, []);
-
+  // The Friends tab is gone; keep its old links working.
   useEffect(() => {
-    // Paint cached conversations + personas instantly, then refresh.
-    const cachedC = readCache<Conversation[]>(cacheKeys.convos);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (cachedC) setConvos(cachedC);
-    const cachedP = readCache<Persona[]>(cacheKeys.personas);
-    if (cachedP) setPersonas(cachedP);
-    loadConvos();
-    loadPersonas();
-    loadPending();
-  }, [loadConvos, loadPersonas, loadPending]);
-
-  // Open (or create+open) a 1:1 persona conversation.
-  async function startPersonaChat(personaId: string) {
-    if (starting) return;
-    setStarting(true);
-    try {
-      const res = await fetch("/api/groups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personaId }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (res.ok && d.group?.id) router.push(`/chat/c/${d.group.id}`);
-    } catch {
-      // ignore
-    } finally {
-      setStarting(false);
-    }
-  }
-
-  const tabs: { id: typeof tab; label: string }[] = [
-    { id: "chats", label: "Chats" },
-    { id: "ai", label: "AI" },
-    { id: "friends", label: "Friends" },
-  ];
-
-
-
-  const filteredConvos = useMemo(() => {
-    if (!convos) return null;
-    const q = query.trim().toLowerCase();
-    if (!q) return convos;
-    return convos.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.lastMessage?.content ?? "").toLowerCase().includes(q)
-    );
-  }, [convos, query]);
+    if (tabParam === "friends") router.replace("/friends");
+  }, [tabParam, router]);
 
   const unreadCount = useMemo(() => {
     if (!convos) return 0;
@@ -146,406 +88,118 @@ export default function ChatHub() {
     ).length;
   }, [convos]);
 
-  const dynamicSubtitle = useMemo(() => {
+  const subtitle = useMemo(() => {
     if (unreadCount > 0) {
       return `You have ${unreadCount} unread conversation${unreadCount === 1 ? "" : "s"}`;
     }
-    if (convos?.length === 0) {
-      return "Start your first conversation with Kai";
-    }
+    if (convos?.length === 0) return "Start your first conversation with Kai";
     return "Talk to AI personas, friends, and groups";
   }, [unreadCount, convos]);
 
-  const hasKaiThread = useMemo(
-    () =>
-      !!convos?.some(
-        (c) =>
-          c.kind === "persona" &&
-          c.name.trim().toLowerCase() === "kai"
-      ),
-    [convos]
-  );
+  const openCompose = (mode: ComposeMode) => {
+    setComposeMode(mode);
+    setComposeOpen(true);
+  };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        title="Chat"
-        jp="会話"
-        subtitle={dynamicSubtitle}
-        compact
-        action={
-          tab === "chats" ? (
-            <button
-              onClick={() => setComposing(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
-              aria-label="New chat"
-              title="New chat"
-            >
-              <PencilSimple size={18} weight="bold" />
-            </button>
-          ) : undefined
-        }
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-8 sm:py-5">
-        <div className="mx-auto max-w-2xl flex flex-col gap-4">
-          <div className="flex items-center gap-2">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`relative rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${tab === t.id
-                    ? "bg-indigo-ai text-white shadow-sm"
-                    : "text-muted hover:bg-indigo-ai/10"
-                  }`}
+    <>
+      <div className="flex h-full min-h-0 flex-col lg:hidden">
+        <PageHeader
+          title="Chat"
+          jp="会話"
+          subtitle={subtitle}
+          compact
+          action={
+            <div className="flex items-center gap-2">
+              <Link
+                href="/friends"
+                className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+                aria-label="Friends"
+                title="Friends"
               >
-                {t.label}
-                {t.id === "friends" && pending > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-sakura px-1 text-[10px] font-bold text-white">
-                    {pending}
-                  </span>
-                )}
+                <Users size={18} weight="bold" />
+              </Link>
+              <button
+                onClick={() => openCompose("ai")}
+                className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
+                aria-label="New chat"
+                title="New chat"
+              >
+                <PencilSimple size={18} weight="bold" />
               </button>
-            ))}
-          </div>
-
-          {tab === "chats" && (
-            <div className="flex flex-col gap-3">
-              {/* Kai hero only when no Kai thread exists yet */}
-              {!hasKaiThread && (
-                <KaiHeroCard
-                  onStartChat={startPersonaChat}
-                  personas={personas}
-                  loading={starting}
-                />
-              )}
-
-              {convos && convos.length > 4 && (
-                <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
-                  <MagnifyingGlass size={16} className="text-muted" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search conversations…"
-                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted/60"
-                  />
-                </div>
-              )}
-
-              {convos === null && (
-                <div className="flex flex-col gap-2">
-                  {[0, 1, 2].map((i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 rounded-2xl border-2 border-border px-4 py-3"
-                    >
-                      <span className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-border/50" />
-                      <span className="flex-1 space-y-2">
-                        <span className="block h-3 w-1/3 animate-pulse rounded bg-border/50" />
-                        <span className="block h-2.5 w-2/3 animate-pulse rounded bg-border/40" />
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {convos?.length === 0 && (
-                <div className="rounded-3xl border-2 border-dashed border-border px-6 py-6 text-center">
-                  <p className="text-sm text-muted">
-                    Tap Kai above to start — or use + for a friend or group.
-                  </p>
-                </div>
-              )}
-
-              {filteredConvos?.map((c) => (
-                <ConversationRow
-                  key={c.id}
-                  convo={c}
-                  onHide={(id) => {
-                    setConvos(
-                      (convos) =>
-                        convos?.filter((conv) => conv.id !== id) ?? null
-                    );
-                    fetch(`/api/groups/${id}/hide`, { method: "POST" }).catch(
-                      () => {
-                        loadConvos();
-                      }
-                    );
-                  }}
-                />
-              ))}
-
-              {filteredConvos?.length === 0 && convos && convos.length > 0 && (
-                <p className="py-6 text-center text-sm text-muted">
-                  No conversations match &ldquo;{query}&rdquo;.
-                </p>
-              )}
             </div>
-          )}
+          }
+        />
 
-          {tab === "ai" && (
-            <div className="flex flex-col gap-6">
-              <p className="text-sm text-muted">
-                Custom personas for 1:1 chat. Roleplay quests live below.
-              </p>
-              <PersonaManager
-                personas={personas}
-                onChange={loadPersonas}
-                onStartChat={startPersonaChat}
-              />
-
-              <div className="flex items-center gap-3">
-                <span className="h-px flex-1 bg-border" />
-                <span className="text-xs font-bold uppercase tracking-wider text-muted/60">
-                  Quests
-                </span>
-                <span className="h-px flex-1 bg-border" />
-              </div>
-
-              <QuestLauncher
-                onStartQuest={(groupId) => {
-                  loadConvos();
-                  router.push(`/chat/c/${groupId}`);
-                }}
-              />
-            </div>
-          )}
-
-          {tab === "friends" && <FriendsPanel />}
-
-          {composing && (
-            <NewChat
-              onClose={() => setComposing(false)}
-              onCreated={(id) => {
-                setComposing(false);
-                router.push(`/chat/c/${id}`);
-              }}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] sm:px-8 sm:py-5 sm:pb-5">
+          <div className="mx-auto w-full max-w-2xl">
+            <InboxList
+              convos={convos}
+              personas={personas}
+              pending={pending}
+              starting={starting}
+              query={query}
+              onQuery={setQuery}
+              onStartPersona={startPersonaChat}
+              onHide={hideConvo}
+              onCompose={openCompose}
+              strangerEnabled={strangerEnabled}
             />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function relativeTime(iso?: string): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const s = Math.floor((Date.now() - then) / 1000);
-  if (s < 60) return "now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d`;
-  return `${Math.floor(d / 7)}w`;
-}
-
-function ConversationRow({
-  convo,
-  onHide,
-}: {
-  convo: {
-    id: string;
-    name: string;
-    kind: string;
-    lastMessage: { content: string; senderName: string; fromMe?: boolean } | null;
-    lastAt?: string;
-    mood?: string;
-    members: { kind: string; name?: string | null; avatar?: string | null }[];
-  };
-  onHide: (id: string) => void;
-}) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const personaMember = convo.members.find((m) => m.kind === "persona");
-  const isAi = convo.kind === "persona";
-  const isGroup = convo.kind === "group";
-  const unread = isUnread(convo.id, convo.lastAt, convo.lastMessage?.fromMe ?? false);
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    if (menuOpen) {
-      document.addEventListener("mousedown", handleClick);
-      return () => document.removeEventListener("mousedown", handleClick);
-    }
-  }, [menuOpen]);
-
-  const handleHide = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setMenuOpen(false);
-    onHide(convo.id);
-  };
-
-  const avatar = isGroup ? (
-    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-ai/20 to-sakura/20 text-2xl">
-      👥
-    </span>
-  ) : isAi && personaMember ? (
-    <Avatar name={personaMember.name} emoji={personaMember.avatar} size={48} />
-  ) : (
-    <Avatar name={convo.name} size={48} />
-  );
-
-  const preview = convo.lastMessage
-    ? convo.kind === "dm" || convo.kind === "persona"
-      ? convo.lastMessage.content
-      : `${convo.lastMessage.senderName}: ${convo.lastMessage.content}`
-    : "Tap to start chatting";
-  const time = relativeTime(convo.lastAt);
-
-  return (
-    <Link
-      href={`/chat/c/${convo.id}`}
-      className="group relative flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-3.5 py-3 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md"
-    >
-      <div className="relative">
-        {avatar}
-        {isAi && (
-          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai text-[8px] text-white ring-2 ring-card">
-            ✨
-          </span>
-        )}
-      </div>
-
-      <span className="relative min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className={`truncate ${unread ? "font-extrabold" : "font-bold"}`}>
-            {convo.name}
-          </span>
-          {isAi && isMood(convo.mood) && (
-            <span
-              className="shrink-0 text-sm leading-none"
-              title={`Mood: ${MOOD_LABEL[convo.mood]}`}
-              aria-label={`Mood: ${MOOD_LABEL[convo.mood]}`}
-            >
-              {MOOD_EMOJI[convo.mood]}
-            </span>
-          )}
-          {isGroup && (
-            <span className="rounded-full bg-indigo-ai/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-indigo-ai">
-              Group
-            </span>
-          )}
-          {time && (
-            <span
-              className={`ml-auto shrink-0 text-[11px] font-semibold ${unread ? "text-indigo-ai" : "text-muted/70"
-                }`}
-            >
-              {time}
-            </span>
-          )}
-        </span>
-        <span className="mt-0.5 flex items-center gap-2">
-          <span
-            className={`min-w-0 flex-1 truncate text-xs ${!convo.lastMessage
-                ? "italic text-muted/60"
-                : unread
-                  ? "font-bold text-foreground"
-                  : "text-muted"
-              }`}
-          >
-            {preview}
-          </span>
-          {unread && (
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-sakura" aria-label="Unread" />
-          )}
-        </span>
-      </span>
-
-      {/* Three-dots menu */}
-      <div ref={menuRef} className="relative z-10">
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setMenuOpen(!menuOpen);
-          }}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai sm:opacity-0 sm:group-hover:opacity-100"
-          aria-label="Conversation options"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <circle cx="8" cy="3" r="1.5" />
-            <circle cx="8" cy="8" r="1.5" />
-            <circle cx="8" cy="13" r="1.5" />
-          </svg>
-        </button>
-
-        {menuOpen && (
-          <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border-2 border-border bg-card p-1 shadow-xl">
-            <button
-              onClick={handleHide}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-border/40"
-            >
-              <span className="text-base">🙈</span>
-              <span>
-                <span className="block font-bold text-foreground">Hide conversation</span>
-                <span className="block text-xs text-muted">Reappears if someone messages you</span>
-              </span>
-            </button>
           </div>
-        )}
+        </div>
+
+        {/* One compose action for the whole hub; the island nav stays put. */}
+        <button
+          onClick={() => openCompose("ai")}
+          aria-label="New chat"
+          className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-ai text-white shadow-xl shadow-indigo-ai/35 ring-4 ring-bg transition-transform active:scale-95"
+        >
+          <PencilSimple size={22} weight="bold" />
+        </button>
       </div>
-    </Link>
-  );
-}
 
-/** Hero shortcut to the Kai persona — always pinned at the top of the chats list. */
-function KaiHeroCard({
-  onStartChat,
-  personas,
-  loading,
-}: {
-  onStartChat: (id: string) => void;
-  personas: { id: string; name: string; builtin: boolean }[];
-  loading: boolean;
-}) {
-  const kaiPersona = personas.find(
-    (p) => p.builtin && p.name.trim().toLowerCase() === "kai"
-  );
-
-  if (!kaiPersona) {
-    // Personas not yet loaded — show a skeleton
-    return (
-      <div className="flex animate-pulse items-center gap-4 rounded-3xl border-2 border-border bg-card p-4 shadow-sm">
-        <span className="h-14 w-14 shrink-0 rounded-full bg-border/50" />
-        <span className="flex-1 space-y-2">
-          <span className="block h-4 w-24 rounded bg-border/50" />
-          <span className="block h-3 w-40 rounded bg-border/40" />
+      {/* Desktop: the rail holds the inbox, so `/chat` itself is the empty pane. */}
+      <div className="hidden h-full flex-1 flex-col items-center justify-center px-8 text-center lg:flex">
+        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-ai/10 text-3xl ring-2 ring-indigo-ai/20">
+          💬
         </span>
+        <p className="mt-4 font-display text-lg font-extrabold">No chat selected</p>
+        <p className="mt-1 max-w-xs text-sm text-muted">
+          Pick a conversation on the left, or start a new one.
+        </p>
+        <button
+          onClick={() => openCompose("ai")}
+          className="mt-5 min-h-11 rounded-full bg-indigo-ai px-5 font-display text-sm font-bold text-white shadow-md shadow-indigo-ai/25 transition-colors hover:bg-indigo-deep"
+        >
+          New chat
+        </button>
       </div>
-    );
-  }
 
-  return (
-    <button
-      onClick={() => onStartChat(kaiPersona.id)}
-      disabled={loading}
-      className="flex w-full items-center gap-4 rounded-3xl border-2 border-indigo-ai/25 bg-gradient-to-br from-indigo-ai/8 to-sakura/5 p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-ai/50 hover:shadow-md active:scale-[0.99] disabled:opacity-70"
-    >
-      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 ring-2 ring-indigo-ai/20">
-        <Kai size={32} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="font-display text-base font-extrabold text-foreground">Kai</span>
-          <span className="rounded-full bg-indigo-ai/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-ai">
-            AI Tutor
-          </span>
-        </span>
-        <span className="mt-0.5 block truncate text-xs text-muted">
-          Your Japanese companion — tap to start chatting
-        </span>
-      </span>
-      <span className="shrink-0 text-lg text-indigo-ai/40">›</span>
-    </button>
+      {composeOpen && (
+        <ComposeSheet
+          mode={composeMode}
+          onModeChange={setComposeMode}
+          onClose={() => setComposeOpen(false)}
+          onCreated={(id) => {
+            setComposeOpen(false);
+            router.push(`/chat/c/${id}`);
+          }}
+          onMeet={() => {
+            setComposeOpen(false);
+            setQueueOpen(true);
+          }}
+          onQuest={(groupId) => {
+            setComposeOpen(false);
+            router.push(`/chat/c/${groupId}`);
+          }}
+          strangerEnabled={strangerEnabled}
+          initialQuestsOpen={wantsQuests}
+        />
+      )}
+
+      {strangerEnabled && queueOpen && (
+        <StrangerQueueModal onClose={() => setQueueOpen(false)} />
+      )}
+    </>
   );
 }

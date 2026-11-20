@@ -60,6 +60,15 @@ model User {
 
   // ── Push notifications ──
   pushSubscriptions PushSubscription[]
+
+  // ── Stranger chat (ephemeral random rooms) ──
+  strangerQueueEntry     StrangerQueueEntry?
+  strangerParticipations StrangerParticipant[]
+  strangerMessages       StrangerMessage[]
+  strangerBlocksMade     StrangerBlock[]      @relation("StrangerBlocker")
+  strangerBlocksReceived StrangerBlock[]      @relation("StrangerBlocked")
+  strangerReportsMade    StrangerReport[]     @relation("StrangerReporter")
+  strangerReportsReceived StrangerReport[]    @relation("StrangerReported")
 }
 
 // A reusable AI character. Kai ships as a built-in (seeded with a null userId);
@@ -526,6 +535,119 @@ model Phrase {
   @@index([userId])
   @@index([text])
   @@index([userId, verified])
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Stranger chat — ephemeral random 1:1 rooms (/chat/strangers)
+//
+// Deliberately separate from Chat/ChatMember/Message: those require an owner,
+// invites and hide state and feed the persistent conversation list. Rows here
+// are TTL-scoped and deleted by the lazy reaper in src/lib/stranger/cleanup.ts.
+// ════════════════════════════════════════════════════════════════════════════
+
+// One row per user waiting to be matched. `userId` is unique, so joining again
+// refreshes the existing entry instead of stacking duplicates.
+model StrangerQueueEntry {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alias      String
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+// A matched room. Short-lived: 30 min idle, extended by messages up to 2 h.
+model StrangerSession {
+  id            String    @id @default(cuid())
+  status        String    @default("active") // active | ended
+  endReason     String? // skip | leave | expired | reported
+  createdAt     DateTime  @default(now())
+  endedAt       DateTime?
+  expiresAt     DateTime
+  lastMessageAt DateTime?
+
+  participants StrangerParticipant[]
+  messages     StrangerMessage[]
+  reports      StrangerReport[]
+
+  @@index([status, expiresAt])
+  @@index([expiresAt])
+}
+
+// A side of a room. `leftAt` is the leave/skip timestamp; matchmaking ignores
+// anyone with a live participant row.
+//
+// NOTE: a partial unique index created in the migration
+// (`stranger_participant_one_active` on userId WHERE leftAt IS NULL) is the
+// database-level guarantee that one account is never in two rooms at once.
+// Prisma cannot express partial indexes; don't drop it as "drift".
+model StrangerParticipant {
+  id         String          @id @default(cuid())
+  sessionId  String
+  session    StrangerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alias      String
+  joinedAt   DateTime        @default(now())
+  lastSeenAt DateTime        @default(now())
+  lastReadAt DateTime?
+  leftAt     DateTime?
+  leftReason String? // skip | leave
+
+  messages StrangerMessage[]
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId, leftAt])
+}
+
+model StrangerMessage {
+  id            String              @id @default(cuid())
+  sessionId     String
+  session       StrangerSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   StrangerParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  senderUserId  String
+  senderUser    User                @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  body          String
+  createdAt     DateTime            @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([senderUserId, createdAt])
+}
+
+// Safety foundation: matchmaking never pairs two users who blocked each other.
+// The block/report UI ships in Phase 3.
+model StrangerBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blocker   User     @relation("StrangerBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("StrangerBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model StrangerReport {
+  id         String          @id @default(cuid())
+  sessionId  String
+  session    StrangerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  reporterId String
+  reporter   User            @relation("StrangerReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId String
+  reported   User            @relation("StrangerReported", fields: [reportedId], references: [id], onDelete: Cascade)
+  reason     String
+  note       String?
+  createdAt  DateTime        @default(now())
+
+  @@index([sessionId])
+  @@index([reportedId, createdAt])
 }
 
 // Web Push subscription for a user's device.

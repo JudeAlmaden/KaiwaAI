@@ -85,6 +85,7 @@ Set the following values in `.env`; do not commit that file.
 | `ENCRYPTION_KEY` | Base64-encoded 32-byte AES-GCM key for stored server Gemini keys |
 | `TRIGGER_SECRET` | Bearer token for protected trigger endpoints |
 | `CRON_SECRET` | Bearer token expected from the Vercel cron job |
+| `STRANGER_CHAT_ENABLED` | Optional. `true` (or `1`) exposes random stranger chat — the **Meet** tab in `/chat` and `/chat/strangers`; unset or any other value hides the tab and returns 404 from `/api/stranger/*`. Requires the `Stranger*` tables from `npx prisma migrate deploy` |
 
 Useful commands:
 
@@ -115,7 +116,9 @@ Authenticated routes:
 | Route | Purpose |
 | --- | --- |
 | `/home` | Dashboard: level, streak, vocabulary, kanji, due cards, and activity |
-| `/chat` | Personal Kai/persona conversation hub and chat creation |
+| `/chat` | One inbox for AI personas, friends and groups, with a compose sheet for starting new chats (including strangers) |
+| `/chat/personas` | Create, edit and start chats with AI personas |
+| `/friends` | Friends, pending requests and group invites |
 | `/chat/c/[id]` | A selected personal, direct-message, or group conversation |
 | `/review` | Vocabulary, kanji, and mixed SRS sessions |
 | `/vocab` | Saved word and phrase decks, lookup, search, filters, and card management |

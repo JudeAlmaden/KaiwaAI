@@ -861,7 +861,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               <button
                 onClick={() => {
                   clearQuestForConv(groupId);
-                  router.push("/chat?tab=ai");
+                  router.push("/chat?compose=quest");
                 }}
                 className="btn-pop rounded-full bg-indigo-ai px-5 py-2 text-sm font-bold text-white"
               >
