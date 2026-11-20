@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 
 export const MAX_HUMAN_MEMBERS = 5;
+/** New message requests a single account may send per hour. */
+export const MAX_MESSAGE_REQUESTS_PER_HOUR = 5;
+const MESSAGE_REQUEST_WINDOW_MS = 60 * 60 * 1000;
 
 /** The one DM between two users, if it already exists. */
 function dmBetween(aId: string, bId: string) {
@@ -152,6 +155,27 @@ export async function POST(req: Request) {
         );
       }
       return NextResponse.json({ group: existing, reused: true, request: !isFriend });
+    }
+
+    if (!isFriend) {
+      // Counted from the DM rows themselves (owner + a second member) so the
+      // limit holds across serverless instances and a decline cannot reset it.
+      const sent = await prisma.chat.count({
+        where: {
+          ownerId: user.id,
+          kind: "dm",
+          createdAt: { gte: new Date(Date.now() - MESSAGE_REQUEST_WINDOW_MS) },
+          members: { some: { kind: "user", userId: { not: user.id } } },
+        },
+      });
+      if (sent >= MAX_MESSAGE_REQUESTS_PER_HOUR) {
+        return NextResponse.json(
+          {
+            error: `You can send ${MAX_MESSAGE_REQUESTS_PER_HOUR} message requests an hour. Try again later.`,
+          },
+          { status: 429 }
+        );
+      }
     }
 
     const chat = await prisma.chat.create({

@@ -7,7 +7,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findFirst: vi.fn() },
     friendship: { findFirst: vi.fn() },
-    chat: { findFirst: vi.fn(), create: vi.fn() },
+    chat: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn() },
     chatMember: { findFirst: vi.fn() },
   },
 }));
@@ -34,6 +34,7 @@ describe("/api/groups POST - message requests", () => {
     vi.clearAllMocks();
     vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(me as never);
     vi.mocked(prisma.chat.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.chat.count).mockResolvedValue(0);
   });
 
   it("matches the email regardless of case and makes a stranger's membership pending", async () => {
@@ -94,6 +95,36 @@ describe("/api/groups POST - message requests", () => {
         },
       }),
     });
+  });
+
+  it("429s once the hourly request cap is reached, without creating a chat", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(them as never);
+    vi.mocked(prisma.friendship.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.chat.count).mockResolvedValue(5);
+
+    const res = await post({ email: "hana@example.com" });
+
+    expect(res.status).toBe(429);
+    await expect(res.json()).resolves.toEqual({
+      error: "You can send 5 message requests an hour. Try again later.",
+    });
+    expect(prisma.chat.create).not.toHaveBeenCalled();
+  });
+
+  it("does not spend the cap on a friend DM", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(them as never);
+    vi.mocked(prisma.friendship.findFirst).mockResolvedValue({ id: "f1" } as never);
+    vi.mocked(prisma.chat.count).mockResolvedValue(99);
+    vi.mocked(prisma.chat.create).mockResolvedValue({
+      id: "dm3",
+      name: "Hana",
+      kind: "dm",
+    } as never);
+
+    const res = await post({ email: "hana@example.com" });
+
+    expect(res.status).toBe(200);
+    expect(prisma.chat.count).not.toHaveBeenCalled();
   });
 
   it("404s on an address no account uses", async () => {

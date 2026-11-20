@@ -234,24 +234,19 @@ export default function InboxList({
   personas,
   starting,
   query,
-  onQuery,
   onStartPersona,
   onHide,
   onNewChat,
   activeId,
-  searchInList = true,
 }: {
   convos: Conversation[] | null;
   personas: Persona[];
   starting: boolean;
   query: string;
-  onQuery: (value: string) => void;
   onStartPersona: (personaId: string) => void;
   onHide: (id: string) => void;
   onNewChat: () => void;
   activeId?: string;
-  /** The rail pins its own search row above the list. */
-  searchInList?: boolean;
 }) {
   const q = query.trim().toLowerCase();
   const filtered = convos
@@ -266,7 +261,6 @@ export default function InboxList({
   const hasKaiThread = !!convos?.some(
     (c) => c.kind === "persona" && c.name.trim().toLowerCase() === "kai"
   );
-  const showSearch = !!convos && convos.length > 3;
   return (
     <div className="flex flex-col gap-3">
       {!hasKaiThread && (
@@ -274,14 +268,6 @@ export default function InboxList({
           onStartChat={onStartPersona}
           personas={personas}
           loading={starting}
-        />
-      )}
-
-      {searchInList && showSearch && (
-        <InboxSearchRow
-          query={query}
-          onQuery={onQuery}
-          onNewChat={onNewChat}
         />
       )}
 

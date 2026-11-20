@@ -14,6 +14,9 @@ const MODES: { id: ComposeMode; label: string }[] = [
   { id: "group", label: "New group" },
 ];
 
+/** Server cap is 5 humans including you. */
+const MAX_GROUP_FRIENDS = 4;
+
 /**
  * Writing only: pick a friend or persona to message, send a message request to
  * someone who is not a friend yet, or create a group. Contacts management lives
@@ -68,7 +71,7 @@ export default function NewChatSheet({
     setPickedFriends((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
-      else next.add(id);
+      else if (next.size < MAX_GROUP_FRIENDS) next.add(id);
       return next;
     });
   }
@@ -300,12 +303,21 @@ export default function NewChatSheet({
                       <Chip
                         key={entry.friendshipId}
                         active={pickedFriends.has(entry.user.id)}
+                        disabled={
+                          !pickedFriends.has(entry.user.id) &&
+                          pickedFriends.size >= MAX_GROUP_FRIENDS
+                        }
                         onClick={() => toggleFriend(entry.user.id)}
                       >
                         {personLabel(entry.user)}
                       </Chip>
                     ))}
                   </div>
+                )}
+                {pickedFriends.size >= MAX_GROUP_FRIENDS && (
+                  <p className="mt-1.5 px-1 text-[11px] text-muted">
+                    {MAX_GROUP_FRIENDS} friends is the most a group can hold.
+                  </p>
                 )}
               </div>
 

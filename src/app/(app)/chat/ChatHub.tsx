@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PencilSimple, Users } from "@phosphor-icons/react/dist/ssr";
 import PageHeader from "../PageHeader";
-import InboxList from "./InboxList";
+import InboxList, { InboxSearchRow } from "./InboxList";
 import PeopleSheet, { type PeopleFocus } from "./PeopleSheet";
 import NewChatSheet, { type ComposeMode } from "./NewChatSheet";
 import RequestsRow from "./RequestsRow";
@@ -143,6 +143,15 @@ export default function ChatHub({
           }
         />
 
+        {/* Same pinned search as the rail, so phones can filter with few chats. */}
+        <div className="px-4 pt-3 sm:px-8">
+          <InboxSearchRow
+            query={query}
+            onQuery={setQuery}
+            onNewChat={openWrite}
+          />
+        </div>
+
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] sm:px-8 sm:py-5 sm:pb-5">
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
             <RequestsRow onOpen={() => setPeople({ focus: "requests" })} />
@@ -152,7 +161,6 @@ export default function ChatHub({
               personas={personas}
               starting={starting}
               query={query}
-              onQuery={setQuery}
               onStartPersona={startPersonaChat}
               onHide={hideConvo}
               onNewChat={openWrite}

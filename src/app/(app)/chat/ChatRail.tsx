@@ -83,12 +83,10 @@ export default function ChatRail({
             personas={personas}
             starting={starting}
             query={query}
-            onQuery={setQuery}
             onStartPersona={startPersonaChat}
             onHide={hideConvo}
             onNewChat={() => setWrite({ mode: "people", focusSearch: true })}
             activeId={activeId}
-            searchInList={false}
           />
           <MeetRow strangerEnabled={strangerEnabled} />
         </div>
