@@ -22,7 +22,8 @@ export default function PersonaManager({
 }: {
   personas: Persona[];
   onChange: () => void;
-  onStartChat: (id: string) => void;
+  /** Only needed when the Chat buttons are shown. */
+  onStartChat?: (id: string) => void;
   /** Single-column rows for the People sheet instead of the page's card grid. */
   compact?: boolean;
   /** People manages personas; writing to one happens in the New chat sheet. */
@@ -86,7 +87,7 @@ export default function PersonaManager({
                 )}
                 {showChat && (
                   <button
-                    onClick={() => onStartChat(p.id)}
+                    onClick={() => onStartChat?.(p.id)}
                     className="shrink-0 rounded-full bg-indigo-ai px-3 py-1 text-[11px] font-extrabold text-white transition-colors hover:bg-indigo-deep"
                   >
                     Chat
@@ -126,7 +127,7 @@ export default function PersonaManager({
                   </span>
                 )}
                 <button
-                  onClick={() => onStartChat(p.id)}
+                  onClick={() => onStartChat?.(p.id)}
                   className="rounded-full bg-indigo-ai px-3 py-1 text-xs font-extrabold text-white transition-colors hover:bg-indigo-deep cursor-pointer"
                 >
                   Chat

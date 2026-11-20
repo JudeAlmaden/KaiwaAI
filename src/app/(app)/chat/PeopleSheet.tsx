@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import PersonaManager from "./PersonaManager";
 import { useInboxContext, usePeopleContext } from "./InboxProvider";
 import { personLabel } from "./usePeople";
@@ -15,6 +15,43 @@ function Initial({ name, size = 32 }: { name: string; size?: number }) {
     >
       {name.charAt(0)}
     </span>
+  );
+}
+
+/** One waiting request: a friend request or a group/message invite. */
+function RequestCard({
+  avatar,
+  title,
+  subtitle,
+  onAccept,
+  onDecline,
+}: {
+  avatar: ReactNode;
+  title: string;
+  subtitle: string;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-2xl border-2 border-sakura/30 bg-sakura/5 px-3 py-2">
+      {avatar}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold">{title}</span>
+        <span className="block truncate text-[11px] text-muted">{subtitle}</span>
+      </span>
+      <button
+        onClick={onAccept}
+        className="shrink-0 rounded-full bg-mint px-2.5 py-1 text-[11px] font-bold text-white"
+      >
+        Accept
+      </button>
+      <button
+        onClick={onDecline}
+        className="shrink-0 rounded-full border-2 border-border px-2.5 py-1 text-[11px] font-bold text-muted"
+      >
+        Decline
+      </button>
+    </div>
   );
 }
 
@@ -49,8 +86,6 @@ export default function PeopleSheet({
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const searchRef = useRef<HTMLInputElement>(null);
   const requestsRef = useRef<HTMLDivElement>(null);
   const personasRef = useRef<HTMLDivElement>(null);
 
@@ -117,7 +152,6 @@ export default function PeopleSheet({
 
         <div className="mt-3 px-5">
           <input
-            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search friends and personas…"
@@ -133,64 +167,32 @@ export default function PeopleSheet({
                   Requests
                 </p>
                 {incoming.map((entry) => (
-                  <div
+                  <RequestCard
                     key={entry.friendshipId}
-                    className="flex items-center gap-2 rounded-2xl border-2 border-sakura/30 bg-sakura/5 px-3 py-2"
-                  >
-                    <Initial name={personLabel(entry.user)} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-bold">
-                        {personLabel(entry.user)}
-                      </span>
-                      <span className="block text-[11px] text-muted">
-                        wants to be friends
-                      </span>
-                    </span>
-                    <button
-                      onClick={() => void accept(entry.friendshipId)}
-                      className="shrink-0 rounded-full bg-mint px-2.5 py-1 text-[11px] font-bold text-white"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => void remove(entry.friendshipId)}
-                      className="shrink-0 rounded-full border-2 border-border px-2.5 py-1 text-[11px] font-bold text-muted"
-                    >
-                      Decline
-                    </button>
-                  </div>
+                    avatar={<Initial name={personLabel(entry.user)} />}
+                    title={personLabel(entry.user)}
+                    subtitle="wants to be friends"
+                    onAccept={() => void accept(entry.friendshipId)}
+                    onDecline={() => void remove(entry.friendshipId)}
+                  />
                 ))}
                 {invites.map((invite) => (
-                  <div
+                  <RequestCard
                     key={invite.memberId}
-                    className="flex items-center gap-2 rounded-2xl border-2 border-sakura/30 bg-sakura/5 px-3 py-2"
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-base">
-                      {invite.persona?.avatar ?? (invite.kind === "dm" ? "✉️" : "👥")}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-bold">
-                        {invite.groupName}
+                    avatar={
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-base">
+                        {invite.persona?.avatar ?? (invite.kind === "dm" ? "✉️" : "👥")}
                       </span>
-                      <span className="block truncate text-[11px] text-muted">
-                        {invite.kind === "dm"
-                          ? `${invite.invitedBy} wants to message you`
-                          : `Invite from ${invite.invitedBy} · ${invite.memberCount} members`}
-                      </span>
-                    </span>
-                    <button
-                      onClick={() => void acceptInvite(invite.memberId)}
-                      className="shrink-0 rounded-full bg-mint px-2.5 py-1 text-[11px] font-bold text-white"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => void declineInvite(invite.memberId)}
-                      className="shrink-0 rounded-full border-2 border-border px-2.5 py-1 text-[11px] font-bold text-muted"
-                    >
-                      Decline
-                    </button>
-                  </div>
+                    }
+                    title={invite.groupName}
+                    subtitle={
+                      invite.kind === "dm"
+                        ? `${invite.invitedBy} wants to message you`
+                        : `Invite from ${invite.invitedBy} · ${invite.memberCount} members`
+                    }
+                    onAccept={() => void acceptInvite(invite.memberId)}
+                    onDecline={() => void declineInvite(invite.memberId)}
+                  />
                 ))}
               </div>
             )}
@@ -278,7 +280,6 @@ export default function PeopleSheet({
                 showChat={false}
                 personas={filteredPersonas}
                 onChange={reloadPersonas}
-                onStartChat={() => {}}
               />
             </div>
           </div>

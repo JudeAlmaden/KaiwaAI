@@ -4,6 +4,20 @@ import { getCurrentUser } from "@/lib/auth-helpers";
 
 export const MAX_HUMAN_MEMBERS = 5;
 
+/** The one DM between two users, if it already exists. */
+function dmBetween(aId: string, bId: string) {
+  return prisma.chat.findFirst({
+    where: {
+      kind: "dm",
+      AND: [
+        { members: { some: { kind: "user", userId: aId } } },
+        { members: { some: { kind: "user", userId: bId } } },
+      ],
+    },
+    select: { id: true, name: true, kind: true },
+  });
+}
+
 // GET: conversations the user belongs to (persona chats, DMs, groups).
 export async function GET() {
   const user = await getCurrentUser();
@@ -98,7 +112,9 @@ export async function POST(req: Request) {
   // requests until they accept it.
   const requestEmail = typeof body.email === "string" ? body.email.trim() : "";
   if (requestEmail) {
-    const target = await prisma.user.findFirst({ where: { email: requestEmail } });
+    const target = await prisma.user.findFirst({
+      where: { email: { equals: requestEmail, mode: "insensitive" } },
+    });
     if (!target) {
       return NextResponse.json(
         { error: "No account uses that email." },
@@ -120,16 +136,7 @@ export async function POST(req: Request) {
     });
     const isFriend = Boolean(friendship);
 
-    const existing = await prisma.chat.findFirst({
-      where: {
-        kind: "dm",
-        AND: [
-          { members: { some: { kind: "user", userId: user.id } } },
-          { members: { some: { kind: "user", userId: target.id } } },
-        ],
-      },
-      select: { id: true, name: true, kind: true },
-    });
+    const existing = await dmBetween(user.id, target.id);
     if (existing) {
       const mine = await prisma.chatMember.findFirst({
         where: { chatId: existing.id, userId: user.id },
@@ -242,16 +249,7 @@ export async function POST(req: Request) {
 
     // A DM is one conversation per friend pair, however often it is opened.
     if (kind === "dm" && validFriendIds.length === 1) {
-      const existing = await prisma.chat.findFirst({
-        where: {
-          kind: "dm",
-          AND: [
-            { members: { some: { kind: "user", userId: user.id } } },
-            { members: { some: { kind: "user", userId: validFriendIds[0] } } },
-          ],
-        },
-        select: { id: true, name: true, kind: true },
-      });
+      const existing = await dmBetween(user.id, validFriendIds[0]);
       if (existing) return NextResponse.json({ group: existing, reused: true });
     }
 
@@ -277,12 +275,13 @@ export async function POST(req: Request) {
         apiKeyEnc: kind === "persona" ? user.geminiKeyEnc : null,
         members: {
           create: [
-            // Owner joins immediately; invited friends must accept.
+            // Owner joins immediately. A DM's friend is already spoken for;
+            // group invitees still have to accept.
             { kind: "user", userId: user.id, status: "accepted" },
             ...validFriendIds.map((fid) => ({
               kind: "user",
               userId: fid,
-              status: "pending",
+              status: kind === "dm" ? "accepted" : "pending",
             })),
             ...(validPersonaId
               ? [{ kind: "persona", personaId: validPersonaId, status: "accepted" }]

@@ -27,7 +27,7 @@ export function personLabel(person: { name: string | null; email: string }): str
 
 /**
  * Friends, requests and group invites with their actions, shared by the People
- * group and the compose sheet so accepting never round-trips to a /friends page.
+ * sheet and the New chat sheet so accepting never round-trips to a /friends page.
  */
 export function usePeople() {
   const [friends, setFriends] = useState<FriendEntry[] | null>(null);

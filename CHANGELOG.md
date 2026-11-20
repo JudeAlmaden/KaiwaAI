@@ -28,6 +28,8 @@ All notable changes to KaiwaAI are documented in this file.
 
 ### Fixed
 
+- **Message requests only matched the exact email** — `POST /api/groups` looked the address up as typed, so `Hana@Example.com` failed even when the account was `hana@example.com`. The lookup is now case-insensitive, and the friend/non-friend paths are covered by a new route test.
+- **A friend had to accept your DM** — opening a friend from New chat added them as a **pending** member, so the first DM showed up in their requests like a group invite. A DM now adds the friend as accepted; group invitees still accept. This also makes the two ways to start a DM (tap the friend, or type their email) behave the same.
 - **Settings was unreachable at the bottom on phones** — the settings column ended at `py-5`, so the last card sat underneath the floating bottom tab bar (and its raised Talk-to-Kai button) and could not be scrolled clear. The container now reserves `6.5rem` plus `env(safe-area-inset-bottom)` below `sm`, matching the app's other mobile screens.
 - **App Manager clipped its own list on phones** — the app grid carried `max-h-[360px] overflow-y-auto` at every width, so in the single-column mobile layout the eighth app (Netflix) was cut off inside a nested scroll region. The height cap and inner scrolling now apply only from `sm` up, and phones let the list flow in the page's own scroll.
 - **Standalone Focus Guard page** — its bottom padding now also accounts for the device safe area instead of a flat `pb-28`.
@@ -39,8 +41,8 @@ All notable changes to KaiwaAI are documented in this file.
 - Deleted: `src/app/(app)/chat/strangers/StrangerLobby.tsx` (replaced by the queue dialog on `/chat`), `src/app/(app)/chat/NewChat.tsx` (replaced by `ComposeSheet.tsx`), `src/app/(app)/chat/strangers/StrangerQueueModal.tsx` and `src/app/(app)/chat/strangers/useStrangerQueue.ts` (replaced by `QueueRow` + `useMatchQueue`), `src/app/(app)/chat/RailFriendsSection.tsx` and `src/app/(app)/chat/RailMeetSection.tsx` (replaced by `PeopleSheet`), `src/app/(app)/chat/PeopleGroup.tsx` (replaced by `PeopleSheet` + `RequestsRow`), `src/app/(app)/groups/FriendsPanel.tsx` (actions moved into `usePeople`; `/friends` now redirects)
 - Requires `npx prisma migrate deploy` (new `Stranger*` tables + `stranger_participant_one_active` partial unique index) and `STRANGER_CHAT_ENABLED=true` before the surface appears.
 - Removed in the streamlining pass: `src/app/(app)/chat/ComposeSheet.tsx` and `src/app/(app)/chat/personas/PersonasClient.tsx` (`/chat/personas` now redirects), plus the duplicate meet footers. `PersonaManager` gained `compact` and `showChat` modes.
-- Split in the follow-up: `src/app/(app)/chat/NewChatSheet.tsx` (writing) alongside `PeopleSheet.tsx` (management); `src/app/api/groups/route.ts` gained the `email` message-request path; `src/app/api/invites/route.ts` now returns `kind`.
-- Checks: `npm run typecheck` and `npm run lint` clean; `npm run test` 774 passing (82 files), including `src/lib/stranger/service.test.ts`, `src/lib/stranger/cleanup.test.ts`, `src/app/(app)/chat/strangers/queue-state.test.ts` and `src/app/(app)/chat/people.test.ts`
+- Split in the follow-up: `src/app/(app)/chat/NewChatSheet.tsx` (writing) alongside `PeopleSheet.tsx` (management); `src/app/api/groups/route.ts` gained the `email` message-request path and a shared `dmBetween()` helper; `src/app/api/invites/route.ts` now returns `kind`; `src/app/api/groups/route.test.ts` covers the friend, stranger and unknown-email paths.
+- Checks: `npm run typecheck` and `npm run lint` clean; `npm run test` 777 passing (83 files), including `src/lib/stranger/service.test.ts`, `src/lib/stranger/cleanup.test.ts`, `src/app/(app)/chat/strangers/queue-state.test.ts`, `src/app/(app)/chat/people.test.ts` and `src/app/api/groups/route.test.ts`
 
 ## [2.4.2] - 2026-11-19
 

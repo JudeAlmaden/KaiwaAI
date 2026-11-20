@@ -103,12 +103,6 @@ export default function NewChatSheet({
     }
   }
 
-  async function sendRequest() {
-    const email = requestEmail.trim();
-    if (!email || busy) return;
-    await create({ email });
-  }
-
   const list = friends ?? [];
   const q = query.trim().toLowerCase();
   const visibleFriends = q
@@ -270,13 +264,15 @@ export default function NewChatSheet({
                     value={requestEmail}
                     onChange={(e) => setRequestEmail(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") void sendRequest();
+                      if (e.key === "Enter" && requestEmail.trim() && !busy) {
+                        void create({ email: requestEmail.trim() });
+                      }
                     }}
                     placeholder="friend@email.com"
                     className="min-w-0 flex-1 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs outline-none placeholder:text-muted/60 focus:border-indigo-ai"
                   />
                   <button
-                    onClick={() => void sendRequest()}
+                    onClick={() => void create({ email: requestEmail.trim() })}
                     disabled={busy || !requestEmail.trim()}
                     className="shrink-0 rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
                   >
