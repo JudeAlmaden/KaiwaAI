@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { normalizePersonaRole } from "@/lib/persona-role";
 import { useSearchParams } from "next/navigation";
 import Kai from "../../Kai";
@@ -13,6 +14,12 @@ type Memory = {
   category: string;
   importance: number;
   createdAt: string;
+};
+
+type ChatInfo = {
+  id: string;
+  name: string;
+  kind: string;
 };
 
 const CATEGORIES = ["profile", "preference", "fact", "goal", "relationship"];
@@ -30,20 +37,46 @@ export default function MemoryClient() {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [category, setCategory] = useState("fact");
+  const [chat, setChat] = useState<ChatInfo | null>(null);
   const [personas, setPersonas] = useState<
     { id: string; name: string; avatar: string; builtin: boolean; kind?: string }[]
   >([]);
   const [activePersona, setActivePersona] = useState("");
   const searchParams = useSearchParams();
   const requestedPersona = searchParams.get("persona");
+  const requestedChat = searchParams.get("chat");
+  const chatMode = !!requestedChat;
 
-  const load = useCallback((personaId: string) => {
-    if (!personaId) return;
-    fetch(`/api/memory?personaId=${encodeURIComponent(personaId)}`)
+  const load = useCallback((personaId: string, chatId?: string) => {
+    const query = chatId
+      ? `chatId=${encodeURIComponent(chatId)}`
+      : personaId
+        ? `personaId=${encodeURIComponent(personaId)}`
+        : "";
+    if (!query) return;
+    fetch(`/api/memory?${query}`)
       .then((r) => r.json())
       .then((d) => setMemories(d.memories ?? []))
       .catch(() => setMemories([]));
   }, []);
+
+  // Chat mode needs the room's name; the detail route already enforces
+  // membership, so a stranger just falls back to a generic title.
+  useEffect(() => {
+    if (!requestedChat) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setChat(null);
+      return;
+    }
+    fetch(`/api/groups/${encodeURIComponent(requestedChat)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.group) {
+          setChat({ id: d.group.id, name: d.group.name, kind: d.group.kind });
+        }
+      })
+      .catch(() => {});
+  }, [requestedChat]);
 
   useEffect(() => {
     fetch("/api/personas")
@@ -74,17 +107,24 @@ export default function MemoryClient() {
   }, []);
 
   useEffect(() => {
+    if (requestedChat) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMemories(null);
+      load("", requestedChat);
+      return;
+    }
     if (!activePersona) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMemories(null);
     load(activePersona);
-  }, [load, activePersona]);
+  }, [load, activePersona, requestedChat]);
 
   const active = personas.find((p) => p.id === activePersona);
-  const activeName = active?.name ?? "Persona";
+  const isGroupChat = chat?.kind === "group";
+  const activeName = chatMode ? (chat?.name ?? "This chat") : (active?.name ?? "Persona");
   const isKai =
-    active?.kind === "kai" ||
-    (!!active?.builtin && active.name.trim().toLowerCase() === "kai");
+    !chatMode &&
+    (active?.kind === "kai" ||
+      (!!active?.builtin && active.name.trim().toLowerCase() === "kai"));
 
   const sortedMemories = useMemo(() => {
     if (!memories) return null;
@@ -103,7 +143,9 @@ export default function MemoryClient() {
       body: JSON.stringify({
         content,
         category,
-        personaId: activePersona,
+        ...(requestedChat
+          ? { chatId: requestedChat }
+          : { personaId: activePersona }),
       }),
     });
     if (res.ok) {
@@ -119,32 +161,50 @@ export default function MemoryClient() {
     await fetch(`/api/memory/${id}`, { method: "DELETE" });
   }
 
+  const pageSubtitle = chatMode
+    ? isGroupChat
+      ? "What Kai remembers from this group. Only you can see these notes."
+      : "Notes from this conversation. Only you can see them."
+    : "What Kai (in every attitude) and your personas remember about you. Edit anytime.";
+
   return (
     <div className="flex flex-1 flex-col">
       <PageHeader
-        title="Persona Memory"
+        title={chatMode ? (isGroupChat ? "Group Memory" : "Chat Memory") : "Persona Memory"}
         jp="日記"
-        subtitle="What Kai (in every attitude) and your personas remember about you. Edit anytime."
+        subtitle={pageSubtitle}
         compact
       />
 
       <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8">
         <div className="mx-auto max-w-2xl">
-          {/* Horizontal-scroll persona tabs */}
-          <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {personas.map((p) => (
-              <PersonaTab
-                key={p.id}
-                active={activePersona === p.id}
-                onClick={() => setActivePersona(p.id)}
-                label={`${p.avatar} ${p.name}`}
-              />
-            ))}
-          </div>
+          {chatMode ? (
+            <Link
+              href="/memory"
+              className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-muted transition-colors hover:text-indigo-ai"
+            >
+              ← All persona memories
+            </Link>
+          ) : (
+            <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {personas.map((p) => (
+                <PersonaTab
+                  key={p.id}
+                  active={activePersona === p.id}
+                  onClick={() => setActivePersona(p.id)}
+                  label={`${p.avatar} ${p.name}`}
+                />
+              ))}
+            </div>
+          )}
 
           <div className="overflow-hidden rounded-2xl border-2 border-border shadow-md">
             <div className="flex items-center gap-3 bg-gradient-to-r from-indigo-ai to-indigo-soft px-5 py-4 text-white">
-              {isKai ? (
+              {chatMode ? (
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-xl">
+                  {isGroupChat ? "👥" : "💬"}
+                </span>
+              ) : isKai ? (
                 <Kai size={36} />
               ) : (
                 <Avatar
@@ -155,10 +215,10 @@ export default function MemoryClient() {
               )}
               <div>
                 <p className="font-display text-lg font-extrabold">
-                  {activeName}&apos;s Diary
+                  {chatMode ? `${activeName} memory` : `${activeName}'s Diary`}
                 </p>
                 <p className="font-jp text-xs text-white/80">
-                  あなたのこと、おぼえています
+                  {chatMode ? "この会話のきおく" : "あなたのこと、おぼえています"}
                 </p>
               </div>
             </div>
@@ -168,7 +228,11 @@ export default function MemoryClient() {
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder={`Tell ${activeName} something to remember… (e.g. I have a cat named Pochi)`}
+                  placeholder={
+                    chatMode
+                      ? `Add something to remember about this ${isGroupChat ? "group" : "chat"}…`
+                      : `Tell ${activeName} something to remember… (e.g. I have a cat named Pochi)`
+                  }
                   rows={2}
                   className="w-full resize-none rounded-xl border-2 border-border bg-white/70 px-3 py-2 font-jp text-sm leading-8 outline-none focus:border-indigo-ai"
                 />
@@ -202,8 +266,9 @@ export default function MemoryClient() {
                     まだ何も書いていません
                   </p>
                   <p className="mt-1 text-sm text-muted">
-                    {activeName} hasn&apos;t written anything down yet. As you
-                    chat, memories land here — or add one yourself above.
+                    {chatMode
+                      ? "Nothing saved from this chat yet. Memories noticed here land in this space — or add one above."
+                      : `${activeName} hasn't written anything down yet. As you chat, memories land here — or add one yourself above.`}
                   </p>
                 </div>
               ) : (
@@ -243,8 +308,11 @@ export default function MemoryClient() {
           </div>
 
           <p className="mt-4 text-center text-xs text-muted">
-            {activeName} injects these notes into your conversations to remember
-            you.
+            {chatMode
+              ? isGroupChat
+                ? "Only you can see these notes; Kai uses them in this group."
+                : "Only you can see these notes."
+              : `${activeName} injects these notes into your conversations to remember you.`}
           </p>
         </div>
       </div>

@@ -14,15 +14,27 @@ const NEAR_DUP_THRESHOLD = 0.75;
 export async function upsertMemory(args: {
   userId: string;
   personaId: string | null;
+  /** Conversation bucket; null/omitted means persona-global memory. */
+  chatId?: string | null;
   content: string;
   category: string;
   importance: number;
   supersedesId?: string | null;
 }) {
-  const { userId, personaId, content, category, importance, supersedesId } = args;
+  const {
+    userId,
+    personaId,
+    chatId = null,
+    content,
+    category,
+    importance,
+    supersedesId,
+  } = args;
 
+  // Dedupe inside the same bucket only: a group note should not replace a
+  // persona-global note (or another conversation's).
   const existing = await prisma.memory.findMany({
-    where: { userId, personaId, supersededById: null },
+    where: { userId, personaId, chatId, supersededById: null },
     select: { id: true, content: true, importance: true },
     take: 200,
   });
@@ -47,7 +59,7 @@ export async function upsertMemory(args: {
   }
 
   const memory = await prisma.memory.create({
-    data: { userId, personaId, content, category, importance },
+    data: { userId, personaId, chatId, content, category, importance },
   });
 
   if (supersedesId) {

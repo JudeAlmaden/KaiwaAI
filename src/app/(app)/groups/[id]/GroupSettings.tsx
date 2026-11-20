@@ -311,14 +311,22 @@ export default function GroupSettings({
                 <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
                   Kai
                 </p>
-                {hasKai && group.persona && (
+                <div className="flex items-center gap-3">
                   <Link
-                    href={`/memory?persona=${encodeURIComponent(group.persona.id)}`}
+                    href={`/memory?chat=${encodeURIComponent(group.id)}`}
                     className="text-[11px] font-bold text-indigo-ai hover:underline"
                   >
-                    Kai&apos;s memory
+                    Group memory
                   </Link>
-                )}
+                  {hasKai && group.persona && (
+                    <Link
+                      href={`/memory?persona=${encodeURIComponent(group.persona.id)}`}
+                      className="text-[11px] font-bold text-indigo-ai hover:underline"
+                    >
+                      Kai&apos;s memory
+                    </Link>
+                  )}
+                </div>
               </div>
 
               {!hasKai ? (

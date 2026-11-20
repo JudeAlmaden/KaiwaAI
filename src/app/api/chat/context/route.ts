@@ -36,15 +36,19 @@ export async function GET(req: Request) {
       prisma.memory.findMany({
         where: {
           userId: user.id,
-          personaId,
           supersededById: null,
+          // A conversation sees its own notes plus the persona's global memory.
+          // Without a chat, only the global persona bucket is eligible.
+          ...(chatId
+            ? { OR: [{ personaId, chatId: null }, { chatId }] }
+            : { personaId, chatId: null }),
         },
         orderBy: [
           { importance: "desc" },
           { lastUsedAt: "desc" },
           { updatedAt: "desc" },
         ],
-        take: 10,
+        take: 12,
         select: { id: true, content: true },
       }),
       chatId

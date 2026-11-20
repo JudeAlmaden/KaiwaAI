@@ -81,6 +81,29 @@ describe("upsertMemory", () => {
     expect(update.mock.calls[0][0].data.importance).toBe(5);
   });
 
+  it("scopes dedupe and creation to a conversation", async () => {
+    findMany.mockResolvedValue([]);
+    create.mockResolvedValue({ id: "new", content: "Likes the tea shop" });
+
+    await upsertMemory({
+      userId: "u1",
+      personaId: null,
+      chatId: "chat1",
+      content: "Likes the tea shop",
+      category: "fact",
+      importance: 2,
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "u1", personaId: null, chatId: "chat1", supersededById: null },
+      })
+    );
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ chatId: "chat1", personaId: null }),
+    });
+  });
+
   it("soft-supersedes an old memory when creating a replacement", async () => {
     findMany.mockResolvedValue([]);
     create.mockResolvedValue({ id: "new", content: "No longer has a cat" });

@@ -621,17 +621,22 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             void maybeSummarizeOlderMessages(next);
             return next;
           });
-          // Surface durable facts the persona noticed, scoped to this persona.
+          // Surface durable facts the AI noticed. A group keeps its own memory
+          // bucket; a 1:1 persona chat uses that persona's global memory.
           const sugg = kai.memorySuggestions ?? [];
           if (sugg.length > 0) {
             if (getAutoMemory()) {
+              const scope =
+                group?.kind === "group"
+                  ? { chatId: groupId }
+                  : { personaId: persona!.id };
               for (const s of sugg) {
                 const payload =
                   typeof s === "string"
-                    ? { content: s, personaId: persona!.id, category: "fact" }
+                    ? { content: s, ...scope, category: "fact" }
                     : {
                         content: s.content,
-                        personaId: persona!.id,
+                        ...scope,
                         category: s.category,
                         importance: s.importance,
                       };
@@ -866,7 +871,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           <ConvMenu
             isOwner={group.isOwner}
             personaId={group.persona?.id ?? null}
-            isGroup={group.kind === "group"}
+            chatKind={group.kind}
+            chatId={groupId}
             personaKind={group.persona?.kind ?? null}
             kai={
               group.kind !== "group" && group.persona?.kind === "kai"
@@ -1093,6 +1099,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             <MemorySuggestions
               suggestions={memSuggestions}
               personaId={group.persona.id}
+              chatId={group.kind === "group" ? groupId : null}
               auto={getAutoMemory()}
               onClear={() => setMemSuggestions([])}
             />

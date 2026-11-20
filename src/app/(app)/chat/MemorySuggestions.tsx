@@ -14,22 +14,26 @@ const CATEGORY_EMOJI: Record<string, string> = {
   relationship: "🤝",
 };
 
-/** Save a single memory for a persona (null = Kai/default tutor). */
+/**
+ * Save a single memory for a persona (null = Kai/default tutor) or for one
+ * conversation (group/DM) when `chatId` is given.
+ */
 export async function saveMemory(
   suggestion: MemorySuggestion | string,
-  personaId: string | null
+  personaId: string | null,
+  chatId?: string | null
 ) {
   const payload =
     typeof suggestion === "string"
       ? {
           content: cleanMemorySuggestion(suggestion),
-          personaId,
+          ...(chatId ? { chatId } : { personaId }),
           category: "fact",
           importance: 1,
         }
       : {
           content: cleanMemorySuggestion(suggestion.content),
-          personaId,
+          ...(chatId ? { chatId } : { personaId }),
           category: suggestion.category,
           importance: suggestion.importance,
         };
@@ -47,11 +51,14 @@ export async function saveMemory(
 export default function MemorySuggestions({
   suggestions,
   personaId,
+  chatId,
   auto,
   onClear,
 }: {
   suggestions: Array<MemorySuggestion | string>;
   personaId: string | null;
+  /** When set, saves go to this conversation instead of the persona bucket. */
+  chatId?: string | null;
   auto: boolean;
   onClear: () => void;
 }) {
@@ -71,13 +78,15 @@ export default function MemorySuggestions({
   if (normalized.length === 0) return null;
 
   const pending = normalized.length - saved.size;
-  const memoryHref = personaId
-    ? `/memory?persona=${encodeURIComponent(personaId)}`
-    : "/memory";
+  const memoryHref = chatId
+    ? `/memory?chat=${encodeURIComponent(chatId)}`
+    : personaId
+      ? `/memory?persona=${encodeURIComponent(personaId)}`
+      : "/memory";
 
   async function save(i: number) {
     setSaved((prev) => new Set(prev).add(i));
-    await saveMemory(normalized[i], personaId);
+    await saveMemory(normalized[i], personaId, chatId);
   }
 
   async function saveAll() {

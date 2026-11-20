@@ -5,12 +5,14 @@ import Link from "next/link";
 import { DotsThree } from "@phosphor-icons/react/dist/ssr";
 import ModelSwitcher from "../../chat/ModelSwitcher";
 import type { KaiModeInfo } from "./group-types";
+import { conversationMenuModel } from "./conversation-menu";
 
 // Conversation options: profile, quest, clear, delete.
 export default function ConvMenu({
   isOwner,
   personaId,
-  isGroup = false,
+  chatKind,
+  chatId,
   personaKind,
   showModelPicker = false,
   canStartQuest = false,
@@ -23,8 +25,9 @@ export default function ConvMenu({
 }: {
   isOwner: boolean;
   personaId?: string | null;
-  /** A real group (people + maybe Kai), not a 1:1 conversation. */
-  isGroup?: boolean;
+  /** "persona" | "dm" | "group" — decides which controls are valid. */
+  chatKind: string;
+  chatId: string;
   /** "kai" | "kai_mode" | "custom" — decides how the memory entry reads. */
   personaKind?: string | null;
   /** Group management (name, members, Kai) — groups only. */
@@ -80,25 +83,48 @@ export default function ConvMenu({
     }
   }
 
-  const isKaiGroup = isGroup && personaKind === "kai";
-  const canClear = !isGroup || isOwner;
-  const clearTitle = isGroup ? "Clear the group's messages?" : "Clear all messages?";
+  const model = conversationMenuModel({
+    kind: chatKind,
+    isOwner,
+    hasPersona: !!personaId,
+    personaKind,
+  });
+  const isGroup = model.isGroup;
+  const canClear = model.canClear;
+  const clearTitle = isGroup
+    ? "Clear the group's messages?"
+    : model.isDm
+      ? "Clear the chat's messages?"
+      : "Clear all messages?";
   const clearNote = isGroup
     ? "Removes every message for everyone in this group. Saved memories are kept. This can't be undone."
-    : "Removes the messages for everyone. Saved memories are kept. This can't be undone.";
-  const deleteTitle = isGroup
-    ? isOwner
-      ? "Delete this group?"
-      : "Hide this group?"
-    : "Delete conversation?";
-  const deleteNote = isGroup
-    ? isOwner
-      ? "Permanently deletes the group, its members and every message for everyone. This can't be undone."
-      : "Removes this group from your list only — you stay a member. Leave it from Group settings."
-    : isOwner
-      ? "Permanently deletes the conversation and all its messages for everyone. This can't be undone."
-      : "Removes this conversation from your list. Find it in Archived.";
-  const deleteLabel = isGroup && !isOwner ? "Hide group" : "Delete conversation";
+    : model.isDm
+      ? "Removes every message for both of you. Saved memories are kept. This can't be undone."
+      : "Removes the messages for everyone. Saved memories are kept. This can't be undone.";
+  const deleteTitle =
+    model.deleteMode === "delete"
+      ? isGroup
+        ? "Delete this group?"
+        : "Delete conversation?"
+      : isGroup
+        ? "Hide this group?"
+        : "Hide conversation?";
+  const deleteNote =
+    model.deleteMode === "delete"
+      ? isGroup
+        ? "Permanently deletes the group, its members and every message for everyone. This can't be undone."
+        : "Permanently deletes the conversation and all its messages for everyone. This can't be undone."
+      : isGroup
+        ? "Removes this group from your list only — you stay a member. Leave it from Group settings. Find it in Archived."
+        : "Removes this conversation from your list. Find it in Archived.";
+  const deleteLabel =
+    model.deleteMode === "delete"
+      ? isGroup
+        ? "Delete group"
+        : "Delete conversation"
+      : isGroup
+        ? "Hide group"
+        : "Hide conversation";
 
   return (
     <div ref={ref} className="relative">
@@ -121,7 +147,7 @@ export default function ConvMenu({
             </div>
           )}
 
-          {onOpenSettings && (
+          {onOpenSettings && model.showGroupSettings && (
             <button
               type="button"
               onClick={() => {
@@ -140,7 +166,7 @@ export default function ConvMenu({
             </button>
           )}
 
-          {kai && kai.canEdit && kai.modes.length > 0 && (
+          {kai && model.showKaiAttitude && kai.canEdit && kai.modes.length > 0 && (
             <div className="border-b border-border/60 px-3 py-2.5">
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">
                 Kai&apos;s attitude
@@ -185,7 +211,7 @@ export default function ConvMenu({
             </div>
           )}
 
-          {mute && (
+          {mute && model.showMuteKai && (
             <button
               type="button"
               onClick={() => {
@@ -248,7 +274,25 @@ export default function ConvMenu({
             </button>
           )}
 
-          {personaId && (
+          {model.memory.scope !== "persona" && (
+            <Link
+              href={`/memory?chat=${encodeURIComponent(chatId)}`}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
+              onClick={() => setOpen(false)}
+            >
+              <span className="text-lg">
+                {model.memory.scope === "group" ? "👥" : "💬"}
+              </span>
+              <span>
+                <span className="block text-sm font-bold">{model.memory.title}</span>
+                <span className="block text-xs text-muted">
+                  {model.memory.description}
+                </span>
+              </span>
+            </Link>
+          )}
+
+          {personaId && model.memory.scope !== "chat" && (
             <Link
               href={`/memory?persona=${encodeURIComponent(personaId)}`}
               className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
@@ -257,20 +301,24 @@ export default function ConvMenu({
               <span className="text-lg">📔</span>
               <span>
                 <span className="block text-sm font-bold">
-                  {isGroup ? (isKaiGroup ? "Kai's memory" : "Open full diary") : "Open full diary"}
+                  {model.memory.scope === "group"
+                    ? personaKind === "kai"
+                      ? "Kai's memory"
+                      : "Full persona diary"
+                    : "Open full diary"}
                 </span>
                 <span className="block text-xs text-muted">
-                  {isGroup
-                    ? isKaiGroup
-                      ? "Kai's saved memories — shared with every Kai chat, not only this group."
-                      : "This persona's saved memories — shared across their chats."
+                  {model.memory.scope === "group"
+                    ? personaKind === "kai"
+                      ? "Kai's memories across every chat — not just this group."
+                      : "This persona's memories across every chat."
                     : "All memories across personas — different from the quick profile above."}
                 </span>
               </span>
             </Link>
           )}
 
-          {canStartQuest && onStartQuest && (
+          {canStartQuest && model.showQuest && onStartQuest && (
             <button
               type="button"
               onClick={() => {
@@ -314,7 +362,9 @@ export default function ConvMenu({
                   <span className="block text-xs text-muted">
                     {isGroup
                       ? "Empty this group for everyone, keep it in the list."
-                      : "Empty this conversation, keep it in your list."}
+                      : model.isDm
+                        ? "Empty this chat for both of you, keep it in the list."
+                        : "Empty this conversation, keep it in your list."}
                   </span>
                 </span>
               </button>
@@ -325,7 +375,13 @@ export default function ConvMenu({
               title={deleteTitle}
               note={deleteNote}
               actionLabel={
-                busy === "delete" ? "Deleting…" : isGroup && !isOwner ? "Hide" : "Delete"
+                busy === "delete"
+                  ? model.deleteMode === "hide"
+                    ? "Hiding…"
+                    : "Deleting…"
+                  : model.deleteMode === "hide"
+                    ? "Hide"
+                    : "Delete"
               }
               onConfirm={() => run("delete")}
               onCancel={() => setConfirm(null)}
@@ -342,13 +398,13 @@ export default function ConvMenu({
                   {deleteLabel}
                 </span>
                 <span className="block text-xs text-muted">
-                  {isGroup
-                    ? isOwner
+                  {model.deleteMode === "delete"
+                    ? isGroup
                       ? "Remove the group for everyone, permanently."
-                      : "Removes it from your list; you stay a member."
-                    : isOwner
-                      ? "Remove it for everyone, permanently."
-                      : "Remove from your list."}
+                      : "Remove it for everyone, permanently."
+                    : isGroup
+                      ? "Removes it from your list; you stay a member."
+                      : "Removes it from your list. Find it in Archived."}
                 </span>
               </span>
             </button>
