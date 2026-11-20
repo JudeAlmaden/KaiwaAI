@@ -13,8 +13,6 @@ import {
   ShieldCheck,
   GearSix,
   Sparkle,
-  Users,
-  Globe,
 } from "@phosphor-icons/react";
 import Kai from "../Kai";
 import LogoutButton from "../LogoutButton";
@@ -77,16 +75,25 @@ const SYSTEM_NAV: NavLinkItem[] = [
   { href: "/settings", label: "Settings", jp: "設定", icon: GearSix },
 ];
 
+/** Hover label for the icon-only rail; only rendered while collapsed. */
+function NavTip({ label }: { label: string }) {
+  return (
+    <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-lg bg-foreground px-2 py-1 text-[11px] font-bold text-card shadow-lg group-hover:block">
+      {label}
+    </span>
+  );
+}
+
 function SidebarNav({
   pathname,
   dueCount,
   hasUnreadKai,
-  strangerEnabled,
+  collapsed,
 }: {
   pathname: string;
   dueCount: number | null;
   hasUnreadKai: boolean;
-  strangerEnabled: boolean;
+  collapsed: boolean;
 }) {
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
@@ -100,9 +107,11 @@ function SidebarNav({
     <>
       {/* Study Navigation Group */}
       <div className="space-y-1">
-        <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-          Study &amp; Practice
-        </p>
+        {!collapsed && (
+          <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
+            Study &amp; Practice
+          </p>
+        )}
         <nav className="flex flex-col gap-1">
           {STUDY_NAV.map((item) => {
             const active = isNavActive(pathname, currentTab, item.href);
@@ -114,101 +123,62 @@ function SidebarNav({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group relative flex items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold transition-all ${active
+                aria-label={collapsed ? item.label : undefined}
+                className={`group relative flex items-center gap-3 rounded-2xl py-2 text-xs font-bold transition-all ${active
                   ? "bg-indigo-ai text-white shadow-sm"
                   : "text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
-                  }`}
+                  } ${collapsed ? "justify-center" : "px-3"}`}
               >
                 <Icon
                   size={20}
                   weight={active ? "fill" : "duotone"}
                   className={active ? "text-white" : "text-indigo-ai/70"}
                 />
-                <span>{item.label}</span>
+                {!collapsed && <span>{item.label}</span>}
+                {collapsed && <NavTip label={item.label} />}
 
                 {/* Unread indicator */}
                 {isChat && (
                   <span
-                    className="absolute right-9 h-2 w-2 rounded-full bg-sakura animate-pulse"
+                    className={`absolute h-2 w-2 rounded-full bg-sakura animate-pulse ${collapsed ? "right-1.5 top-1.5" : "right-9"
+                      }`}
                     aria-label="Unread messages from Kai"
                   />
                 )}
 
                 {/* Due count pill */}
-                {isDue && (
-                  <span className="ml-auto rounded-full bg-amber/20 px-2 py-0.5 text-[10px] font-extrabold text-amber">
-                    {dueCount}
+                {isDue &&
+                  (collapsed ? (
+                    <span className="absolute right-0 top-0 rounded-full bg-amber px-1 text-[9px] font-extrabold text-white ring-2 ring-card">
+                      {dueCount}
+                    </span>
+                  ) : (
+                    <span className="ml-auto rounded-full bg-amber/20 px-2 py-0.5 text-[10px] font-extrabold text-amber">
+                      {dueCount}
+                    </span>
+                  ))}
+
+                {!collapsed && (
+                  <span
+                    className={`font-jp text-[11px] ${isDue ? "hidden" : "ml-auto"
+                      } ${active ? "text-white/70" : "text-muted/40"}`}
+                  >
+                    {item.jp}
                   </span>
                 )}
-
-                <span
-                  className={`font-jp text-[11px] ${isDue ? "hidden" : "ml-auto"
-                    } ${active ? "text-white/70" : "text-muted/40"}`}
-                >
-                  {item.jp}
-                </span>
               </Link>
             );
           })}
         </nav>
       </div>
 
-      {/* People — places that aren't conversations: contacts, and the one-shot
-          stranger matching action. Mobile keeps both inside the compose sheet. */}
-      <div className="space-y-1 pt-1 border-t border-border/60">
-        <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-          People
-        </p>
-        <nav className="flex flex-col gap-1">
-          <Link
-            href="/friends"
-            className={`group relative flex items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold transition-all ${
-              pathname.startsWith("/friends")
-                ? "bg-indigo-ai text-white shadow-sm"
-                : "text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
-            }`}
-          >
-            <Users
-              size={20}
-              weight={pathname.startsWith("/friends") ? "fill" : "duotone"}
-              className={
-                pathname.startsWith("/friends")
-                  ? "text-white"
-                  : "text-indigo-ai/70"
-              }
-            />
-            <span>Friends</span>
-            <span
-              className={`ml-auto font-jp text-[11px] ${
-                pathname.startsWith("/friends")
-                  ? "text-white/70"
-                  : "text-muted/40"
-              }`}
-            >
-              友達
-            </span>
-          </Link>
-
-          {strangerEnabled && (
-            <Link
-              href="/chat?queue=1"
-              className="group relative flex items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold text-muted transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai"
-            >
-              <Globe size={20} weight="duotone" className="text-indigo-ai/70" />
-              <span>Meet a stranger</span>
-              <span className="ml-auto font-jp text-[11px] text-muted/40">
-                出会い
-              </span>
-            </Link>
-          )}
-        </nav>
-      </div>
-
       {/* System Navigation Group */}
       <div className="space-y-1 pt-1 border-t border-border/60">
-        <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-          System &amp; Focus
-        </p>
+        {!collapsed && (
+          <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
+            System &amp; Focus
+          </p>
+        )}
         <nav className="flex flex-col gap-1">
           {systemNav.map((item) => {
             const active = isNavActive(pathname, currentTab, item.href);
@@ -218,23 +188,27 @@ function SidebarNav({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group relative flex items-center gap-3 rounded-2xl px-3 py-2 text-xs font-bold transition-all ${active
+                aria-label={collapsed ? item.label : undefined}
+                className={`group relative flex items-center gap-3 rounded-2xl py-2 text-xs font-bold transition-all ${active
                   ? "bg-indigo-ai text-white shadow-sm"
                   : "text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
-                  }`}
+                  } ${collapsed ? "justify-center" : "px-3"}`}
               >
                 <Icon
                   size={20}
                   weight={active ? "fill" : "duotone"}
                   className={active ? "text-white" : "text-indigo-ai/70"}
                 />
-                <span>{item.label}</span>
-                <span
-                  className={`ml-auto font-jp text-[11px] ${active ? "text-white/70" : "text-muted/40"
-                    }`}
-                >
-                  {item.jp}
-                </span>
+                {!collapsed && <span>{item.label}</span>}
+                {collapsed && <NavTip label={item.label} />}
+                {!collapsed && (
+                  <span
+                    className={`ml-auto font-jp text-[11px] ${active ? "text-white/70" : "text-muted/40"
+                      }`}
+                  >
+                    {item.jp}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -248,11 +222,9 @@ function SidebarNav({
 export function Sidebar({
   email,
   streak,
-  strangerEnabled = false,
 }: {
   email: string;
   streak: number;
-  strangerEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const hasUnreadKai = useUnreadKaiMessages();
@@ -267,30 +239,41 @@ export function Sidebar({
       .catch(() => { });
   }, [pathname]);
 
+  // Inside /chat the rail already holds the inbox, so the sidebar folds to an
+  // icon strip on lg and gives that width back to the list and the messages.
+  const collapsed = pathname === "/chat" || pathname.startsWith("/chat/");
+
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r-2 border-border bg-card/60 px-3.5 py-5 backdrop-blur-xl lg:flex justify-between">
+    <aside
+      className={`relative z-30 hidden shrink-0 flex-col justify-between border-r-2 border-border bg-card/60 py-5 backdrop-blur-xl lg:flex ${
+        collapsed ? "w-[72px] px-2" : "w-64 px-3.5"
+      }`}
+    >
       {/* Top section: Brand + Quick Action + Links */}
       <div className="space-y-5">
         {/* Brand & Companion Status */}
-        <div className="px-2">
+        <div className={collapsed ? "flex justify-center" : "px-2"}>
           <Link
             href="/"
+            aria-label="KaiwaAI home"
             className="flex items-center gap-2.5 font-display text-xl font-extrabold tracking-tight text-foreground hover:opacity-90 transition-opacity"
           >
             <Kai size={32} />
-            <span>KaiwaAI</span>
+            {!collapsed && <span>KaiwaAI</span>}
           </Link>
-
         </div>
 
         {/* Primary Action CTA: Talk to Kai */}
-        <div className="px-1">
+        <div className={collapsed ? "flex justify-center" : "px-1"}>
           <Link
             href="/chat"
-            className="group flex items-center justify-center gap-2 rounded-2xl bg-indigo-ai p-2.5 font-display text-xs font-bold text-white shadow-md shadow-indigo-ai/25 transition-all hover:bg-indigo-ai/90 active:scale-[0.98]"
+            aria-label="Talk to Kai"
+            title={collapsed ? "Talk to Kai" : undefined}
+            className={`group flex items-center justify-center gap-2 rounded-2xl bg-indigo-ai font-display text-xs font-bold text-white shadow-md shadow-indigo-ai/25 transition-all hover:bg-indigo-ai/90 active:scale-[0.98] ${collapsed ? "h-10 w-10" : "p-2.5"
+              }`}
           >
             <Sparkle size={15} weight="fill" className="text-sakura group-hover:rotate-12 transition-transform" />
-            <span>Talk to Kai</span>
+            {!collapsed && <span>Talk to Kai</span>}
           </Link>
         </div>
 
@@ -300,7 +283,7 @@ export function Sidebar({
             pathname={pathname}
             dueCount={dueCount}
             hasUnreadKai={hasUnreadKai}
-            strangerEnabled={strangerEnabled}
+            collapsed={collapsed}
           />
         </Suspense>
       </div>
@@ -308,6 +291,24 @@ export function Sidebar({
       {/* Bottom section: Learner Profile & Streak Card */}
       <div className="space-y-2 pt-3 border-t-2 border-border">
         {/* User + Streak + Logout card */}
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-bg/60 p-2 backdrop-blur-sm">
+            <span
+              title={email}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-ai/30 to-indigo-ai/10 font-display text-xs font-extrabold uppercase text-indigo-ai ring-1 ring-indigo-ai/20"
+            >
+              {email.charAt(0)}
+            </span>
+            <span
+              title={`${streak} day streak`}
+              className="flex items-center gap-0.5 rounded-lg bg-amber/10 px-1.5 py-0.5 text-[10px] font-extrabold text-amber ring-1 ring-amber/20"
+            >
+              <Fire size={11} weight="fill" />
+              {streak}
+            </span>
+            <LogoutButton variant="icon" />
+          </div>
+        ) : (
         <div className="rounded-2xl border border-border bg-bg/60 p-3 backdrop-blur-sm">
           {/* Row 1 — Avatar + Name + Streak + Logout */}
           <div className="flex items-center gap-2.5">
@@ -336,6 +337,7 @@ export function Sidebar({
             <LogoutButton variant="icon" />
           </div>
         </div>
+        )}
       </div>
     </aside>
   );

@@ -116,9 +116,9 @@ Authenticated routes:
 | Route | Purpose |
 | --- | --- |
 | `/home` | Dashboard: level, streak, vocabulary, kanji, due cards, and activity |
-| `/chat` | One inbox for AI personas, friends and groups, with a compose sheet for starting new chats (including strangers) |
-| `/chat/personas` | Create, edit and start chats with AI personas |
-| `/friends` | Friends, pending requests and group invites |
+| `/chat` | One inbox for AI personas, friends and groups: actionable friend requests, a collapsible **People** group (friends, add by email, personas, stranger matching) and the matching state as a row, with a compose sheet for starting new chats |
+| `/chat/personas` | Redirects to `/chat?panel=personas` — persona editing lives in the People sheet |
+| `/friends` | Redirects to `/chat?panel=people` — friends, requests and invites live in the inbox |
 | `/chat/c/[id]` | A selected personal, direct-message, or group conversation |
 | `/review` | Vocabulary, kanji, and mixed SRS sessions |
 | `/vocab` | Saved word and phrase decks, lookup, search, filters, and card management |
@@ -330,7 +330,14 @@ Key UI files:
 
 | Path | Responsibility |
 | --- | --- |
-| `src/app/(app)/chat/ChatHub.tsx` | Chat list and personal-conversation hub |
+| `src/app/(app)/chat/InboxList.tsx` | Conversation rows, search row, Kai hero and empty state (shared by phone hub and rail) |
+| `src/app/(app)/chat/ChatRail.tsx` | Desktop rail: pinned search, requests, matching row, inbox and People |
+| `src/app/(app)/chat/PeopleSheet.tsx` | People sheet: requests, friends, add-by-email and persona editing (management only) |
+| `src/app/(app)/chat/NewChatSheet.tsx` | New chat: message a friend or persona, message request by email, group creation, roleplay quest |
+| `src/app/(app)/chat/RequestsRow.tsx` | One summary row for pending friend requests and group invites |
+| `src/app/(app)/chat/MeetRow.tsx` | Meet-someone-new row at the end of the conversation list |
+| `src/app/(app)/chat/InboxProvider.tsx` | One inbox/people/queue instance for the whole `/chat` subtree |
+| `src/app/(app)/chat/ChatHub.tsx` | Phone hub shell and the desktop empty pane |
 | `src/app/(app)/chat/WordToken.tsx` | Tappable word/phrase popup and save controls |
 | `src/app/(app)/chat/RichText.tsx` | Token-aware message rendering |
 | `src/app/(app)/groups/[id]/GroupChatClient.tsx` | Group/DM conversation experience |

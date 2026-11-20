@@ -81,11 +81,90 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { name?: string; friendIds?: string[]; personaId?: string | null };
+  let body: {
+    name?: string;
+    friendIds?: string[];
+    personaId?: string | null;
+    email?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  }
+
+  // A message request: start a DM by email. Friends are accepted instantly;
+  // anyone else is added as a pending member, so the chat shows up in their
+  // requests until they accept it.
+  const requestEmail = typeof body.email === "string" ? body.email.trim() : "";
+  if (requestEmail) {
+    const target = await prisma.user.findFirst({ where: { email: requestEmail } });
+    if (!target) {
+      return NextResponse.json(
+        { error: "No account uses that email." },
+        { status: 404 }
+      );
+    }
+    if (target.id === user.id) {
+      return NextResponse.json({ error: "That's your own email." }, { status: 400 });
+    }
+
+    const friendship = await prisma.friendship.findFirst({
+      where: {
+        status: "accepted",
+        OR: [
+          { requesterId: user.id, addresseeId: target.id },
+          { requesterId: target.id, addresseeId: user.id },
+        ],
+      },
+    });
+    const isFriend = Boolean(friendship);
+
+    const existing = await prisma.chat.findFirst({
+      where: {
+        kind: "dm",
+        AND: [
+          { members: { some: { kind: "user", userId: user.id } } },
+          { members: { some: { kind: "user", userId: target.id } } },
+        ],
+      },
+      select: { id: true, name: true, kind: true },
+    });
+    if (existing) {
+      const mine = await prisma.chatMember.findFirst({
+        where: { chatId: existing.id, userId: user.id },
+        select: { status: true },
+      });
+      if (!mine || mine.status !== "accepted") {
+        return NextResponse.json(
+          {
+            error:
+              "They already sent you a message request — accept it in People → Requests.",
+          },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ group: existing, reused: true, request: !isFriend });
+    }
+
+    const chat = await prisma.chat.create({
+      data: {
+        name: (target.name || target.email).slice(0, 60),
+        kind: "dm",
+        ownerId: user.id,
+        members: {
+          create: [
+            { kind: "user", userId: user.id, status: "accepted" },
+            { kind: "user", userId: target.id, status: isFriend ? "accepted" : "pending" },
+          ],
+        },
+      },
+    });
+
+    return NextResponse.json({
+      group: { id: chat.id, name: chat.name, kind: "dm" },
+      request: !isFriend,
+    });
   }
 
   const friendIds = Array.isArray(body.friendIds) ? [...new Set(body.friendIds)] : [];
@@ -155,6 +234,21 @@ export async function POST(req: Request) {
           kind: "persona",
           ownerId: user.id,
           members: { some: { kind: "persona", personaId: validPersonaId } },
+        },
+        select: { id: true, name: true, kind: true },
+      });
+      if (existing) return NextResponse.json({ group: existing, reused: true });
+    }
+
+    // A DM is one conversation per friend pair, however often it is opened.
+    if (kind === "dm" && validFriendIds.length === 1) {
+      const existing = await prisma.chat.findFirst({
+        where: {
+          kind: "dm",
+          AND: [
+            { members: { some: { kind: "user", userId: user.id } } },
+            { members: { some: { kind: "user", userId: validFriendIds[0] } } },
+          ],
         },
         select: { id: true, name: true, kind: true },
       });

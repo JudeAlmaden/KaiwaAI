@@ -33,7 +33,6 @@ export function useInbox() {
   const router = useRouter();
   const [convos, setConvos] = useState<Conversation[] | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
-  const [pending, setPending] = useState(0);
   const [starting, setStarting] = useState(false);
 
   const reloadConvos = useCallback(() => {
@@ -58,19 +57,6 @@ export function useInbox() {
       .catch(() => {});
   }, []);
 
-  const reloadPending = useCallback(() => {
-    Promise.all([
-      fetch("/api/friends")
-        .then((r) => r.json())
-        .catch(() => ({})),
-      fetch("/api/invites")
-        .then((r) => r.json())
-        .catch(() => ({})),
-    ]).then(([f, i]) => {
-      setPending((f.incoming?.length ?? 0) + (i.invites?.length ?? 0));
-    });
-  }, []);
-
   useEffect(() => {
     // Paint cached conversations + personas instantly, then refresh.
     const cachedC = readCache<Conversation[]>(cacheKeys.convos);
@@ -80,8 +66,7 @@ export function useInbox() {
     if (cachedP) setPersonas(cachedP);
     reloadConvos();
     reloadPersonas();
-    reloadPending();
-  }, [reloadConvos, reloadPersonas, reloadPending]);
+  }, [reloadConvos, reloadPersonas]);
 
   // Open (or create+open) a 1:1 persona conversation.
   const startPersonaChat = useCallback(
@@ -118,7 +103,6 @@ export function useInbox() {
   return {
     convos,
     personas,
-    pending,
     starting,
     reloadConvos,
     reloadPersonas,

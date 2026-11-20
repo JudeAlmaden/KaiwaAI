@@ -17,17 +17,23 @@ export default function PersonaManager({
   personas,
   onChange,
   onStartChat,
+  compact = false,
+  showChat = true,
 }: {
   personas: Persona[];
   onChange: () => void;
   onStartChat: (id: string) => void;
+  /** Single-column rows for the People sheet instead of the page's card grid. */
+  compact?: boolean;
+  /** People manages personas; writing to one happens in the New chat sheet. */
+  showChat?: boolean;
 }) {
   const [editing, setEditing] = useState<Persona | null>(null);
   const [creating, setCreating] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4">
-      <Surface>
+    <div className={`flex flex-col ${compact ? "gap-2" : "gap-4"}`}>
+      <PersonaShell plain={compact}>
         <div className="flex items-center justify-between">
           <h2 className="font-display text-lg font-bold">AI personas</h2>
           <button
@@ -45,8 +51,49 @@ export default function PersonaManager({
           rename it however you like.
         </p>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {personas.map((p) => (
+        <div
+          className={
+            compact
+              ? "mt-2 flex flex-col gap-1"
+              : "mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2"
+          }
+        >
+          {personas.map((p) =>
+            compact ? (
+              <div
+                key={p.id}
+                className="flex items-center gap-2 rounded-2xl px-2 py-2 transition-colors hover:bg-indigo-ai/10"
+              >
+                <Avatar name={p.name} emoji={p.avatar} size={32} />
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold">{p.name}</span>
+                  <span className="block truncate text-[11px] text-muted">
+                    {p.blurb || "No description"}
+                  </span>
+                </div>
+                {p.mine && (
+                  <button
+                    onClick={() => {
+                      setEditing(p);
+                      setCreating(false);
+                    }}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
+                    aria-label={`Edit ${p.name}`}
+                    title="Edit"
+                  >
+                    ⋯
+                  </button>
+                )}
+                {showChat && (
+                  <button
+                    onClick={() => onStartChat(p.id)}
+                    className="shrink-0 rounded-full bg-indigo-ai px-3 py-1 text-[11px] font-extrabold text-white transition-colors hover:bg-indigo-deep"
+                  >
+                    Chat
+                  </button>
+                )}
+              </div>
+            ) : (
             <div
               key={p.id}
               className="group/p relative flex flex-col justify-between rounded-2xl border-2 border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-sm"
@@ -86,9 +133,10 @@ export default function PersonaManager({
                 </button>
               </div>
             </div>
-          ))}
+            )
+          )}
         </div>
-      </Surface>
+      </PersonaShell>
 
       {(creating || editing) && (
         <PersonaEditor
@@ -105,6 +153,21 @@ export default function PersonaManager({
         />
       )}
     </div>
+  );
+}
+
+/** The sheet already draws a card; don't nest another Surface inside it. */
+function PersonaShell({
+  plain,
+  children,
+}: {
+  plain: boolean;
+  children: React.ReactNode;
+}) {
+  return plain ? (
+    <div className="flex flex-col">{children}</div>
+  ) : (
+    <Surface>{children}</Surface>
   );
 }
 

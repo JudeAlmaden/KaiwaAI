@@ -6,12 +6,27 @@ Durable notes for agents working on `/chat` and persona conversations. Prefer co
 
 | Area | Entry |
 |------|--------|
-| Hub (Chats / AI / Friends) | `src/app/(app)/chat/ChatHub.tsx` |
+| Hub (phone) | `src/app/(app)/chat/ChatHub.tsx` |
+| Desktop rail | `src/app/(app)/chat/ChatRail.tsx` — Chats header, pinned search, `RequestsRow`, `QueueRow`, `InboxList` |
+| People sheet | `src/app/(app)/chat/PeopleSheet.tsx` — management only: requests, friends, add-by-email, persona editing |
+| New chat sheet | `src/app/(app)/chat/NewChatSheet.tsx` — writing only: message a friend/persona, message request by email, group creation, quest |
+| Shared inbox state | `src/app/(app)/chat/InboxProvider.tsx` (`useInbox`, `usePeople`, `useMatchQueue`) |
 | Active thread | `src/app/(app)/groups/[id]/GroupChatClient.tsx` via `/chat/c/[id]` |
 | Memory diary | `src/app/(app)/memory/MemoryClient.tsx` |
 | BYOK Gemini | `src/lib/gemini.ts` |
 | Server group replies | `src/lib/group-chat.ts` |
 | Prompt context | `GET /api/chat/context?personaId=&chatId=` |
+
+## People, friends and matching
+
+- One surface: `/chat` holds conversations, friend requests, friends, personas and stranger matching. `/friends` redirects to `/chat?panel=people`.
+- The column stays a list: pending requests are one `RequestsRow`, contacts live in `PeopleSheet`, and meeting a stranger is one `MeetRow`.
+- The two sheets have disjoint jobs: **People** manages (requests, friends, add-by-email, persona CRUD) and never opens a chat; **New chat** writes (friends, personas, message requests by email, groups, quests). `/chat/personas` redirects into People.
+- Message requests: `POST /api/groups { email }` creates a DM whose non-friend member is `pending`, surfacing through `/api/invites` with `kind: "dm"`.
+- `usePeople` owns friends/incoming/outgoing/invites plus accept/decline/join/add, so requests are actionable where they appear.
+- Matching is `useMatchQueue` + `QueueRow`, not a modal: the provider is mounted by `chat/(inbox)/layout.tsx`, so the queue survives moving between conversations and is cancelled when leaving `/chat`.
+- Opening a friend posts `/api/groups { friendIds: [id] }`; the route reuses the existing DM for that pair.
+- `/chat/strangers` redirects to `?compose=meet`; the sidebar no longer has a People group.
 
 ## Mood (per-conversation)
 

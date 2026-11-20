@@ -4,7 +4,6 @@ import { dayKeyFor, previousDayKey } from "@/lib/day";
 import { currentStreak } from "@/lib/streak";
 import { getDashboardStatsForUser } from "@/lib/dashboard-stats";
 import { Sidebar, BottomTabs, MobileTopBar } from "./AppNav";
-import { isStrangerChatEnabled } from "@/lib/stranger/config";
 import OnboardingCheck from "@/components/OnboardingCheck";
 import OfflineBanner from "@/components/OfflineBanner";
 import AppUpdateBanner from "@/components/AppUpdateBanner";
@@ -35,11 +34,7 @@ export default async function AppLayout({
   return (
     <div className="flex h-dvh overflow-hidden">
       <OnboardingCheck />
-      <Sidebar
-        email={user.email}
-        streak={streak}
-        strangerEnabled={isStrangerChatEnabled()}
-      />
+      <Sidebar email={user.email} streak={streak} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <MobileTopBar streak={streak} />

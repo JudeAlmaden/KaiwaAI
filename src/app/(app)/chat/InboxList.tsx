@@ -6,7 +6,6 @@ import Avatar from "./Avatar";
 import Kai from "../../Kai";
 import { isUnread } from "@/lib/chat-cache";
 import { MOOD_EMOJI, MOOD_LABEL, isMood } from "@/lib/mood";
-import type { ComposeMode } from "./ComposeSheet";
 import type { Conversation, Persona } from "./useInbox";
 
 function relativeTime(iso?: string): string {
@@ -60,10 +59,13 @@ export function ConversationRow({
       href={`/chat/c/${convo.id}`}
       className={`group relative flex items-center gap-3 rounded-2xl border-2 px-3.5 py-3 transition-all ${
         active
-          ? "border-indigo-ai/60 bg-indigo-ai/5"
+          ? "border-border bg-indigo-ai/10 pl-4"
           : "border-border bg-card hover:-translate-y-0.5 hover:border-indigo-ai hover:shadow-md"
       }`}
     >
+      {active && (
+        <span className="absolute inset-y-2.5 left-0 w-1 rounded-r-full bg-indigo-ai" />
+      )}
       <div className="relative">
         {avatar}
         {isAi && (
@@ -192,35 +194,64 @@ export function KaiHeroCard({
 }
 
 /**
- * The inbox itself: requests banner, pinned Kai, search, rows and empty state.
- * Shared by the phone hub page and the desktop rail so the two can't drift.
+ * Search row shared by the phone list and the rail (which pins it above the
+ * scroll area so compose is always reachable).
+ */
+export function InboxSearchRow({
+  query,
+  onQuery,
+  onNewChat,
+}: {
+  query: string;
+  onQuery: (value: string) => void;
+  onNewChat: () => void;
+}) {
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onNewChat();
+      }}
+      className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2"
+    >
+      <MagnifyingGlass size={16} className="text-muted" />
+      <input
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        placeholder="Search conversations…"
+        className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted/60"
+      />
+    </form>
+  );
+}
+
+/**
+ * The inbox itself: pinned Kai, search, rows and empty state. Shared by the
+ * phone hub page and the desktop rail so the two can't drift.
  */
 export default function InboxList({
   convos,
   personas,
-  pending,
   starting,
   query,
   onQuery,
   onStartPersona,
   onHide,
-  onCompose,
-  strangerEnabled,
+  onNewChat,
   activeId,
-  compact = false,
+  searchInList = true,
 }: {
   convos: Conversation[] | null;
   personas: Persona[];
-  pending: number;
   starting: boolean;
   query: string;
   onQuery: (value: string) => void;
   onStartPersona: (personaId: string) => void;
   onHide: (id: string) => void;
-  onCompose: (mode: ComposeMode) => void;
-  strangerEnabled: boolean;
+  onNewChat: () => void;
   activeId?: string;
-  compact?: boolean;
+  /** The rail pins its own search row above the list. */
+  searchInList?: boolean;
 }) {
   const q = query.trim().toLowerCase();
   const filtered = convos
@@ -235,27 +266,9 @@ export default function InboxList({
   const hasKaiThread = !!convos?.some(
     (c) => c.kind === "persona" && c.name.trim().toLowerCase() === "kai"
   );
-  const showSearch = !!convos && convos.length > (compact ? 0 : 3);
-  const chip =
-    "rounded-full border-2 border-border px-3 py-1.5 text-xs font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai";
-
+  const showSearch = !!convos && convos.length > 3;
   return (
     <div className="flex flex-col gap-3">
-      {pending > 0 && (
-        <Link
-          href="/friends"
-          className="flex items-center gap-3 rounded-2xl border-2 border-sakura/30 bg-sakura/5 px-4 py-2.5 transition-colors hover:border-sakura"
-        >
-          <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-sakura px-1.5 text-xs font-bold text-white">
-            {pending}
-          </span>
-          <span className="text-sm font-bold">
-            {pending === 1 ? "1 request waiting" : `${pending} requests waiting`}
-          </span>
-          <span className="ml-auto text-indigo-ai">→</span>
-        </Link>
-      )}
-
       {!hasKaiThread && (
         <KaiHeroCard
           onStartChat={onStartPersona}
@@ -264,16 +277,12 @@ export default function InboxList({
         />
       )}
 
-      {showSearch && (
-        <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2">
-          <MagnifyingGlass size={16} className="text-muted" />
-          <input
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="Search conversations…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted/60"
-          />
-        </div>
+      {searchInList && showSearch && (
+        <InboxSearchRow
+          query={query}
+          onQuery={onQuery}
+          onNewChat={onNewChat}
+        />
       )}
 
       {convos === null && (
@@ -294,18 +303,17 @@ export default function InboxList({
       )}
 
       {convos?.length === 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => onCompose("group")} className={chip}>
-            Start a group
+        <div className="rounded-2xl border-2 border-dashed border-border px-4 py-6 text-center">
+          <p className="text-sm font-bold">No conversations yet</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Start with Kai, a friend, or a group.
+          </p>
+          <button
+            onClick={onNewChat}
+            className="mt-3 rounded-full bg-indigo-ai px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-indigo-deep"
+          >
+            New chat
           </button>
-          <Link href="/friends" className={chip}>
-            Add a friend
-          </Link>
-          {strangerEnabled && (
-            <button onClick={() => onCompose("meet")} className={chip}>
-              Meet a stranger
-            </button>
-          )}
         </div>
       )}
 

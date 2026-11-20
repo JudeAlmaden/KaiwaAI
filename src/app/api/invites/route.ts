@@ -24,6 +24,7 @@ export async function GET() {
   const invites = pending.map((m) => ({
     memberId: m.id,
     groupId: m.chatId,
+    kind: m.chat.kind,
     groupName: m.chat.name,
     invitedBy: m.chat.owner.name || m.chat.owner.email,
     persona: m.chat.members.find((x) => x.kind === "persona")?.persona ?? null,
