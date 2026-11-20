@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } fr
 import { createPortal } from "react-dom";
 import WordToken from "./WordToken";
 import LookupToken from "./LookupToken";
-import { SelectionLookupPopup } from "./WordToken";
+import { SelectionLookupPopup } from "./SelectionLookupPopup";
 import { hasFeedback, type CachedToken, type Correction } from "@/lib/types";
 import { repairSplitTokenSurfaces } from "@/lib/token-repair";
 import {
