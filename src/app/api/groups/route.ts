@@ -158,16 +158,51 @@ export async function POST(req: Request) {
     }
 
     if (!isFriend) {
-      // Counted from the DM rows themselves (owner + a second member) so the
-      // limit holds across serverless instances and a decline cannot reset it.
-      const sent = await prisma.chat.count({
+      // Counted from the DM rows themselves so the limit holds across
+      // serverless instances and a decline cannot reset it. Chats with someone
+      // who is already a friend are not requests, so they don't spend budget.
+      const recentDms = await prisma.chat.findMany({
         where: {
           ownerId: user.id,
           kind: "dm",
           createdAt: { gte: new Date(Date.now() - MESSAGE_REQUEST_WINDOW_MS) },
-          members: { some: { kind: "user", userId: { not: user.id } } },
         },
+        select: { members: { select: { userId: true } } },
       });
+      const others = [
+        ...new Set(
+          recentDms.flatMap((chat) =>
+            chat.members
+              .map((member) => member.userId)
+              .filter((id): id is string => Boolean(id) && id !== user.id)
+          )
+        ),
+      ];
+      const friendRows = others.length
+        ? await prisma.friendship.findMany({
+            where: {
+              status: "accepted",
+              OR: [
+                { requesterId: user.id, addresseeId: { in: others } },
+                { addresseeId: user.id, requesterId: { in: others } },
+              ],
+            },
+            select: { requesterId: true, addresseeId: true },
+          })
+        : [];
+      const friendIds = new Set(
+        friendRows.map((row) =>
+          row.requesterId === user.id ? row.addresseeId : row.requesterId
+        )
+      );
+      const sent = recentDms.filter((chat) => {
+        const otherIds = chat.members
+          .map((member) => member.userId)
+          .filter((id): id is string => Boolean(id) && id !== user.id);
+        // No other member means the request was declined (the membership row
+        // is deleted), which still counts, so declining can't reset the budget.
+        return otherIds.length === 0 || otherIds.some((id) => !friendIds.has(id));
+      }).length;
       if (sent >= MAX_MESSAGE_REQUESTS_PER_HOUR) {
         return NextResponse.json(
           {
