@@ -40,7 +40,7 @@ Durable notes for agents working on `/chat` and persona conversations. Prefer co
 
 - Shared contract: `src/lib/tokenization.ts` (`validateTokens`, schemas, JP-only prompt fragment).
 - Render: `RichText.tsx` → `WordToken` (model tokens) or `LookupToken` (fallback).
-- Shared popup: `TokenPopup.tsx`; vocab once via `SavedWordsContext`.
+- Shared popup: `TokenPopup.tsx`; saved vocabulary is a `savedWords` set passed into `RichText` (or fetched locally), refreshed across views by the `kaiwa:vocab-removed` window event.
 - Range select: `src/lib/token-selection.ts` + ‹ › handles (skip `[data-token-selection-ui]` when hit-testing).
 - Enrichment: `src/lib/dictionary-enrich.ts` + `POST /api/dictionary/enrich` on persist.
 - Lookup cache: `src/lib/lookup-cache.ts`.

@@ -286,7 +286,6 @@ All application APIs are implemented under `src/app/api`. Authenticated endpoint
 | `/api/kanji/[character]/mnemonic` | `PATCH` | Update a mnemonic |
 | `/api/kanji/[character]/mnemonic/save` | `POST` | Save a generated mnemonic |
 | `/api/kanji/mnemonics/bulk` | `POST` | Generate mnemonics in bulk |
-| `/api/kanji/debug`, `/api/kanji/test` | `GET` | Development/debug helpers |
 
 ### Background and protected triggers
 
