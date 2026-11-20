@@ -150,7 +150,12 @@ export default function MemoryClient() {
     });
     if (res.ok) {
       const d = await res.json();
-      setMemories((m) => (m ? [d.memory, ...m] : [d.memory]));
+      // A near-duplicate is deduped server-side into an existing row, so
+      // replace that row instead of showing the same id twice.
+      setMemories((m) => [
+        d.memory,
+        ...(m ?? []).filter((x) => x.id !== d.memory.id),
+      ]);
       setDraft("");
     }
     setAdding(false);
