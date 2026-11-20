@@ -144,7 +144,9 @@ model Chat {
   members  ChatMember[]
   messages Message[]
 
-  @@index([ownerId])
+  // Conversation lists and the message-request cap filter owner first, then
+  // kind/recency.
+  @@index([ownerId, kind, createdAt])
 }
 
 // A participant in a group: either a human user OR an AI persona.
@@ -172,6 +174,9 @@ model ChatMember {
   @@unique([chatId, userId])
   @@unique([chatId, personaId])
   @@index([chatId])
+  // Inbox, invites and membership checks all filter by user first; the uniques
+  // above are chat-first and can't serve them.
+  @@index([userId, kind, status, hidden])
 }
 
 model Message {
