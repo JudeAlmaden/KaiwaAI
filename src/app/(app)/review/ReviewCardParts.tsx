@@ -84,17 +84,6 @@ export function CardExtras({ card }: { card: Card }) {
 
   return (
     <div className="mt-3 w-full space-y-2" onClick={(e) => e.stopPropagation()} data-stop-flip>
-      {leech && (
-        <div className="flex items-center justify-center">
-          <span
-            className="inline-flex items-center gap-1 rounded-full border border-amber/40 bg-amber/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber"
-            title={`Reviewed ${card.timesReviewed ?? 0}× — interval still ${card.interval ?? 0}d`}
-          >
-            ⚠️ Leech
-          </span>
-        </div>
-      )}
-
       {source && (
         <div className="rounded-2xl border border-border bg-surface/50 px-3 py-2 text-left">
           <p className="text-[10px] font-bold uppercase tracking-wide text-muted font-display">
@@ -112,9 +101,16 @@ export function CardExtras({ card }: { card: Card }) {
           type="button"
           onClick={openBreakdown}
           disabled={loading}
-          className="w-full rounded-full border-2 border-indigo-ai/30 bg-indigo-ai/5 px-3 py-1.5 text-xs font-bold text-indigo-ai transition-all hover:bg-indigo-ai/10 disabled:opacity-50"
+          className="group flex w-full items-center justify-between rounded-2xl border border-amber/30 bg-amber/5 px-3.5 py-2 text-xs font-semibold text-foreground transition-all hover:border-indigo-ai/40 hover:bg-indigo-ai/5 disabled:opacity-50"
+          title={`Reviewed ${card.timesReviewed ?? 0}× — interval still ${card.interval ?? 0}d`}
         >
-          {loading ? "Kai is thinking…" : breakdown ? "Ask Kai again" : "🩺 Kai's Breakdown"}
+          <div className="flex items-center gap-1.5 text-amber">
+            <span>💡</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">Tricky word</span>
+          </div>
+          <span className="flex items-center gap-1 text-[11px] font-bold text-indigo-ai group-hover:underline">
+            {loading ? "Kai is thinking…" : breakdown ? "Ask Kai again" : "Kai's Breakdown ✨"}
+          </span>
         </button>
       )}
 

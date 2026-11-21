@@ -9,6 +9,35 @@ import type { GMsg } from "./group-types";
 import { timeLabel } from "./group-format";
 
 /**
+ * Renders plain message text with interactive @mention pills.
+ */
+function FormattedMessageText({ content }: { content: string }) {
+  // Regex to match @mentions (@word)
+  const parts = content.split(/(@[\p{L}\p{N}_]+)/gu);
+  if (parts.length === 1) {
+    return <p className="font-jp leading-relaxed">{content}</p>;
+  }
+
+  return (
+    <p className="font-jp leading-relaxed">
+      {parts.map((part, i) => {
+        if (part.startsWith("@")) {
+          return (
+            <span
+              key={i}
+              className="inline-flex items-center mx-0.5 rounded-md bg-indigo-ai/15 px-1.5 py-0.5 text-[0.9em] font-bold text-indigo-ai border border-indigo-ai/20 shadow-2xs"
+            >
+              {part}
+            </span>
+          );
+        }
+        return part;
+      })}
+    </p>
+  );
+}
+
+/**
  * One message bubble: own-message styling, persona rich text, swipe-to-reply and
  * the grammar correction card.
  */
@@ -122,6 +151,28 @@ export default function GroupBubble({
     e.stopPropagation();
   };
 
+  // Bubble border radius grouping (iMessage / Messenger style):
+  // - Single isolated message: rounded-2xl
+  // - Run start: flat bottom-corner on message side (rounded-2xl rounded-br-sm or rounded-bl-sm)
+  // - Run middle: flat top and bottom corner on message side (rounded-2xl rounded-r-sm or rounded-l-sm)
+  // - Run end: flat top-corner on message side (rounded-2xl rounded-tr-sm or rounded-tl-sm)
+  const isSingle = startGroup && endGroup;
+  const userCorners = isSingle
+    ? "rounded-2xl"
+    : startGroup
+    ? "rounded-2xl rounded-br-sm"
+    : endGroup
+    ? "rounded-2xl rounded-tr-sm"
+    : "rounded-2xl rounded-r-sm";
+
+  const otherCorners = isSingle
+    ? "rounded-2xl"
+    : startGroup
+    ? "rounded-2xl rounded-bl-sm"
+    : endGroup
+    ? "rounded-2xl rounded-tl-sm"
+    : "rounded-2xl rounded-l-sm";
+
   if (msg.isMe) {
     return (
       <div
@@ -129,13 +180,13 @@ export default function GroupBubble({
         onMouseEnter={() => setShowReply(true)}
         onMouseLeave={() => setShowReply(false)}
       >
-        {/* Reply button on the side - vertically centered, visible during swipe */}
+        {/* Reply button on the side - visible on hover or active swipe */}
         <button
           onClick={onReply}
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white ${
-            showReply || Math.abs(swipeOffset) > 20 || endGroup
-              ? "opacity-100 scale-100 sm:opacity-40 sm:group-hover:opacity-100"
-              : "opacity-0 scale-75 pointer-events-none sm:opacity-0"
+            showReply || Math.abs(swipeOffset) > 20
+              ? "opacity-100 scale-100"
+              : "opacity-0 scale-75 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
           }`}
           title="Reply"
         >
@@ -154,11 +205,23 @@ export default function GroupBubble({
           onClickCapture={suppressTokenClickAfterSwipe}
         >
           <div
-            className={`rounded-3xl bg-indigo-ai px-4 py-2.5 text-white shadow-sm ${
-              endGroup ? "rounded-br-md" : ""
-            }`}
+            className={`bg-indigo-ai px-4 py-2.5 text-white shadow-sm transition-all ${userCorners}`}
           >
-            <p className="font-jp leading-relaxed">{msg.content}</p>
+            <p className="font-jp leading-relaxed">
+              {msg.content.split(/(@[\p{L}\p{N}_]+)/gu).map((part, i) => {
+                if (part.startsWith("@")) {
+                  return (
+                    <span
+                      key={i}
+                      className="inline-flex items-center mx-0.5 rounded-md bg-white/20 px-1.5 py-0.5 text-[0.9em] font-bold text-white shadow-2xs"
+                    >
+                      {part}
+                    </span>
+                  );
+                }
+                return part;
+              })}
+            </p>
           </div>
           {endGroup && (
             <span className="mr-1 mt-0.5 text-[10px] text-muted/60">{time}</span>
@@ -224,9 +287,7 @@ export default function GroupBubble({
           </span>
         )}
         <div
-          className={`max-w-full rounded-3xl bg-card px-4 py-2.5 shadow-sm ${
-            endGroup ? "rounded-bl-md" : ""
-          }`}
+          className={`max-w-full bg-card px-4 py-2.5 shadow-sm transition-all ${otherCorners}`}
         >
           {isPersona ? (
             <RichKaiText
@@ -240,20 +301,20 @@ export default function GroupBubble({
               onSelectionModeChange={handleSelectionModeChange}
             />
           ) : (
-            <p className="font-jp leading-relaxed">{msg.content}</p>
+            <FormattedMessageText content={msg.content} />
           )}
         </div>
         {endGroup && (
           <span className="ml-1 mt-0.5 text-[10px] text-muted/60">{time}</span>
         )}
       </div>
-      {/* Reply button on the side - vertically centered, visible during swipe */}
+      {/* Reply button on the side - visible on hover or active swipe */}
       <button
         onClick={onReply}
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/10 text-indigo-ai transition-all hover:bg-indigo-ai hover:text-white ${
-          showReply || Math.abs(swipeOffset) > 20 || endGroup
-            ? "opacity-100 scale-100 sm:opacity-40 sm:group-hover:opacity-100"
-            : "opacity-0 scale-75 pointer-events-none sm:opacity-0"
+          showReply || Math.abs(swipeOffset) > 20
+            ? "opacity-100 scale-100"
+            : "opacity-0 scale-75 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto"
         }`}
         title="Reply"
       >
