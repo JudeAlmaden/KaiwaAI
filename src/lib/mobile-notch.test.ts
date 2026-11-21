@@ -5,6 +5,7 @@ import {
   setMobileNotchOffset,
   applyMobileNotchOffset,
   MOBILE_NOTCH_STORAGE_KEY,
+  NOTCH_AUTO,
   DEFAULT_NOTCH_OFFSET,
   MAX_NOTCH_OFFSET,
   MIN_NOTCH_OFFSET,
@@ -35,28 +36,47 @@ describe("mobile-notch utility", () => {
     expect(clampNotchOffset(NaN)).toBe(DEFAULT_NOTCH_OFFSET);
   });
 
-  it("returns default offset when nothing stored", () => {
-    expect(getMobileNotchOffset()).toBe(0);
+  it("returns null (auto) when nothing is stored", () => {
+    expect(getMobileNotchOffset()).toBe(null);
   });
 
-  it("stores and retrieves custom offset", () => {
+  it("returns null (auto) when stored value is 'auto'", () => {
+    window.localStorage.setItem(MOBILE_NOTCH_STORAGE_KEY, NOTCH_AUTO);
+    expect(getMobileNotchOffset()).toBe(null);
+  });
+
+  it("stores and retrieves a custom offset", () => {
     const saved = setMobileNotchOffset(32);
     expect(saved).toBe(32);
     expect(getMobileNotchOffset()).toBe(32);
     expect(window.localStorage.getItem(MOBILE_NOTCH_STORAGE_KEY)).toBe("32");
   });
 
-  it("applies offset to document CSS variable", () => {
+  it("stores 'auto' sentinel when reset to null", () => {
+    setMobileNotchOffset(null);
+    expect(window.localStorage.getItem(MOBILE_NOTCH_STORAGE_KEY)).toBe(NOTCH_AUTO);
+    expect(getMobileNotchOffset()).toBe(null);
+  });
+
+  it("applies a fixed offset to the CSS variable", () => {
     const setProperty = vi.fn();
+    const removeProperty = vi.fn();
     vi.stubGlobal("document", {
-      documentElement: {
-        style: {
-          setProperty,
-        },
-      },
+      documentElement: { style: { setProperty, removeProperty } },
     });
 
     applyMobileNotchOffset(40);
     expect(setProperty).toHaveBeenCalledWith("--mobile-notch-offset", "40px");
+  });
+
+  it("removes the CSS variable when offset is null (auto)", () => {
+    const setProperty = vi.fn();
+    const removeProperty = vi.fn();
+    vi.stubGlobal("document", {
+      documentElement: { style: { setProperty, removeProperty } },
+    });
+
+    applyMobileNotchOffset(null);
+    expect(removeProperty).toHaveBeenCalledWith("--mobile-notch-offset");
   });
 });

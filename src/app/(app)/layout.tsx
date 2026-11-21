@@ -36,7 +36,7 @@ export default async function AppLayout({
       <OnboardingCheck />
       <Sidebar email={user.email} streak={streak} />
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-[var(--mobile-notch-offset,0px)] lg:pt-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-[var(--mobile-notch-offset,env(safe-area-inset-top,0px))] lg:pt-0">
         <MobileTopBar streak={streak} />
         <AppUpdateBanner />
         <OfflineBanner />
