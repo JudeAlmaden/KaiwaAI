@@ -57,19 +57,8 @@ export async function POST(
       },
     });
   } else {
-    // If Heisig fields were supplied, update the Kanji record
-    const updateData: { heisigNumber?: number; heisigLesson?: number; heisigKeyword?: string } = {};
-    if (body.heisigNumber) updateData.heisigNumber = Number(body.heisigNumber);
-    if (body.heisigLesson) updateData.heisigLesson = Number(body.heisigLesson);
-    if (body.heisigKeyword || body.keyword) {
-      updateData.heisigKeyword = body.heisigKeyword || body.keyword;
-    }
-    if (Object.keys(updateData).length > 0) {
-      kanji = await prisma.kanji.update({
-        where: { id: kanji.id },
-        data: updateData,
-      });
-    }
+    // Keep global Kanji table intact — user-supplied keywords and mnemonics
+    // are stored on the user's UserKanji record below.
   }
 
   // Check if already in user's review queue

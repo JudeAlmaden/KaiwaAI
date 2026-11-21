@@ -60,6 +60,8 @@ const globalForLimiter = globalThis as unknown as {
   messageLimiter: RateLimiter | undefined;
   flashcardLimiter: RateLimiter | undefined;
   lookupLimiter: RateLimiter | undefined;
+  loginLimiter: RateLimiter | undefined;
+  registerLimiter: RateLimiter | undefined;
 };
 
 export const messageLimiter =
@@ -71,8 +73,26 @@ export const flashcardLimiter =
 export const lookupLimiter =
   globalForLimiter.lookupLimiter ?? new RateLimiter(30, 60000); // 30 dictionary lookups per minute
 
+export const loginLimiter =
+  globalForLimiter.loginLimiter ?? new RateLimiter(5, 60000); // 5 login attempts per minute
+
+export const registerLimiter =
+  globalForLimiter.registerLimiter ?? new RateLimiter(3, 60000); // 3 registration attempts per minute
+
 if (process.env.NODE_ENV !== "production") {
   globalForLimiter.messageLimiter = messageLimiter;
   globalForLimiter.flashcardLimiter = flashcardLimiter;
   globalForLimiter.lookupLimiter = lookupLimiter;
+  globalForLimiter.loginLimiter = loginLimiter;
+  globalForLimiter.registerLimiter = registerLimiter;
+}
+
+export function getClientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+  return "127.0.0.1";
 }

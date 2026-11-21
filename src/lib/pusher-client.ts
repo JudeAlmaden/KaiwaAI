@@ -14,6 +14,7 @@ export function getPusherClient(): PusherClient | null {
     clientInstance = new PusherClient(key, {
       cluster,
       forceTLS: true,
+      authEndpoint: "/api/pusher/auth",
     });
   }
 

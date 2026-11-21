@@ -37,7 +37,7 @@ export async function triggerGroupEvent(
   if (!pusher) return false;
 
   try {
-    await pusher.trigger(`group-${groupId}`, event, data);
+    await pusher.trigger(`private-group-${groupId}`, event, data);
     return true;
   } catch (err) {
     console.warn("Pusher trigger failed:", err);

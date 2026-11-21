@@ -30,12 +30,13 @@ describe("session", () => {
   });
 
   it("creates a session and reads it back", async () => {
-    await createSession({ userId: "user_1", email: "a@b.com" });
+    await createSession({ userId: "user_1", email: "a@b.com", tokenVersion: 3 });
 
     const session = await getSession();
     expect(session).not.toBeNull();
     expect(session?.userId).toBe("user_1");
     expect(session?.email).toBe("a@b.com");
+    expect(session?.tokenVersion).toBe(3);
   });
 
   it("stores the token as an httpOnly-style signed value, not plaintext", async () => {

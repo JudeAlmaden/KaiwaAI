@@ -16,6 +16,7 @@ function getSecretKey() {
 export type SessionPayload = {
   userId: string;
   email: string;
+  tokenVersion?: number;
 };
 
 export async function createSession(payload: SessionPayload) {
@@ -43,7 +44,12 @@ export async function getSession(): Promise<SessionPayload | null> {
 
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
-    return { userId: payload.userId as string, email: payload.email as string };
+    return {
+      userId: payload.userId as string,
+      email: payload.email as string,
+      tokenVersion:
+        typeof payload.tokenVersion === "number" ? payload.tokenVersion : undefined,
+    };
   } catch {
     return null;
   }

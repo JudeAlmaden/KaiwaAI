@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { createSession } from "@/lib/session";
 
 // PATCH: update user's password
 export async function PATCH(req: Request) {
@@ -31,11 +32,21 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Current password is incorrect" }, { status: 401 });
   }
 
-  // Hash and save new password
+  // Hash and save new password, incrementing tokenVersion to revoke all other active sessions
   const hashedPassword = await bcrypt.hash(newPassword, 12);
-  await prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: user.id },
-    data: { password: hashedPassword },
+    data: {
+      password: hashedPassword,
+      tokenVersion: { increment: 1 },
+    },
+  });
+
+  // Re-issue a fresh session cookie with the new tokenVersion for this active client
+  await createSession({
+    userId: updatedUser.id,
+    email: updatedUser.email,
+    tokenVersion: updatedUser.tokenVersion,
   });
 
   return NextResponse.json({ ok: true });

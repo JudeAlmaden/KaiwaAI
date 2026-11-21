@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import bcrypt from "bcryptjs";
 import { PATCH } from "./route";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { createSession } from "@/lib/session";
 
 vi.mock("@/lib/auth-helpers");
+vi.mock("@/lib/session");
 vi.mock("bcryptjs");
 
 vi.mock("@/lib/prisma", () => ({
@@ -75,11 +77,17 @@ describe("/api/settings/password", () => {
   it("updates password successfully", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({
       id: "user1",
+      email: "user1@example.com",
       password: "hashedOldPassword",
+      tokenVersion: 1,
     } as never);
     vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
     vi.mocked(bcrypt.hash).mockResolvedValue("hashedNewPassword" as never);
-    vi.mocked(prisma.user.update).mockResolvedValue({ id: "user1" } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      id: "user1",
+      email: "user1@example.com",
+      tokenVersion: 2,
+    } as never);
 
     const req = new Request("http://localhost/api/settings/password", {
       method: "PATCH",
@@ -95,7 +103,15 @@ describe("/api/settings/password", () => {
     expect(bcrypt.hash).toHaveBeenCalledWith("new12345", 12);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user1" },
-      data: { password: "hashedNewPassword" },
+      data: {
+        password: "hashedNewPassword",
+        tokenVersion: { increment: 1 },
+      },
+    });
+    expect(createSession).toHaveBeenCalledWith({
+      userId: "user1",
+      email: "user1@example.com",
+      tokenVersion: 2,
     });
   });
 });

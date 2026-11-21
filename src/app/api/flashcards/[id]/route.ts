@@ -64,7 +64,7 @@ export async function PATCH(
     if (owned.phraseId) {
       const meaningsJson = meaning ? JSON.stringify([meaning]) : undefined;
       await prisma.phrase.update({
-        where: { id: owned.phraseId },
+        where: { id: owned.phraseId, userId: user.id },
         data: {
           ...(reading ? { reading: reading.trim() } : {}),
           ...(meaningsJson ? { meanings: meaningsJson } : {}),
@@ -74,25 +74,20 @@ export async function PATCH(
         },
       });
     } else if (owned.wordId) {
-      if (owned.wordFormId) {
-        await prisma.wordForm.update({
-          where: { id: owned.wordFormId },
-          data: {
-            ...(reading ? { reading: reading.trim() } : {}),
-          },
+      // For dictionary words, user overrides are saved to personal notes on the
+      // flashcard rather than mutating the shared JMdict Word table for all users.
+      if (meaning || reading) {
+        const noteText = [
+          meaning ? `Meaning: ${meaning.trim()}` : null,
+          reading ? `Reading: ${reading.trim()}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+        await prisma.userFlashcard.update({
+          where: { id },
+          data: { note: noteText },
         });
       }
-      const meaningsJson = meaning ? JSON.stringify([meaning]) : undefined;
-      await prisma.word.update({
-        where: { id: owned.wordId },
-        data: {
-          ...(reading && !owned.wordFormId ? { reading: reading.trim() } : {}),
-          ...(meaningsJson ? { meanings: meaningsJson } : {}),
-          ...(partOfSpeech && partOfSpeech in PartOfSpeech
-            ? { partOfSpeech: partOfSpeech as PartOfSpeech }
-            : {}),
-        },
-      });
     }
 
     const updated = await prisma.userFlashcard.findUnique({

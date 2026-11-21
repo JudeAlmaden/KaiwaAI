@@ -82,6 +82,12 @@ export async function POST(
     where: { id },
     select: { moodScore: true, kind: true },
   });
+  if (!chat || chat.kind !== "persona") {
+    return NextResponse.json(
+      { error: "Proactive messages are only allowed in 1:1 persona conversations." },
+      { status: 400 }
+    );
+  }
   if (chat?.kind === "persona") {
     const lastUser = await prisma.message.findFirst({
       where: { chatId: id, senderKind: "user" },

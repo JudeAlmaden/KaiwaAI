@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import bcrypt from "bcryptjs";
+import { registerLimiter } from "@/lib/rate-limiter";
 
 const findUnique = vi.fn();
 const create = vi.fn();
@@ -20,9 +21,13 @@ vi.mock("@/lib/session", () => ({
 
 import { POST } from "./route";
 
-function req(body: unknown) {
+function req(body: unknown, headers?: Record<string, string>) {
   return new Request("http://localhost/api/auth/register", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -32,6 +37,7 @@ describe("POST /api/auth/register", () => {
     findUnique.mockReset();
     create.mockReset();
     createSession.mockReset();
+    registerLimiter.reset();
   });
 
   it("rejects a missing email or password", async () => {
@@ -62,6 +68,7 @@ describe("POST /api/auth/register", () => {
       id: "new_user",
       email: data.email,
       name: null,
+      tokenVersion: 1,
     }));
 
     const res = await POST(
@@ -81,6 +88,28 @@ describe("POST /api/auth/register", () => {
     expect(createSession).toHaveBeenCalledWith({
       userId: "new_user",
       email: "new@example.com",
+      tokenVersion: 1,
     });
+  });
+
+  it("rate limits repeated registration attempts from same IP", async () => {
+    findUnique.mockResolvedValue({ id: "existing", email: "a@b.com" });
+    const clientHeaders = { "x-forwarded-for": "10.0.0.5" };
+
+    // Fire 3 attempts (limit is 3)
+    for (let i = 0; i < 3; i++) {
+      const res = await POST(
+        req({ email: `reg${i}@b.com`, password: "validpassword123" }, clientHeaders)
+      );
+      expect(res.status).toBe(409);
+    }
+
+    // 4th attempt should be 429
+    const blocked = await POST(
+      req({ email: "reg4@b.com", password: "validpassword123" }, clientHeaders)
+    );
+    expect(blocked.status).toBe(429);
+    const data = await blocked.json();
+    expect(data.error).toMatch(/too many registration attempts/i);
   });
 });

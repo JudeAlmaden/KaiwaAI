@@ -18,6 +18,7 @@ model User {
   email              String    @unique
   name               String?
   password           String
+  tokenVersion       Int       @default(1)
   timezone           String    @default("UTC")
   // Opt-in: user's Gemini API key, encrypted at rest (AES-256-GCM). Enables
   // server-side features (scheduled messages, background summaries). Null = the
