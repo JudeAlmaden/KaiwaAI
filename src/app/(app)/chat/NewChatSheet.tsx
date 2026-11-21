@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Chip } from "../ui";
-import QuestLauncher from "./QuestLauncher";
 import { usePeopleContext } from "./InboxProvider";
 import { personLabel } from "./usePeople";
+import { useDebounce } from "@/hooks/useDebounce";
+import { looksLikeEmail } from "@/lib/email-utils";
 
 export type ComposeMode = "people" | "group";
 
@@ -18,19 +18,16 @@ const MODES: { id: ComposeMode; label: string }[] = [
 const MAX_GROUP_FRIENDS = 4;
 
 /**
- * Writing only: pick a friend or persona to message, send a message request to
- * someone who is not a friend yet, or create a group. Contacts management lives
- * in the People sheet.
+ * Writing only: pick a friend to message, send a message request to someone
+ * who is not a friend yet, or create a group.
  */
 export default function NewChatSheet({
   initialMode = "people",
   focusSearch = false,
-  initialQuestsOpen = false,
   onClose,
 }: {
   initialMode?: ComposeMode;
   focusSearch?: boolean;
-  initialQuestsOpen?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -38,14 +35,14 @@ export default function NewChatSheet({
 
   const [mode, setMode] = useState<ComposeMode>(initialMode);
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounce(query, 180);
   const [pickedFriends, setPickedFriends] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState("");
-  const [requestEmail, setRequestEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showQuests, setShowQuests] = useState(initialQuestsOpen);
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Escape closes; the inbox behind the sheet must not scroll.
   useEffect(() => {
@@ -58,12 +55,22 @@ export default function NewChatSheet({
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
   }, [onClose]);
 
   useEffect(() => {
     if (focusSearch) searchRef.current?.focus();
   }, [focusSearch]);
+
+  function handleScroll() {
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (document.activeElement === searchRef.current) {
+        searchRef.current?.blur();
+      }
+    }, 80);
+  }
 
   function toggleFriend(id: string) {
     setPickedFriends((prev) => {
@@ -104,11 +111,18 @@ export default function NewChatSheet({
   }
 
   const list = friends ?? [];
-  const q = query.trim().toLowerCase();
+  const q = debouncedQuery.trim().toLowerCase();
   const visibleFriends = q
-    ? list.filter((entry) => personLabel(entry.user).toLowerCase().includes(q))
+    ? list.filter((entry) => personLabel(entry.user).toLowerCase().includes(q) || entry.user.email.toLowerCase().includes(q))
     : list;
   const nothingMatches = q.length > 0 && visibleFriends.length === 0;
+
+  const trimmedQuery = query.trim();
+  const isInputEmail = mode === "people" && looksLikeEmail(trimmedQuery);
+  const isDebouncedEmail = mode === "people" && looksLikeEmail(debouncedQuery);
+  const alreadyFriend = list.some(
+    (entry) => entry.user.email.toLowerCase() === q
+  );
 
   return (
     <div
@@ -154,18 +168,69 @@ export default function NewChatSheet({
         </div>
 
         <div className="mt-3 px-5">
-          <input
-            ref={searchRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={mode === "group" ? "Search people to invite…" : "Search people…"}
-            className="w-full rounded-full border-2 border-border bg-card px-4 py-2 text-sm outline-none placeholder:text-muted/60 focus:border-indigo-ai"
-          />
+          <div className="relative flex items-center">
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isInputEmail && !busy) {
+                  e.preventDefault();
+                  void create({ email: trimmedQuery });
+                }
+              }}
+              placeholder={
+                mode === "group"
+                  ? "Search people to invite…"
+                  : "Search friends or type an email…"
+              }
+              className="w-full rounded-full border-2 border-border bg-card px-4 py-2 pr-20 text-sm outline-none placeholder:text-muted/60 transition-colors focus:border-indigo-ai"
+            />
+            {isInputEmail && (
+              <button
+                type="button"
+                onClick={() => void create({ email: trimmedQuery })}
+                disabled={busy}
+                className="absolute right-1.5 rounded-full bg-indigo-ai px-3.5 py-1 text-xs font-bold text-white transition-colors hover:bg-indigo-deep disabled:opacity-40"
+              >
+                {busy ? "…" : "Send"}
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+        <div
+          onScroll={handleScroll}
+          className="min-h-0 flex-1 overflow-y-auto px-5 py-3 scroll-smooth"
+        >
           {mode === "people" && (
             <div className="flex flex-col gap-1">
+              {isDebouncedEmail && !alreadyFriend && (
+                <div className="mb-2 flex items-center justify-between rounded-2xl border-2 border-indigo-ai/30 bg-indigo-ai/5 p-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/15 text-sm">
+                      ✉️
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">
+                        Message &ldquo;{debouncedQuery.trim()}&rdquo;
+                      </span>
+                      <span className="block truncate text-[11px] text-muted">
+                        Send a message request to this email
+                      </span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void create({ email: debouncedQuery.trim() })}
+                    disabled={busy}
+                    className="shrink-0 rounded-full bg-indigo-ai px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-deep disabled:opacity-40"
+                  >
+                    {busy ? "…" : "Send"}
+                  </button>
+                </div>
+              )}
+
               {visibleFriends.length > 0 && (
                 <p className="px-1 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
                   Friends
@@ -192,128 +257,149 @@ export default function NewChatSheet({
                   <span className="shrink-0 text-indigo-ai">→</span>
                 </button>
               ))}
-              {list.length === 0 && (
+              {list.length === 0 && !isDebouncedEmail && (
                 <p className="px-1 py-1 text-xs text-muted">
-                  No friends yet. Add someone from People, or send a message
-                  request below.
+                  No friends yet. Add someone from People, or write to an email above.
                 </p>
               )}
 
-              {nothingMatches && (
+              {nothingMatches && !isDebouncedEmail && (
                 <p className="px-1 py-2 text-xs text-muted">
-                  No one matches &ldquo;{query}&rdquo;.
+                  No one matches &ldquo;{debouncedQuery}&rdquo;. Type a full email to message them.
                 </p>
               )}
-
-              {!q && (
-                <button
-                  onClick={() => setShowQuests((open) => !open)}
-                  className="mt-2 self-start rounded-full border-2 border-border px-3 py-1.5 text-xs font-bold text-muted transition-colors hover:border-indigo-ai hover:text-indigo-ai"
-                  aria-expanded={showQuests}
-                >
-                  Roleplay quest
-                </button>
-              )}
-              {showQuests && (
-                <div className="mt-2">
-                  <QuestLauncher
-                    onStartQuest={(groupId) => {
-                      onClose();
-                      router.push(`/chat/c/${groupId}`);
-                    }}
-                  />
-                </div>
-              )}
-
-              <div className="mt-4 rounded-2xl border-2 border-border/80 bg-bg/40 p-3">
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-                  Message request
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted">
-                  Not friends yet? Write to an email — they accept before the chat
-                  opens for them.
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    value={requestEmail}
-                    onChange={(e) => setRequestEmail(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && requestEmail.trim() && !busy) {
-                        void create({ email: requestEmail.trim() });
-                      }
-                    }}
-                    placeholder="friend@email.com"
-                    className="min-w-0 flex-1 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs outline-none placeholder:text-muted/60 focus:border-indigo-ai"
-                  />
-                  <button
-                    onClick={() => void create({ email: requestEmail.trim() })}
-                    disabled={busy || !requestEmail.trim()}
-                    className="shrink-0 rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
-                  >
-                    {busy ? "…" : "Send"}
-                  </button>
-                </div>
-              </div>
-
             </div>
           )}
 
           {mode === "group" && (
             <div className="flex flex-col gap-3">
+              {/* Group Name input */}
+              <div className="relative flex items-center">
+                <span className="absolute left-3.5 text-base text-muted">👥</span>
+                <input
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="Group name (optional)"
+                  className="w-full rounded-full border-2 border-border bg-card pl-9 pr-4 py-2 text-sm outline-none placeholder:text-muted/60 transition-colors focus:border-indigo-ai"
+                />
+              </div>
+
+              {/* Selected friends tray */}
+              {pickedFriends.size > 0 && (
+                <div className="flex flex-col gap-1.5 rounded-2xl border-2 border-indigo-ai/20 bg-indigo-ai/5 p-2.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-ai">
+                      Selected ({pickedFriends.size}/{MAX_GROUP_FRIENDS})
+                    </span>
+                    {pickedFriends.size >= MAX_GROUP_FRIENDS && (
+                      <span className="text-[10px] text-muted font-semibold">Max reached</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[...pickedFriends].map((id) => {
+                      const friend = list.find((f) => f.user.id === id);
+                      if (!friend) return null;
+                      const name = personLabel(friend.user);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-card border-2 border-indigo-ai/40 pl-2 pr-1.5 py-0.5 text-xs font-bold text-foreground shadow-xs"
+                        >
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-ai/15 text-[9px] font-extrabold text-indigo-ai">
+                            {name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="max-w-[120px] truncate">{name}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleFriend(id)}
+                            className="flex h-4 w-4 items-center justify-center rounded-full text-muted hover:bg-sakura/10 hover:text-sakura"
+                            title={`Remove ${name}`}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Friends list with checkmarks */}
               <div>
                 <p className="mb-1.5 px-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
-                  Friends to invite (up to 4)
+                  {pickedFriends.size === 0 ? "Pick friends to invite (up to 4)" : "Friends"}
                 </p>
                 {list.length === 0 ? (
-                  <p className="px-1 text-xs text-muted">
+                  <p className="px-1 py-1 text-xs text-muted">
                     Add friends first from People to invite them.
                   </p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {visibleFriends.map((entry) => (
-                      <Chip
-                        key={entry.friendshipId}
-                        active={pickedFriends.has(entry.user.id)}
-                        disabled={
-                          !pickedFriends.has(entry.user.id) &&
-                          pickedFriends.size >= MAX_GROUP_FRIENDS
-                        }
-                        onClick={() => toggleFriend(entry.user.id)}
-                      >
-                        {personLabel(entry.user)}
-                      </Chip>
-                    ))}
+                  <div className="flex flex-col gap-1">
+                    {visibleFriends.map((entry) => {
+                      const isPicked = pickedFriends.has(entry.user.id);
+                      const isMax = !isPicked && pickedFriends.size >= MAX_GROUP_FRIENDS;
+                      const name = personLabel(entry.user);
+                      return (
+                        <button
+                          key={entry.friendshipId}
+                          type="button"
+                          disabled={busy || isMax}
+                          onClick={() => toggleFriend(entry.user.id)}
+                          className={`flex items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition-all ${
+                            isPicked
+                              ? "bg-indigo-ai/10 border-2 border-indigo-ai/40"
+                              : "border-2 border-transparent hover:bg-indigo-ai/5 disabled:opacity-40"
+                          }`}
+                        >
+                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold uppercase text-xs transition-colors ${
+                            isPicked ? "bg-indigo-ai text-white" : "bg-indigo-ai/15 text-indigo-ai"
+                          }`}>
+                            {name.charAt(0)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-bold">{name}</span>
+                            <span className="block truncate text-[11px] text-muted">{entry.user.email}</span>
+                          </span>
+                          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs font-extrabold transition-colors ${
+                            isPicked ? "border-indigo-ai bg-indigo-ai text-white" : "border-border text-transparent"
+                          }`}>
+                            ✓
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
-                {pickedFriends.size >= MAX_GROUP_FRIENDS && (
-                  <p className="mt-1.5 px-1 text-[11px] text-muted">
-                    {MAX_GROUP_FRIENDS} friends is the most a group can hold.
+                {nothingMatches && (
+                  <p className="px-1 py-2 text-xs text-muted">
+                    No one matches &ldquo;{debouncedQuery}&rdquo;.
                   </p>
                 )}
               </div>
 
-              <input
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                placeholder="Group name (optional)"
-                className="w-full rounded-full border-2 border-border bg-card px-4 py-2 text-sm outline-none focus:border-indigo-ai"
-              />
-
-              <button
-                onClick={() =>
-                  void create({
-                    name: groupName.trim(),
-                    friendIds: [...pickedFriends],
-                  })
-                }
-                disabled={busy || pickedFriends.size === 0}
-                className="w-full rounded-full bg-indigo-ai py-2.5 text-sm font-bold text-white disabled:opacity-40"
-              >
-                {busy ? "Creating…" : "Create group"}
-              </button>
-              <p className="text-center text-[11px] text-muted">
-                Invited friends get a request they can accept.
-              </p>
+              {/* Create group button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void create({
+                      name: groupName.trim(),
+                      friendIds: [...pickedFriends],
+                    })
+                  }
+                  disabled={busy || pickedFriends.size === 0}
+                  className="w-full rounded-full bg-indigo-ai py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-indigo-deep disabled:opacity-40"
+                >
+                  {busy
+                    ? "Creating…"
+                    : pickedFriends.size > 0
+                      ? `Create group (${pickedFriends.size})`
+                      : "Create group"}
+                </button>
+                <p className="mt-1.5 text-center text-[11px] text-muted">
+                  Invited friends get a request they can accept.
+                </p>
+              </div>
             </div>
           )}
 

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import PersonaManager from "./PersonaManager";
-import { useInboxContext, usePeopleContext } from "./InboxProvider";
+import { usePeopleContext } from "./InboxProvider";
 import { personLabel } from "./usePeople";
+import { useDebounce } from "@/hooks/useDebounce";
+import { looksLikeEmail } from "@/lib/email-utils";
 
-export type PeopleFocus = "requests" | "personas";
+export type PeopleFocus = "requests";
 
 function Initial({ name, size = 32 }: { name: string; size?: number }) {
   return (
@@ -56,9 +57,9 @@ function RequestCard({
 }
 
 /**
- * People is management only: requests waiting on you, your friends (add, remove,
- * search), and your AI personas (create, edit, delete). Starting a conversation
- * happens in the New chat sheet — nothing here opens a chat.
+ * People is management only: requests waiting on you, and your friends (add,
+ * remove, search). Starting a conversation happens in the New chat sheet —
+ * nothing here opens a chat.
  */
 export default function PeopleSheet({
   focus,
@@ -67,7 +68,6 @@ export default function PeopleSheet({
   focus?: PeopleFocus;
   onClose: () => void;
 }) {
-  const { personas, reloadPersonas } = useInboxContext();
   const {
     friends,
     friendsLoading,
@@ -84,10 +84,12 @@ export default function PeopleSheet({
   } = usePeopleContext();
 
   const [query, setQuery] = useState("");
-  const [email, setEmail] = useState("");
+  const debouncedQuery = useDebounce(query, 180);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
   const requestsRef = useRef<HTMLDivElement>(null);
-  const personasRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Escape closes; the inbox behind the sheet must not scroll.
   useEffect(() => {
@@ -100,29 +102,54 @@ export default function PeopleSheet({
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
   }, [onClose]);
 
   useEffect(() => {
     if (focus === "requests") requestsRef.current?.scrollIntoView({ block: "start" });
-    else if (focus === "personas")
-      personasRef.current?.scrollIntoView({ block: "start" });
   }, [focus]);
 
-  async function submitEmail() {
-    const result = await addFriend(email);
+  async function submitEmail(target?: string) {
+    const toAdd = (target ?? query).trim();
+    if (!toAdd) return;
+    const result = await addFriend(toAdd);
     setMsg({ ok: result.ok, text: result.message });
-    if (result.ok) setEmail("");
+    if (result.ok) setQuery("");
+  }
+
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    const top = e.currentTarget.scrollTop;
+    setIsScrolled(top > 6);
+
+    // Debounce keyboard dismissal when scrolling through list
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (document.activeElement === inputRef.current) {
+        inputRef.current?.blur();
+      }
+    }, 80);
   }
 
   const list = friends ?? [];
-  const q = query.trim().toLowerCase();
+  const q = debouncedQuery.trim().toLowerCase();
   const filteredFriends = q
-    ? list.filter((entry) => personLabel(entry.user).toLowerCase().includes(q))
+    ? list.filter(
+        (entry) =>
+          personLabel(entry.user).toLowerCase().includes(q) ||
+          entry.user.email.toLowerCase().includes(q)
+      )
     : list;
-  const filteredPersonas = q
-    ? personas.filter((persona) => persona.name.toLowerCase().includes(q))
-    : personas;
+
+  const trimmedQuery = query.trim();
+  const isInputEmail = looksLikeEmail(trimmedQuery);
+  const isDebouncedEmail = looksLikeEmail(debouncedQuery);
+  const alreadyFriend = list.some(
+    (entry) => entry.user.email.toLowerCase() === debouncedQuery.trim().toLowerCase()
+  );
+  const alreadySent = outgoing.some(
+    (entry) => entry.user.email.toLowerCase() === debouncedQuery.trim().toLowerCase()
+  );
 
   return (
     <div
@@ -150,16 +177,50 @@ export default function PeopleSheet({
           </button>
         </div>
 
-        <div className="mt-3 px-5">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search friends and personas…"
-            className="w-full rounded-full border-2 border-border bg-card px-4 py-2 text-sm outline-none placeholder:text-muted/60 focus:border-indigo-ai"
-          />
+        <div className={`mt-3 px-5 transition-all ${isScrolled ? "pb-3 border-b border-border/70" : "pb-1"}`}>
+          <div className="relative flex items-center">
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (msg) setMsg(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isInputEmail && !busy) {
+                  e.preventDefault();
+                  void submitEmail(trimmedQuery);
+                }
+              }}
+              placeholder="Search friends or add by email…"
+              className="w-full rounded-full border-2 border-border bg-card px-4 py-2 pr-20 text-sm outline-none placeholder:text-muted/60 transition-colors focus:border-indigo-ai"
+            />
+            {isInputEmail && (
+              <button
+                type="button"
+                onClick={() => void submitEmail(trimmedQuery)}
+                disabled={busy}
+                className="absolute right-1.5 rounded-full bg-indigo-ai px-3.5 py-1 text-xs font-bold text-white transition-colors hover:bg-indigo-deep disabled:opacity-40"
+              >
+                {busy ? "…" : "Add"}
+              </button>
+            )}
+          </div>
+          {msg && (
+            <p
+              className={`mt-2 px-1 text-[11px] font-semibold ${
+                msg.ok ? "text-mint" : "text-sakura"
+              }`}
+            >
+              {msg.text}
+            </p>
+          )}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div
+          onScroll={handleScroll}
+          className="min-h-0 flex-1 overflow-y-auto px-5 py-4 scroll-smooth"
+        >
           <div className="flex flex-col gap-4">
             {pending > 0 && (
               <div ref={requestsRef} className="flex flex-col gap-1.5">
@@ -197,6 +258,38 @@ export default function PeopleSheet({
               </div>
             )}
 
+            {isDebouncedEmail && !alreadyFriend && !alreadySent && (
+              <div className="flex items-center justify-between rounded-2xl border-2 border-indigo-ai/30 bg-indigo-ai/5 p-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-ai/15 text-sm">
+                    ✉️
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold">
+                      Add &ldquo;{debouncedQuery.trim()}&rdquo;
+                    </span>
+                    <span className="block truncate text-[11px] text-muted">
+                      Send a friend request to this email
+                    </span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void submitEmail(debouncedQuery.trim())}
+                  disabled={busy}
+                  className="shrink-0 rounded-full bg-indigo-ai px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-deep disabled:opacity-40"
+                >
+                  {busy ? "…" : "Add friend"}
+                </button>
+              </div>
+            )}
+
+            {isDebouncedEmail && alreadySent && (
+              <p className="px-1 py-1 text-xs text-muted">
+                Friend request already sent to &ldquo;{debouncedQuery.trim()}&rdquo;.
+              </p>
+            )}
+
             <div className="flex flex-col gap-1">
               <p className="px-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
                 Friends
@@ -205,7 +298,7 @@ export default function PeopleSheet({
                 <p className="px-1 py-1 text-xs text-muted">Loading…</p>
               ) : list.length === 0 ? (
                 <p className="px-1 py-1 text-xs text-muted">
-                  No friends yet. Add someone by email below.
+                  No friends yet. Search above or type an email to add someone.
                 </p>
               ) : (
                 filteredFriends.map((entry) => (
@@ -231,58 +324,18 @@ export default function PeopleSheet({
                   </div>
                 ))
               )}
-              {!friendsLoading && list.length > 0 && filteredFriends.length === 0 && q && (
+              {!friendsLoading && list.length > 0 && filteredFriends.length === 0 && q && !isDebouncedEmail && (
                 <p className="px-1 py-1 text-xs text-muted">
-                  No friends match &ldquo;{query}&rdquo;.
+                  No friends match &ldquo;{debouncedQuery}&rdquo;.
                 </p>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void submitEmail();
-                }}
-                placeholder="Add by email"
-                className="min-w-0 flex-1 rounded-full border-2 border-border bg-card px-3 py-1.5 text-xs outline-none placeholder:text-muted/60 focus:border-indigo-ai"
-              />
-              <button
-                onClick={() => void submitEmail()}
-                disabled={busy || !email.trim()}
-                className="shrink-0 rounded-full bg-indigo-ai px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-deep disabled:opacity-40"
-              >
-                {busy ? "…" : "Send"}
-              </button>
-            </div>
-            {msg && (
-              <p
-                className={`px-1 text-[11px] font-semibold ${
-                  msg.ok ? "text-mint" : "text-sakura"
-                }`}
-              >
-                {msg.text}
-              </p>
-            )}
             {outgoing.length > 0 && (
               <p className="px-1 text-[11px] text-muted">
                 Sent: {outgoing.map((e) => personLabel(e.user)).join(", ")}
               </p>
             )}
-
-            <div ref={personasRef} className="flex flex-col gap-2">
-              <PersonaManager
-                compact
-                showChat={false}
-                // Kai's attitudes are chosen inside a chat; People only manages
-                // the characters the user actually created.
-                personas={filteredPersonas.filter(
-                  (p) => p.kind !== "kai" && p.kind !== "kai_mode"
-                )}
-                onChange={reloadPersonas}
-              />
-            </div>
           </div>
         </div>
       </div>

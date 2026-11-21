@@ -123,7 +123,7 @@ export async function GET(
   // Attitude tables only exist after the personalities migration; a failed
   // query here must not break the conversation itself.
   let activeMode = null;
-  let kaiModes: { id: string; name: string; label: string | null; avatar: string }[] = [];
+  let kaiModes: { id: string; name: string; label: string | null; avatar: string; personality: string | null; builtin: boolean; userId: string | null }[] = [];
   if (isKai && personaMember?.persona) {
     try {
       activeMode =
@@ -144,9 +144,21 @@ export async function GET(
           })
         )?.activeMode ?? null;
       kaiModes = await prisma.persona.findMany({
-        where: { kind: "kai_mode", modeOfId: personaMember.persona.id },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, name: true, label: true, avatar: true },
+        where: {
+          kind: "kai_mode",
+          modeOfId: personaMember.persona.id,
+          OR: [{ builtin: true }, { userId: user.id }],
+        },
+        orderBy: [{ builtin: "desc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          label: true,
+          avatar: true,
+          personality: true,
+          builtin: true,
+          userId: true,
+        },
       });
     } catch {
       // Migration not applied yet: Kai keeps the base voice.
@@ -187,6 +199,9 @@ export async function GET(
         id: m.id,
         label: m.label ?? m.name,
         avatar: m.avatar,
+        personality: m.personality,
+        builtin: m.builtin,
+        mine: m.userId === user.id,
       })),
       clientGenerated: hasPersona,
       members: group.members

@@ -18,6 +18,7 @@ import { enrichTokensFromDb } from "@/lib/dictionary-enrich-db";
 import { resolveReplyFields, serializeMessage } from "@/lib/message-serialize";
 import { composePersonaPersonality } from "@/lib/personas";
 import { normalizePersonaRole } from "@/lib/persona-role";
+import { triggerGroupEvent } from "@/lib/pusher-server";
 
 export async function DELETE(
   _req: Request,
@@ -277,6 +278,7 @@ export async function POST(
     });
     if (a.mood) await applyModelMood(id, a.mood);
     newMessages.push(rowToMsg(saved, user.id));
+    void triggerGroupEvent(id, "new-messages", { messages: newMessages });
     return NextResponse.json({
       messages: newMessages,
       mood: moodUpdate?.mood,
@@ -330,6 +332,17 @@ export async function POST(
       .map((h) => h.nickname || h.user?.name || h.user?.email || "")
       .filter((n) => n && n !== persona.name);
 
+    const userMemories = await prisma.memory.findMany({
+      where: {
+        userId: user.id,
+        chatId: id,
+        supersededById: null,
+      },
+      orderBy: [{ importance: "desc" }, { createdAt: "desc" }],
+      take: 10,
+      select: { content: true },
+    });
+
     try {
       const r = await generatePersonaReply({
         keys,
@@ -337,6 +350,7 @@ export async function POST(
         otherSpeakers: others,
         transcript: renderTranscript(turns),
         level: user.level,
+        memories: userMemories.map((m) => m.content),
       });
       if (r && r.reply) {
         const saved = await prisma.message.create({
@@ -361,6 +375,7 @@ export async function POST(
     }
   }
 
+  void triggerGroupEvent(id, "new-messages", { messages: newMessages });
   return NextResponse.json({
     messages: newMessages,
     mood: moodUpdate?.mood,

@@ -45,27 +45,23 @@ export default function ChatHub({
   const tabParam = searchParams.get("tab");
   const legacyCompose = tabParam === "ai" || tabParam === "meet" ? tabParam : null;
   const composeParam = searchParams.get("compose") ?? legacyCompose;
-  const wantsQuests = composeParam === "quest";
 
   const [people, setPeople] = useState<{ focus?: PeopleFocus } | null>(() => {
     const panel = searchParams.get("panel");
     if (panel === "requests") return { focus: "requests" };
-    if (panel === "personas") return { focus: "personas" };
     if (panel === "people" || tabParam === "friends") return {};
     return null;
   });
   const [write, setWrite] = useState<{
     mode: ComposeMode;
     focusSearch?: boolean;
-    quests?: boolean;
   } | null>(() => {
     if (searchParams.get("queue") === "1" || composeParam === "meet") return null;
     if (composeParam === "group") return { mode: "group" };
-    if (composeParam === "ai" || composeParam === "friend" || wantsQuests) {
+    if (composeParam === "ai" || composeParam === "friend") {
       return {
         mode: "people",
         focusSearch: composeParam === "friend",
-        quests: wantsQuests,
       };
     }
     return null;
@@ -205,7 +201,6 @@ export default function ChatHub({
         <NewChatSheet
           initialMode={write.mode}
           focusSearch={write.focusSearch}
-          initialQuestsOpen={write.quests}
           onClose={() => setWrite(null)}
         />
       )}

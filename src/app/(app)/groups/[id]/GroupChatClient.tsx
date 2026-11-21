@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -21,7 +21,6 @@ import Avatar from "../../chat/Avatar";
 import ModelSwitcher from "../../chat/ModelSwitcher";
 import MemorySuggestions from "../../chat/MemorySuggestions";
 import PersonaProfileDrawer from "../../chat/PersonaProfileDrawer";
-import QuestLauncher from "../../chat/QuestLauncher";
 import GroupKeyDialog from "./GroupKeyDialog";
 import GroupSettings from "./GroupSettings";
 import ConvMenu from "./ConvMenu";
@@ -29,6 +28,7 @@ import GroupBubble from "./GroupBubble";
 import QuestStrip from "./QuestStrip";
 import type { GMsg, GroupInfo } from "./group-types";
 import { sessionDivider } from "./group-format";
+import { getPusherClient } from "@/lib/pusher-client";
 import {
   cacheKeys,
   readCache,
@@ -55,6 +55,18 @@ import {
 import { MAX_MESSAGE_CHARS, charLength, type MemorySuggestion } from "@/lib/types";
 import { hasAnyKey } from "@/lib/api-keys";
 
+function dedupeMessages(list: GMsg[]): GMsg[] {
+  const seen = new Set<string>();
+  const out: GMsg[] = [];
+  for (const item of list) {
+    if (!item || !item.id) continue;
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
 export default function GroupChatClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [group, setGroup] = useState<GroupInfo | null>(null);
@@ -62,11 +74,11 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   const [messages, setMessages] = useState<GMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [aiTyping, setAiTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
-  const [showQuestPicker, setShowQuestPicker] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [hasKey, setHasKey] = useState(true);
   const [memSuggestions, setMemSuggestions] = useState<
@@ -98,9 +110,11 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   }, []);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const didInitialScroll = useRef(false);
   const loadingOlderRef = useRef(false);
   const atBottomRef = useRef(true);
+  const scrollThrottleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Proactivity bookkeeping (1:1 persona chats only).
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const followupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -135,15 +149,54 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     setMuted(isKaiChatMuted(groupId));
   }, [groupId]);
 
-  // Poll for new messages every 3 seconds for user-to-user chats
+  // Real-time WebSocket subscription via Pusher
+  useEffect(() => {
+    if (!group || group.kind === "persona") return;
+
+    const pusher = getPusherClient();
+    if (!pusher) return;
+
+    const channelName = `group-${groupId}`;
+    const channel = pusher.subscribe(channelName);
+
+    channel.bind("new-messages", (data: { messages?: GMsg[] }) => {
+      if (!Array.isArray(data?.messages) || data.messages.length === 0) return;
+      const myUserId = group.members?.find((m) => m.isMe)?.userId;
+
+      const formatted = data.messages.map((msg) => ({
+        ...msg,
+        isMe: msg.senderUserId ? msg.senderUserId === myUserId : msg.isMe,
+      }));
+
+      setMessages((m) => {
+        const seen = new Set(m.map((x) => x.id));
+        const toAdd = formatted.filter((x) => !seen.has(x.id));
+        if (toAdd.length === 0) return m;
+        if (!atBottomRef.current) {
+          setUnreadCount((c) => c + toAdd.length);
+        }
+        return dedupeMessages([...m, ...toAdd]);
+      });
+    });
+
+    return () => {
+      channel.unbind_all();
+      pusher.unsubscribe(channelName);
+    };
+  }, [groupId, group]);
+
+  // Poll for new messages (fallback if Pusher is not configured, or periodic safety sync)
   const pollForNewMessages = useCallback(() => {
     if (pollingTimer.current) clearTimeout(pollingTimer.current);
     
     // Only poll for non-persona chats or group chats (where other users might message)
     if (!group || group.kind === "persona") return;
     
+    const pollDelay = getPusherClient() ? 30000 : 3000;
+
     const poll = async () => {
       try {
+        if (busyRef.current) return;
         const lastMsg = messagesRef.current[messagesRef.current.length - 1];
         if (!lastMsg || lastMsg.id.startsWith("tmp-")) return;
         
@@ -159,20 +212,21 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           setMessages((m) => {
             const seen = new Set(m.map((x) => x.id));
             const toAdd = newMsgs.filter((x) => !seen.has(x.id));
+            if (toAdd.length === 0) return m;
             if (!atBottomRef.current) {
               setUnreadCount((c) => c + toAdd.length);
             }
-            return [...m, ...toAdd];
+            return dedupeMessages([...m, ...toAdd]);
           });
         }
       } catch {
         // Polling is best-effort, ignore errors
       } finally {
-        pollingTimer.current = setTimeout(poll, 3000); // Poll every 3 seconds
+        pollingTimer.current = setTimeout(poll, pollDelay);
       }
     };
     
-    pollingTimer.current = setTimeout(poll, 3000);
+    pollingTimer.current = setTimeout(poll, pollDelay);
   }, [groupId, group]);
 
 
@@ -191,7 +245,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         if (d.group?.summaryUpToId) summaryUpToIdRef.current = d.group.summaryUpToId;
         if (d.group?.summary) currentSummaryRef.current = d.group.summary;
         if (isMood(d.group?.mood)) setChatMood(d.group.mood);
-        const msgs: GMsg[] = d.messages ?? [];
+        const msgs: GMsg[] = dedupeMessages(d.messages ?? []);
         setMessages(msgs);
         setHasMore(Boolean(d.hasMore));
         writeCache(cacheKey, { group: d.group, messages: msgs.slice(-50) });
@@ -217,8 +271,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         setHasMore(Boolean(d.hasMore));
         if (older.length === 0) return;
         setMessages((cur) => {
-          const seen = new Set(cur.map((m) => m.id));
-          return [...older.filter((m) => !seen.has(m.id)), ...cur];
+          return dedupeMessages([...older, ...cur]);
         });
         // After the prepend paints, restore scroll so content stays put.
         requestAnimationFrame(() => {
@@ -492,6 +545,55 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     });
   }
 
+  const isGroupChat = group?.kind === "group";
+  const personaName = group?.persona?.name ?? "Kai";
+  const kaiMentioned = useMemo(() => {
+    if (!isGroupChat || !group?.persona) return false;
+    return mentionsPersona(input, personaName);
+  }, [isGroupChat, group?.persona, input, personaName]);
+
+  const mentionCandidates = useMemo(() => {
+    if (!group || group.kind !== "group") return [];
+    const list: { id: string; name: string; isAi: boolean }[] = [];
+    if (group.persona) {
+      list.push({
+        id: `ai-${group.persona.id}`,
+        name: group.persona.name,
+        isAi: true,
+      });
+    }
+    for (const m of group.members ?? []) {
+      if (m.isMe) continue;
+      const name = m.nickname || m.name;
+      if (name && !list.some((item) => item.name.toLowerCase() === name.toLowerCase())) {
+        list.push({
+          id: m.id || m.userId || name,
+          name,
+          isAi: m.kind === "persona",
+        });
+      }
+    }
+    return list;
+  }, [group]);
+
+  const mentionMatch = isGroupChat ? input.match(/@([^\s@]*)$/) : null;
+  const isMentioning = Boolean(mentionMatch);
+  const mentionQuery = mentionMatch ? mentionMatch[1].toLowerCase() : "";
+
+  type MentionCandidate = { id: string; name: string; isAi: boolean };
+
+  const filteredMentions = useMemo(() => {
+    if (!isMentioning) return [];
+    return mentionCandidates.filter((c: MentionCandidate) =>
+      c.name.toLowerCase().startsWith(mentionQuery)
+    );
+  }, [isMentioning, mentionCandidates, mentionQuery]);
+
+  const insertMention = useCallback((name: string) => {
+    setInput((prev) => prev.replace(/@([^\s@]*)$/, `@${name} `));
+    inputRef.current?.focus();
+  }, []);
+
   async function send() {
     const content = input.trim();
     if (!content || over || sending) return;
@@ -551,16 +653,21 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         isMe: true,
         createdAt: new Date().toISOString(),
       };
-      setMessages((m) => [...m, optimistic]);
+      setMessages((m) => dedupeMessages([...m, optimistic]));
 
       try {
+        setAiTyping(true);
         const ctx = await buildCtx(persona!.id);
         // Only send last 20 messages for context (not the entire conversation)
+        const isGroup = group?.kind === "group";
         const history = messages.slice(-20).map((m) => ({
           role: (m.senderKind === "persona" ? "model" : "user") as
             | "user"
             | "model",
-          content: m.content,
+          content:
+            isGroup && m.senderKind !== "persona"
+              ? `${m.senderName}: ${m.content}`
+              : m.content,
         }));
         // Build persona personality, injecting quest system prompt if active
         const basePersonality = persona!.personality!;
@@ -614,10 +721,10 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           setError(d.error ?? "Couldn't send.");
         } else {
           setMessages((m) => {
-            const next = [
+            const next = dedupeMessages([
               ...m.filter((x) => x.id !== optimistic.id),
               ...(d.messages ?? []),
-            ];
+            ]);
             void maybeSummarizeOlderMessages(next);
             return next;
           });
@@ -667,6 +774,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           setError("Gemini's rate limit hit. Wait a moment and try again.");
         else setError(msg);
       } finally {
+        setAiTyping(false);
         setSending(false);
         busyRef.current = false;
         scheduleIdleOpener();
@@ -690,7 +798,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         setError(d.error ?? "Couldn't send.");
         setInput(content);
       } else {
-        setMessages((m) => [...m, ...(d.messages ?? [])]);
+        setMessages((m) => dedupeMessages([...m, ...(d.messages ?? [])]));
       }
     } catch {
       setError("Something went wrong.");
@@ -886,6 +994,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
                     onSelect: (modeId: string | null) => void changeMode(modeId),
                     onAdd: () => {},
                     onRemove: () => {},
+                    onReload: () => void load(),
                   }
                 : null
             }
@@ -898,14 +1007,6 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               group.kind === "group" ? () => setShowSettings(true) : undefined
             }
             showModelPicker={!!group.clientGenerated}
-            canStartQuest={
-              !!group.persona &&
-              (group.kind !== "group" || group.persona.kind === "kai") &&
-              (!questState || !!questState.completed)
-            }
-            onStartQuest={
-              group.persona ? () => setShowQuestPicker(true) : undefined
-            }
             onClear={clearMessages}
             onDelete={deleteGroup}
           />
@@ -977,11 +1078,21 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         ref={scrollRef}
         onScroll={(e) => {
           const el = e.currentTarget;
-          if (el.scrollTop < 80) loadOlder();
           const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-          atBottomRef.current = near;
-          setAtBottom(near);
-          if (near) setUnreadCount(0);
+          if (atBottomRef.current !== near) {
+            atBottomRef.current = near;
+            setAtBottom(near);
+          }
+          if (near && unreadCount > 0) setUnreadCount(0);
+
+          if (el.scrollTop < 80) {
+            if (!scrollThrottleTimer.current) {
+              loadOlder();
+              scrollThrottleTimer.current = setTimeout(() => {
+                scrollThrottleTimer.current = null;
+              }, 200);
+            }
+          }
         }}
         className="h-full overflow-y-auto px-4 py-5 sm:px-8"
       >
@@ -1027,7 +1138,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               </div>
             );
           })}
-          {sending && (
+          {aiTyping && (
             <div className="mt-2 flex items-end gap-2">
               {group?.persona && (
                 <Avatar name={group.persona.name} emoji={group.persona.avatar} size={28} />
@@ -1104,8 +1215,59 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               onClear={() => setMemSuggestions([])}
             />
           )}
+          {/* Autocomplete mention popover */}
+          {isMentioning && filteredMentions.length > 0 && (
+            <div className="mb-2 overflow-hidden rounded-2xl border-2 border-border bg-card shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-150">
+              <div className="border-b border-border/40 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted">
+                Mention
+              </div>
+              <div className="max-h-40 overflow-y-auto p-1">
+                {filteredMentions.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      insertMention(item.name);
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold hover:bg-indigo-ai/10 hover:text-indigo-ai transition-colors"
+                  >
+                    <span className="font-bold">@{item.name}</span>
+                    <span className="text-[10px] text-muted">
+                      {item.isAi ? "AI Companion" : "Member"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Group Chat: Kai Summon helper chip */}
+          {isGroupChat && group?.persona && (
+            <div className="mb-2 flex items-center gap-1.5 px-1">
+              {kaiMentioned ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-mint/10 border border-mint/30 px-2.5 py-0.5 text-[11px] font-bold text-mint">
+                  ✓ {personaName} will reply
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInput((prev) => (prev ? `@${personaName} ${prev}` : `@${personaName} `));
+                    inputRef.current?.focus();
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full border border-indigo-ai/40 bg-indigo-ai/10 px-2.5 py-0.5 text-[11px] font-bold text-indigo-ai transition-colors hover:bg-indigo-ai hover:text-white"
+                >
+                  <span>@</span>
+                  <span>Summon {personaName}</span>
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center gap-2 rounded-full border-2 border-border bg-card px-4 py-2 focus-within:border-indigo-ai/60 transition-colors">
             <input
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && send()}
@@ -1164,41 +1326,6 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           persona={group.persona}
           onClose={() => setShowProfileDrawer(false)}
         />
-      )}
-
-      {showQuestPicker && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 py-6 sm:items-center">
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default"
-            aria-label="Close"
-            onClick={() => setShowQuestPicker(false)}
-          />
-          <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-border bg-card p-4 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-display text-base font-extrabold">
-                Start a roleplay quest
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowQuestPicker(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-border hover:text-foreground"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-            <QuestLauncher
-              existingGroupId={groupId}
-              defaultExpanded
-              onStartQuest={() => {
-                const state = loadQuestForConv(groupId);
-                if (state) setQuestState(state);
-                setShowQuestPicker(false);
-              }}
-            />
-          </div>
-        </div>
       )}
     </div>
   );

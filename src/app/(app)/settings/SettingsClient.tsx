@@ -11,6 +11,7 @@ import UserSettingsTab from "./UserSettingsTab";
 import AppBlockerSettings from "./app-blocker/page";
 import LearningResetCard from "./LearningResetCard";
 import MobileAppDownloadCard from "./MobileAppDownloadCard";
+import MobileNotchCard from "./MobileNotchCard";
 import { User, Brain, BookOpen, DeviceMobile } from "@phosphor-icons/react";
 import { useAppBlockerSupported } from "@/lib/app-blocker-platform";
 
@@ -72,6 +73,7 @@ export default function SettingsClient({ email }: { email: string }) {
       {/* Mobile Tab */}
       {tab === "mobile" && (
         <div className="flex flex-col gap-5">
+          <MobileNotchCard />
           <MobileAppDownloadCard />
           {appBlockerEnabled && <AppBlockerSettings />}
         </div>

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import Avatar from "../../chat/Avatar";
-import type { GroupInfo } from "./group-types";
+import type { GroupInfo, KaiModeInfo } from "./group-types";
+import CustomAttitudeModal from "./CustomAttitudeModal";
+import MemoryModal from "../../chat/MemoryModal";
 
 type Friend = { friendshipId: string; user: { id: string; name: string | null; email: string } };
 
@@ -30,13 +31,15 @@ export default function GroupSettings({
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [customModal, setCustomModal] = useState<KaiModeInfo | "new" | null>(null);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
 
   useEffect(() => {
     if (!group.isOwner) return;
     fetch("/api/friends")
       .then((r) => r.json())
       .then((d) => setFriends(d.friends ?? []))
-      .catch(() => {});
+      .catch(() => { });
   }, [group.isOwner]);
 
   async function run(key: string, fn: () => Promise<Response | void>) {
@@ -312,20 +315,13 @@ export default function GroupSettings({
                   Kai
                 </p>
                 <div className="flex items-center gap-3">
-                  <Link
-                    href={`/memory?chat=${encodeURIComponent(group.id)}`}
+                  <button
+                    type="button"
+                    onClick={() => setShowMemoryModal(true)}
                     className="text-[11px] font-bold text-indigo-ai hover:underline"
                   >
                     Group memory
-                  </Link>
-                  {hasKai && group.persona && (
-                    <Link
-                      href={`/memory?persona=${encodeURIComponent(group.persona.id)}`}
-                      className="text-[11px] font-bold text-indigo-ai hover:underline"
-                    >
-                      Kai&apos;s memory
-                    </Link>
-                  )}
+                  </button>
                 </div>
               </div>
 
@@ -346,33 +342,61 @@ export default function GroupSettings({
                 </div>
               ) : (
                 <>
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                      Attitude
+                    </p>
+                    {group.isOwner && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomModal("new")}
+                        className="text-[11px] font-bold text-indigo-ai hover:underline"
+                      >
+                        + Custom
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => void setMode(null)}
                       disabled={!group.isOwner || busy === "mode" || !group.activeMode}
-                      className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold disabled:opacity-50 ${
-                        !group.activeMode
-                          ? "border-indigo-ai text-indigo-ai"
-                          : "border-border text-muted"
-                      }`}
+                      className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold disabled:opacity-50 ${!group.activeMode
+                        ? "border-indigo-ai text-indigo-ai"
+                        : "border-border text-muted"
+                        }`}
                     >
-                      🦊 Default
+                      Default
                     </button>
                     {(group.kaiModes ?? []).map((mode) => (
-                      <button
-                        key={mode.id}
-                        onClick={() => void setMode(mode.id)}
-                        disabled={
-                          !group.isOwner || busy === "mode" || group.activeMode?.id === mode.id
-                        }
-                        className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold disabled:opacity-50 ${
-                          group.activeMode?.id === mode.id
-                            ? "border-indigo-ai text-indigo-ai"
-                            : "border-border text-muted"
-                        }`}
-                      >
-                        {mode.avatar} {mode.label}
-                      </button>
+                      <div key={mode.id} className="relative flex items-center">
+                        <button
+                          onClick={() => void setMode(mode.id)}
+                          disabled={
+                            !group.isOwner || busy === "mode" || group.activeMode?.id === mode.id
+                          }
+                          className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold disabled:opacity-50 ${mode.mine ? "pr-6" : ""
+                            } ${group.activeMode?.id === mode.id
+                              ? "border-indigo-ai text-indigo-ai"
+                              : "border-border text-muted"
+                            }`}
+                        >
+                          <span className="truncate">{mode.label}</span>
+                        </button>
+                        {mode.mine && group.isOwner && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCustomModal(mode);
+                            }}
+                            className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
+                            title="Edit attitude"
+                            aria-label={`Edit ${mode.label}`}
+                          >
+                            ✎
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                   <p className="mt-1.5 text-[10px] text-muted">
@@ -406,6 +430,36 @@ export default function GroupSettings({
           </div>
         </div>
       </div>
+
+      {customModal && (
+        <CustomAttitudeModal
+          mode={customModal === "new" ? null : customModal}
+          onClose={() => setCustomModal(null)}
+          onSaved={(saved) => {
+            onReload();
+            if (customModal === "new") {
+              void setMode(saved.id);
+            }
+          }}
+          onDeleted={(id) => {
+            onReload();
+            if (group.activeMode?.id === id) {
+              void setMode(null);
+            }
+          }}
+        />
+      )}
+
+      {showMemoryModal && (
+        <MemoryModal
+          chatId={group.id}
+          chatName={group.name}
+          chatKind="group"
+          personaId={group.persona?.id}
+          personaName="Kai"
+          onClose={() => setShowMemoryModal(false)}
+        />
+      )}
     </div>
   );
 }

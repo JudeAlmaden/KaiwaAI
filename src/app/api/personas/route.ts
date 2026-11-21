@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { listAvailablePersonas } from "@/lib/personas-server";
+import { listAvailablePersonas, resolveKaiId } from "@/lib/personas-server";
 
 // GET: built-in personas + the user's own custom personas.
 export async function GET() {
@@ -25,19 +25,26 @@ export async function GET() {
   });
 }
 
-// POST: create a custom persona.
+// POST: create a custom persona or custom attitude for Kai.
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { name?: string; blurb?: string; personality?: string; avatar?: string };
+  let body: {
+    name?: string;
+    label?: string;
+    blurb?: string;
+    personality?: string;
+    avatar?: string;
+    kind?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const name = (body.name ?? "").trim();
+  const name = (body.name ?? body.label ?? "").trim();
   const personality = (body.personality ?? "").trim();
   if (!name || !personality) {
     return NextResponse.json(
@@ -46,27 +53,46 @@ export async function POST(req: Request) {
     );
   }
 
+  const isKaiMode = body.kind === "kai_mode";
+  const kaiId = isKaiMode ? await resolveKaiId() : null;
+  const label = (body.label ?? body.name ?? "").trim().slice(0, 24);
+
   const persona = await prisma.persona.create({
     data: {
       userId: user.id,
       name: name.slice(0, 40),
+      label: isKaiMode ? label || name.slice(0, 24) : null,
       blurb: (body.blurb ?? "").trim().slice(0, 80),
       personality: personality.slice(0, 2000),
-      avatar: (body.avatar ?? "🤖").trim().slice(0, 8) || "🤖",
+      avatar: (body.avatar ?? (isKaiMode ? "✨" : "🤖")).trim().slice(0, 8) || (isKaiMode ? "✨" : "🤖"),
       builtin: false,
+      kind: isKaiMode ? "kai_mode" : "custom",
+      modeOfId: kaiId,
     },
-    // Explicit select: the default would include columns added by a migration
-    // that may not be applied yet.
-    select: { id: true, name: true, blurb: true, avatar: true, builtin: true },
+    select: {
+      id: true,
+      name: true,
+      label: true,
+      blurb: true,
+      avatar: true,
+      personality: true,
+      builtin: true,
+      kind: true,
+      modeOfId: true,
+    },
   });
 
   return NextResponse.json({
     persona: {
       id: persona.id,
       name: persona.name,
+      label: persona.label,
       blurb: persona.blurb,
       avatar: persona.avatar,
+      personality: persona.personality,
       builtin: false,
+      kind: persona.kind,
+      modeOfId: persona.modeOfId,
       mine: true,
     },
   });

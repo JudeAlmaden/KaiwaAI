@@ -291,6 +291,35 @@ export function repairSplitTokens(parsed: KaiResponse): void {
   parsed.tokens = repairSplitTokenSurfaces(parsed.tokens);
 }
 
+export function normalizeGeminiContents(
+  rawContents: GeminiContent[]
+): GeminiContent[] {
+  const normalized: GeminiContent[] = [];
+  for (const item of rawContents) {
+    if (!item.parts || item.parts.length === 0) continue;
+    const text = item.parts
+      .map((p) => p.text)
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    if (!text) continue;
+
+    const prev = normalized[normalized.length - 1];
+    if (prev && prev.role === item.role) {
+      prev.parts.push({ text });
+    } else {
+      normalized.push({ role: item.role, parts: [{ text }] });
+    }
+  }
+
+  // Gemini requires the first turn to have role 'user'
+  if (normalized.length > 0 && normalized[0].role !== "user") {
+    normalized.unshift({ role: "user", parts: [{ text: "[Conversation starts]" }] });
+  }
+
+  return normalized;
+}
+
 /** Shared request loop: try each model, rotate keys on rate limit, parse the
  *  structured KaiResponse. Used by both reactive and proactive turns. */
 async function executeKaiTurn(
@@ -302,7 +331,7 @@ async function executeKaiTurn(
 
   const requestBody = JSON.stringify({
     systemInstruction: { parts: [{ text: systemText }] },
-    contents,
+    contents: normalizeGeminiContents(contents),
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: RESPONSE_SCHEMA,

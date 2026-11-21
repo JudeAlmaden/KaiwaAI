@@ -15,7 +15,6 @@ export type ConversationMenuModel = {
   showGroupSettings: boolean;
   showKaiAttitude: boolean;
   showMuteKai: boolean;
-  showQuest: boolean;
   canClear: boolean;
   /** Delete removes for everyone (owner); hide only removes it from your list. */
   deleteMode: "delete" | "hide";
@@ -25,12 +24,11 @@ export type ConversationMenuModel = {
 export function conversationMenuModel({
   kind,
   isOwner,
-  hasPersona,
   personaKind,
 }: {
   kind: string;
   isOwner: boolean;
-  hasPersona: boolean;
+  hasPersona?: boolean;
   personaKind?: string | null;
 }): ConversationMenuModel {
   const isGroup = kind === "group";
@@ -44,8 +42,6 @@ export function conversationMenuModel({
     showGroupSettings: isGroup,
     showKaiAttitude: isKai,
     showMuteKai: isKai,
-    // A group quest is Kai's; a 1:1 quest works for any persona.
-    showQuest: isPersona ? hasPersona : isGroup && hasPersona && personaKind === "kai",
     canClear: !isGroup || isOwner,
     deleteMode: isOwner ? "delete" : "hide",
     memory: isGroup
@@ -62,9 +58,9 @@ export function conversationMenuModel({
           }
         : {
             scope: "persona",
-            title: "Open full diary",
+            title: "Conversation memory",
             description:
-              "All memories across personas — different from the quick profile above.",
+              "What Kai remembers from this conversation — only you can see it.",
           },
   };
 }

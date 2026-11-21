@@ -12,7 +12,13 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  let body: { name?: string; blurb?: string; personality?: string; avatar?: string };
+  let body: {
+    name?: string;
+    label?: string;
+    blurb?: string;
+    personality?: string;
+    avatar?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -21,7 +27,7 @@ export async function PATCH(
 
   const persona = await prisma.persona.findUnique({
     where: { id },
-    select: { id: true, builtin: true, userId: true },
+    select: { id: true, builtin: true, userId: true, kind: true },
   });
   if (!persona) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
@@ -37,6 +43,11 @@ export async function PATCH(
     ...(typeof body.name === "string" && body.name.trim()
       ? { name: body.name.trim().slice(0, 40) }
       : {}),
+    ...(typeof body.label === "string" && body.label.trim()
+      ? { label: body.label.trim().slice(0, 24) }
+      : typeof body.name === "string" && body.name.trim()
+      ? { label: body.name.trim().slice(0, 24) }
+      : {}),
     ...(typeof body.blurb === "string" ? { blurb: body.blurb.trim().slice(0, 80) } : {}),
     ...(typeof body.personality === "string" && body.personality.trim()
       ? { personality: body.personality.trim().slice(0, 2000) }
@@ -49,14 +60,27 @@ export async function PATCH(
   const updated = await prisma.persona.update({
     where: { id },
     data: patch,
-    select: { id: true, name: true, blurb: true, avatar: true },
+    select: {
+      id: true,
+      name: true,
+      label: true,
+      blurb: true,
+      avatar: true,
+      personality: true,
+      kind: true,
+      modeOfId: true,
+    },
   });
   return NextResponse.json({
     persona: {
       id: updated.id,
       name: updated.name,
+      label: updated.label,
       blurb: updated.blurb,
       avatar: updated.avatar,
+      personality: updated.personality,
+      kind: updated.kind,
+      modeOfId: updated.modeOfId,
       builtin: false,
       mine: true,
     },

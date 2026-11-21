@@ -56,6 +56,13 @@ export default function RootLayout({
       lang="en"
       className={`${baloo.variable} ${nunito.variable} ${notoSansJP.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var v=localStorage.getItem("kaiwa:mobile-top-notch");if(v!==null){var n=parseInt(v,10);if(!isNaN(n)&&n>=0&&n<=120){document.documentElement.style.setProperty("--mobile-notch-offset",n+"px");}}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         {children}
         <ServiceWorker />

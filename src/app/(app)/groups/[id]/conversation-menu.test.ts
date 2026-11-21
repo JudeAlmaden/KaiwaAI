@@ -13,7 +13,6 @@ describe("conversation menu model", () => {
     expect(model.showGroupSettings).toBe(false);
     expect(model.showKaiAttitude).toBe(false);
     expect(model.showMuteKai).toBe(false);
-    expect(model.showQuest).toBe(false);
     expect(model.canClear).toBe(true);
     expect(model.deleteMode).toBe("hide");
     expect(model.memory.scope).toBe("chat");
@@ -39,7 +38,6 @@ describe("conversation menu model", () => {
     expect(owner.showGroupSettings).toBe(true);
     expect(owner.showKaiAttitude).toBe(false);
     expect(owner.showMuteKai).toBe(false);
-    expect(owner.showQuest).toBe(true);
     expect(owner.canClear).toBe(true);
     expect(owner.deleteMode).toBe("delete");
     expect(owner.memory.scope).toBe("group");
@@ -63,7 +61,6 @@ describe("conversation menu model", () => {
     });
     expect(kai.showKaiAttitude).toBe(true);
     expect(kai.showMuteKai).toBe(true);
-    expect(kai.showQuest).toBe(true);
     expect(kai.memory.scope).toBe("persona");
 
     const custom = conversationMenuModel({
@@ -74,6 +71,5 @@ describe("conversation menu model", () => {
     });
     expect(custom.showKaiAttitude).toBe(false);
     expect(custom.showMuteKai).toBe(false);
-    expect(custom.showQuest).toBe(true);
   });
 });

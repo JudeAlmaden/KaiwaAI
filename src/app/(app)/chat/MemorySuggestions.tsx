@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Brain } from "@phosphor-icons/react/dist/ssr";
 import type { MemorySuggestion } from "@/lib/types";
 import { cleanMemorySuggestion } from "@/lib/gemini";
+import MemoryModal from "./MemoryModal";
 
 const CATEGORY_EMOJI: Record<string, string> = {
   profile: "🙂",
@@ -74,15 +75,11 @@ export default function MemorySuggestions({
     () => new Set(auto ? normalized.map((_, i) => i) : [])
   );
   const [expanded, setExpanded] = useState(!auto && normalized.length <= 2);
+  const [showModal, setShowModal] = useState(false);
 
   if (normalized.length === 0) return null;
 
   const pending = normalized.length - saved.size;
-  const memoryHref = chatId
-    ? `/memory?chat=${encodeURIComponent(chatId)}`
-    : personaId
-      ? `/memory?persona=${encodeURIComponent(personaId)}`
-      : "/memory";
 
   async function save(i: number) {
     setSaved((prev) => new Set(prev).add(i));
@@ -137,12 +134,13 @@ export default function MemorySuggestions({
             Save all
           </button>
         )}
-        <Link
-          href={memoryHref}
+        <button
+          type="button"
+          onClick={() => setShowModal(true)}
           className="ml-auto text-[11px] font-bold text-indigo-ai/70 underline hover:text-indigo-ai"
         >
           View diary
-        </Link>
+        </button>
         <button
           onClick={onClear}
           className="text-muted/60 hover:text-foreground"
@@ -179,6 +177,14 @@ export default function MemorySuggestions({
             Settings
           </Link>
         </p>
+      )}
+
+      {showModal && (
+        <MemoryModal
+          chatId={chatId}
+          personaId={personaId}
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );

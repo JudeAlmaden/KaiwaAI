@@ -8,6 +8,7 @@ export type GMsg = {
   correction?: string | null;
   userCorrection?: string | null; // AI correction for user's Japanese
   isMe: boolean;
+  senderUserId?: string | null;
   createdAt: string;
 };
 
@@ -36,6 +37,9 @@ export type KaiModeInfo = {
   id: string;
   label: string;
   avatar: string;
+  personality?: string | null;
+  mine?: boolean;
+  builtin?: boolean;
 };
 
 export type GroupInfo = {

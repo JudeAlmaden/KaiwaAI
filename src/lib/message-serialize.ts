@@ -41,6 +41,7 @@ export function serializeMessage(m: MessageRow, meId: string) {
     correction: m.correction,
     userCorrection: m.userCorrection,
     isMe: m.senderUserId === meId,
+    senderUserId: m.senderUserId,
     createdAt: m.createdAt,
     replyTo,
   };

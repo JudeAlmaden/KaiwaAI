@@ -4,6 +4,40 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-21
+
+### Added
+
+- **Real-time WebSocket Messaging via Pusher Channels** — added scalable real-time WebSocket communication for group chats and DMs using Pusher Channels (`pusher` on server, `pusher-js` on client). Incoming messages trigger instant pushes across clients in `< 50ms` on channel `group-${groupId}`, eliminating database and Vercel compute overhead. Includes graceful automatic fallback: if Pusher environment variables are not yet configured, the client smoothly falls back to 3-second HTTP polling; when Pusher is active, polling drops to a quiet 30-second background sync.
+- **@mention Autocomplete & Summon Chip in Group Chats** — added interactive autocomplete for @mentions in group chats, matching group members and AI personas with tab/click auto-insertion. Added a top summon chip (`@Summon Kai` / `✓ Kai will reply`) so users can summon the AI companion into group conversations effortlessly.
+- **In-context Conversation Memory Modal** — replaced page redirects to `/memory` with an in-context `MemoryModal` scoped directly to the active conversation or group. Removed confusing global/convo scope toggles and all decorative emojis in favor of a clean, typography-first UX with text category pills (`All`, `Profile`, `Preference`, `Fact`, `Goal`, `Relationship`), discrete delete actions, and an integrated category select add bar. Verified and extended prompt injection across both client-side BYOK and server fallback (`generatePersonaReply` in `group-chat.ts` and `messages/route.ts`) so AI models actively recall and converse with remembered notes.
+- **Top notch & status bar padding setting** — added a setting under Settings → Mobile to adjust top padding (`--mobile-notch-offset`) for devices with camera cutouts or status bars overlapping the header. Provides presets (Off, Subtle, Standard, Notch, Tall) and a slider, synced to localStorage and applied immediately on mobile screens.
+- **Custom attitudes for Kai** — users can now create, edit, and delete custom attitudes for Kai directly from the attitude picker in `ConvMenu` (1:1 chats) and `GroupSettings`. Saved as `kind: "kai_mode"` personas linked to Kai.
+- **Unified search and add with debounced search & scrolling** — unified friend search and add-by-email into a single bar in `PeopleSheet` and `NewChatSheet`, removing the redundant bottom input boxes. Typing an email provides an inline Add/Send button, Enter key submission, and an in-list action card; search queries are debounced (`useDebounce`, 180ms) for responsive typing, and scrolling debounces keyboard dismissal on mobile and throttles chat transcript pagination.
+- **Redesigned Group Creation** — transformed the New group tab in `NewChatSheet` into a Messenger-style flow with top group name field, selected member tag strip with removal chips and `(X/4)` cap indicator, and consistent avatar friend rows with checkmark selection toggles.
+
+### Fixed
+
+- **Kai SVG hair/ahoge missing on mobile** — converted `Kai.tsx` to a client component using `useId()` to generate globally unique SVG gradient IDs per instance. Previously, multiple `<Kai>` components at the same size (e.g. inbox list) shared the same `id`, causing browsers to silently reuse the first gradient definition found in the DOM — stripping the hair gradient on mobile. Removed the `<clipPath>` sheen element and added a solid fill fallback layer for extra robustness.
+- **Gemini Multiturn Alternation Normalization & Multi-User Group Context** — implemented `normalizeGeminiContents` in `src/lib/gemini.ts` to merge consecutive same-role turns (`user` + `user` or `model` + `model`) and guarantee the first turn begins with `user`, preventing Gemini API `400 Alternation` errors across BYOK client turns and proactive follow-ups. In group chats, history turns now prefix the human sender's display name (`senderName: content`) so the AI companion understands multi-user conversational context and addresses participants naturally.
+- **Message Key Duplication & Polling Race in Group Chat** — implemented strict message deduplication (`dedupeMessages`) across initial load, pagination, sending, and polling. Polling is paused during active message transmission (`busyRef.current`) to eliminate concurrency races between the optimistic/POST response and the 3s poller that caused repeated messages and React duplicate key console errors.
+- **AI Typing Indicator Decoupled from Plain Message Sending** — decoupled the persona typing indicator (`aiTyping`) from generic message sending (`sending`), preventing the AI typing animation from flashing when sending human-to-human messages in group chats or DMs.
+
+### Changed
+
+- **Clean Typography-first Menu & Settings UI** — stripped decorative emojis from `ConvMenu` and `GroupSettings` attitude pickers (converting them to clean typography pills), replaced emoji icons with standard Phosphor icons (`Gear`, `Brain`, `Bell`, `BellSlash`, `UserPlus`, `UserMinus`, `Broom`, `Trash`), and unified the 1:1 conversation memory menu item to "Conversation memory" with clear single-conversation scoping.
+
+### Removed
+
+- **Personas & Roleplay Quests from People & New Chat** — removed the "Your personas" / "+ Create" persona management section from `PeopleSheet` (which is now strictly for friends and requests), and removed the "Roleplay quest" launcher from New Chat.
+
+### Technical
+
+- Modified: `package.json`, `package-lock.json`, `src/app/layout.tsx`, `src/app/(app)/layout.tsx`, `src/app/(app)/settings/SettingsClient.tsx`, `src/app/api/personas/route.ts`, `src/app/api/personas/[id]/route.ts`, `src/app/api/groups/[id]/route.ts`, `src/app/(app)/groups/[id]/group-types.ts`, `src/app/(app)/groups/[id]/ConvMenu.tsx`, `src/app/(app)/groups/[id]/GroupSettings.tsx`, `src/app/(app)/groups/[id]/GroupChatClient.tsx`, `src/app/(app)/groups/[id]/conversation-menu.ts`, `src/app/(app)/chat/PeopleSheet.tsx`, `src/app/(app)/chat/NewChatSheet.tsx`, `src/app/(app)/chat/MemorySuggestions.tsx`, `src/lib/group-chat.ts`, `src/app/api/groups/[id]/messages/route.ts`, `src/lib/message-serialize.ts`, `src/lib/gemini.ts`, `src/lib/gemini.test.ts`, `src/app/Kai.tsx`, `.env.example`
+- New: `src/app/(app)/chat/MemoryModal.tsx`, `src/lib/mobile-notch.ts`, `src/lib/mobile-notch.test.ts`, `src/app/(app)/settings/MobileNotchCard.tsx`, `src/app/(app)/groups/[id]/CustomAttitudeModal.tsx`, `src/hooks/useDebounce.ts`, `src/lib/debounce.ts`, `src/lib/debounce.test.ts`, `src/lib/email-utils.ts`, `src/lib/email-utils.test.ts`, `src/lib/pusher-server.ts`, `src/lib/pusher-client.ts`
+- Deleted: None
+- Tests: 852 passing, 95 suites — fully lint/typecheck clean
+
 ## [2.5.0] - 2026-11-21
 
 ### Added

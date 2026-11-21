@@ -1,11 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { DotsThree } from "@phosphor-icons/react/dist/ssr";
+import {
+  DotsThree,
+  Gear,
+  Brain,
+  Bell,
+  BellSlash,
+  UserPlus,
+  UserMinus,
+  Broom,
+  Trash,
+} from "@phosphor-icons/react/dist/ssr";
 import ModelSwitcher from "../../chat/ModelSwitcher";
 import type { KaiModeInfo } from "./group-types";
 import { conversationMenuModel } from "./conversation-menu";
+import CustomAttitudeModal from "./CustomAttitudeModal";
+import MemoryModal from "../../chat/MemoryModal";
 
 // Conversation options: profile, quest, clear, delete.
 export default function ConvMenu({
@@ -15,8 +26,6 @@ export default function ConvMenu({
   chatId,
   personaKind,
   showModelPicker = false,
-  canStartQuest = false,
-  onStartQuest,
   onClear,
   onDelete,
   kai,
@@ -43,6 +52,7 @@ export default function ConvMenu({
     onSelect: (modeId: string | null) => void;
     onAdd: () => void;
     onRemove: () => void;
+    onReload?: () => void;
   } | null;
   /** Per-chat proactive mute; 1:1 Kai chats only. */
   mute?: {
@@ -50,14 +60,14 @@ export default function ConvMenu({
     onToggle: () => void;
   } | null;
   showModelPicker?: boolean;
-  canStartQuest?: boolean;
-  onStartQuest?: () => void;
   onClear: () => Promise<void> | void;
   onDelete: () => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<null | "clear" | "delete">(null);
   const [confirm, setConfirm] = useState<null | "clear" | "delete">(null);
+  const [customModal, setCustomModal] = useState<KaiModeInfo | "new" | null>(null);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -156,7 +166,7 @@ export default function ConvMenu({
               }}
               className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
             >
-              <span className="text-lg">⚙️</span>
+              <Gear size={18} weight="bold" className="mt-0.5 text-muted shrink-0" />
               <span>
                 <span className="block text-sm font-bold">Group settings</span>
                 <span className="block text-xs text-muted">
@@ -168,9 +178,21 @@ export default function ConvMenu({
 
           {kai && model.showKaiAttitude && kai.canEdit && kai.modes.length > 0 && (
             <div className="border-b border-border/60 px-3 py-2.5">
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">
-                Kai&apos;s attitude
-              </p>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                  Kai&apos;s attitude
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setCustomModal("new");
+                  }}
+                  className="text-[11px] font-bold text-indigo-ai hover:underline"
+                >
+                  + Custom
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
@@ -178,31 +200,46 @@ export default function ConvMenu({
                   onClick={() => {
                     if (!kai.busy && kai.activeMode) kai.onSelect(null);
                   }}
-                  className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-60 ${
-                    !kai.activeMode
-                      ? "border-indigo-ai text-indigo-ai"
-                      : "border-border text-muted hover:border-indigo-ai"
-                  }`}
+                  className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-60 ${!kai.activeMode
+                    ? "border-indigo-ai text-indigo-ai"
+                    : "border-border text-muted hover:border-indigo-ai"
+                    }`}
                 >
-                  🦊 Default
+                  Default
                 </button>
                 {kai.modes.map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    disabled={kai.busy}
-                    onClick={() => {
-                      if (!kai.busy && kai.activeMode?.id !== mode.id)
-                        kai.onSelect(mode.id);
-                    }}
-                    className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-60 ${
-                      kai.activeMode?.id === mode.id
-                        ? "border-indigo-ai text-indigo-ai"
-                        : "border-border text-muted hover:border-indigo-ai"
-                    }`}
-                  >
-                    {mode.avatar} {mode.label}
-                  </button>
+                  <div key={mode.id} className="relative flex items-center">
+                    <button
+                      type="button"
+                      disabled={kai.busy}
+                      onClick={() => {
+                        if (!kai.busy && kai.activeMode?.id !== mode.id)
+                          kai.onSelect(mode.id);
+                      }}
+                      className={`flex w-full items-center justify-center gap-1 rounded-full border-2 px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-60 ${mode.mine ? "pr-6" : ""
+                        } ${kai.activeMode?.id === mode.id
+                          ? "border-indigo-ai text-indigo-ai"
+                          : "border-border text-muted hover:border-indigo-ai"
+                        }`}
+                    >
+                      <span className="truncate">{mode.label}</span>
+                    </button>
+                    {mode.mine && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpen(false);
+                          setCustomModal(mode);
+                        }}
+                        className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-muted hover:bg-indigo-ai/10 hover:text-indigo-ai"
+                        title="Edit attitude"
+                        aria-label={`Edit ${mode.label}`}
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
               <p className="mt-1.5 text-[10px] text-muted">
@@ -220,7 +257,11 @@ export default function ConvMenu({
               }}
               className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
             >
-              <span className="text-lg">{mute.muted ? "🔕" : "🔔"}</span>
+              {mute.muted ? (
+                <BellSlash size={18} weight="bold" className="mt-0.5 text-muted shrink-0" />
+              ) : (
+                <Bell size={18} weight="bold" className="mt-0.5 text-muted shrink-0" />
+              )}
               <span>
                 <span className="block text-sm font-bold">
                   {mute.muted ? "Unmute Kai" : "Mute Kai"}
@@ -244,7 +285,7 @@ export default function ConvMenu({
               }}
               className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5 disabled:opacity-60"
             >
-              <span className="text-lg">🦊</span>
+              <UserPlus size={18} weight="bold" className="mt-0.5 text-muted shrink-0" />
               <span>
                 <span className="block text-sm font-bold">Add Kai to this group</span>
                 <span className="block text-xs text-muted">
@@ -264,7 +305,7 @@ export default function ConvMenu({
               }}
               className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5 disabled:opacity-60"
             >
-              <span className="text-lg">🚪</span>
+              <UserMinus size={18} weight="bold" className="mt-0.5 text-muted shrink-0" />
               <span>
                 <span className="block text-sm font-bold">Remove Kai</span>
                 <span className="block text-xs text-muted">
@@ -274,72 +315,22 @@ export default function ConvMenu({
             </button>
           )}
 
-          {model.memory.scope !== "persona" && (
-            <Link
-              href={`/memory?chat=${encodeURIComponent(chatId)}`}
-              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
-              onClick={() => setOpen(false)}
-            >
-              <span className="text-lg">
-                {model.memory.scope === "group" ? "👥" : "💬"}
+          <button
+            type="button"
+            className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
+            onClick={() => {
+              setOpen(false);
+              setShowMemoryModal(true);
+            }}
+          >
+            <Brain size={18} weight="bold" className="mt-0.5 text-muted shrink-0" />
+            <span>
+              <span className="block text-sm font-bold">{model.memory.title}</span>
+              <span className="block text-xs text-muted">
+                {model.memory.description}
               </span>
-              <span>
-                <span className="block text-sm font-bold">{model.memory.title}</span>
-                <span className="block text-xs text-muted">
-                  {model.memory.description}
-                </span>
-              </span>
-            </Link>
-          )}
-
-          {personaId && model.memory.scope !== "chat" && (
-            <Link
-              href={`/memory?persona=${encodeURIComponent(personaId)}`}
-              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
-              onClick={() => setOpen(false)}
-            >
-              <span className="text-lg">📔</span>
-              <span>
-                <span className="block text-sm font-bold">
-                  {model.memory.scope === "group"
-                    ? personaKind === "kai"
-                      ? "Kai's memory"
-                      : "Full persona diary"
-                    : "Open full diary"}
-                </span>
-                <span className="block text-xs text-muted">
-                  {model.memory.scope === "group"
-                    ? personaKind === "kai"
-                      ? "Kai's memories across every chat — not just this group."
-                      : "This persona's memories across every chat."
-                    : "All memories across personas — different from the quick profile above."}
-                </span>
-              </span>
-            </Link>
-          )}
-
-          {canStartQuest && model.showQuest && onStartQuest && (
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onStartQuest();
-              }}
-              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
-            >
-              <span className="text-lg">🎭</span>
-              <span>
-                <span className="block text-sm font-bold">
-                  {isGroup ? "Start a quest with Kai" : "Start a quest"}
-                </span>
-                <span className="block text-xs text-muted">
-                  {isGroup
-                    ? "Roleplay objectives that run in this group; Kai leads the scene."
-                    : "Roleplay scenario in this chat."}
-                </span>
-              </span>
-            </button>
-          )}
+            </span>
+          </button>
 
           {canClear &&
             (confirm === "clear" ? (
@@ -356,7 +347,7 @@ export default function ConvMenu({
                 onClick={() => setConfirm("clear")}
                 className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-indigo-ai/5"
               >
-                <span className="text-lg">🧹</span>
+                <Broom size={18} weight="bold" className="mt-0.5 text-muted shrink-0" />
                 <span>
                   <span className="block text-sm font-bold">Clear messages</span>
                   <span className="block text-xs text-muted">
@@ -392,7 +383,7 @@ export default function ConvMenu({
               onClick={() => setConfirm("delete")}
               className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-sakura/5"
             >
-              <span className="text-lg">🗑️</span>
+              <Trash size={18} weight="bold" className="mt-0.5 text-sakura shrink-0" />
               <span>
                 <span className="block text-sm font-bold text-sakura">
                   {deleteLabel}
@@ -410,6 +401,35 @@ export default function ConvMenu({
             </button>
           )}
         </div>
+      )}
+
+      {customModal && (
+        <CustomAttitudeModal
+          mode={customModal === "new" ? null : customModal}
+          onClose={() => setCustomModal(null)}
+          onSaved={(saved) => {
+            kai?.onReload?.();
+            if (customModal === "new") {
+              kai?.onSelect(saved.id);
+            }
+          }}
+          onDeleted={(id) => {
+            kai?.onReload?.();
+            if (kai?.activeMode?.id === id) {
+              kai?.onSelect(null);
+            }
+          }}
+        />
+      )}
+
+      {showMemoryModal && (
+        <MemoryModal
+          chatId={chatId}
+          chatKind={chatKind}
+          personaId={personaId}
+          personaName={personaKind === "kai" ? "Kai" : "Persona"}
+          onClose={() => setShowMemoryModal(false)}
+        />
       )}
     </div>
   );

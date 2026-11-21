@@ -76,12 +76,21 @@ export async function generatePersonaReply(args: {
   otherSpeakers: string[];
   transcript: string;
   level?: string;
+  memories?: string[];
 }): Promise<PersonaReply | null> {
-  const { keys, persona, otherSpeakers, transcript, level } = args;
+  const { keys, persona, otherSpeakers, transcript, level, memories } = args;
   if (keys.length === 0) throw new Error("No conversation key.");
+
+  const memoryBlock =
+    memories && memories.length > 0
+      ? `\n\nWhat you know about the participants (treat as true, use naturally):\n${memories
+          .map((m) => `- ${m}`)
+          .join("\n")}`
+      : "";
 
   const system =
     personaSystemPrompt(persona.personality, { level, otherSpeakers }) +
+    memoryBlock +
     outputContract();
 
   const body = JSON.stringify({

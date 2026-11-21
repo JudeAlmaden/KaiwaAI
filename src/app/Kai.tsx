@@ -1,3 +1,7 @@
+"use client";
+
+import { useId } from "react";
+
 /**
  * Kai — KaiwaAI's companion logo mark.
  * A simple violet half-circle (a head/hair silhouette, flat side down) with a
@@ -11,7 +15,10 @@ export default function Kai({
   className?: string;
   size?: number;
 }) {
-  const id = `kai-${size}`;
+  const reactId = useId();
+  const cleanId = reactId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const id = `kai-${cleanId}-${size}`;
+
   // viewBox cropped tight to the actual artwork so there's no dead space
   // around the mark. Height derived from the crop's aspect ratio.
   const vb = { x: 36, y: 44, w: 132, h: 100 };
@@ -30,28 +37,30 @@ export default function Kai({
           <stop offset="0%" stopColor="#b8a4ff" />
           <stop offset="100%" stopColor="var(--indigo, #7c5cff)" />
         </linearGradient>
-        <clipPath id={`${id}-clip`}>
-          <path d="M38 140a62 62 0 0 1 124 0Z" />
-        </clipPath>
       </defs>
 
-      {/* head — half circle, flat side down */}
+      {/* head base — solid violet fallback so hair is guaranteed visible on all mobile/WebKit browsers */}
+      <path
+        d="M38 140a62 62 0 0 1 124 0Z"
+        fill="var(--indigo, #7c5cff)"
+      />
+
+      {/* gradient overlay */}
       <path
         d="M38 140a62 62 0 0 1 124 0Z"
         fill={`url(#${id}-head)`}
+        opacity="0.85"
       />
 
       {/* soft glossy sheen across the top of the head */}
-      <g clipPath={`url(#${id}-clip)`}>
-        <ellipse
-          cx="100"
-          cy="96"
-          rx="46"
-          ry="16"
-          fill="#fff"
-          opacity="0.22"
-        />
-      </g>
+      <ellipse
+        cx="100"
+        cy="96"
+        rx="46"
+        ry="16"
+        fill="#fff"
+        opacity="0.18"
+      />
 
       {/* ahoge — a C-shaped tapering ribbon (opens to the left): leaves the head
           thick, arcs out to the right, and curls back so the fine tip points

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { extractJsonString, salvageKaiResponse, stripRomajiShadows } from "./gemini";
+import {
+  extractJsonString,
+  normalizeGeminiContents,
+  salvageKaiResponse,
+  stripRomajiShadows,
+} from "./gemini";
 import type { KaiResponse } from "./types";
 
 function resp(reply: string, tokens: KaiResponse["tokens"] = []): KaiResponse {
@@ -161,5 +166,44 @@ describe("stripRomajiShadows", () => {
     ]);
     stripRomajiShadows(r);
     expect(r.tokens.map((t) => t.surface)).toEqual(["ありがとう", " ", "!"]);
+  });
+});
+
+describe("normalizeGeminiContents", () => {
+  it("merges consecutive turns with the same role", () => {
+    const raw = [
+      { role: "user", parts: [{ text: "Hello" }] },
+      { role: "user", parts: [{ text: "Are you there?" }] },
+      { role: "model", parts: [{ text: "Yes!" }] },
+    ];
+    const out = normalizeGeminiContents(raw);
+    expect(out).toHaveLength(2);
+    expect(out[0].role).toBe("user");
+    expect(out[0].parts).toHaveLength(2);
+    expect(out[0].parts[0].text).toBe("Hello");
+    expect(out[0].parts[1].text).toBe("Are you there?");
+    expect(out[1].role).toBe("model");
+  });
+
+  it("prepends a user turn if the transcript starts with a model turn", () => {
+    const raw = [
+      { role: "model", parts: [{ text: "Kai started this chat." }] },
+      { role: "user", parts: [{ text: "Oh, hi Kai!" }] },
+    ];
+    const out = normalizeGeminiContents(raw);
+    expect(out[0].role).toBe("user");
+    expect(out[1].role).toBe("model");
+    expect(out[2].role).toBe("user");
+  });
+
+  it("handles already alternating turns correctly", () => {
+    const raw = [
+      { role: "user", parts: [{ text: "Hi" }] },
+      { role: "model", parts: [{ text: "Hello" }] },
+      { role: "user", parts: [{ text: "How are you?" }] },
+    ];
+    const out = normalizeGeminiContents(raw);
+    expect(out).toHaveLength(3);
+    expect(out.map((t) => t.role)).toEqual(["user", "model", "user"]);
   });
 });
