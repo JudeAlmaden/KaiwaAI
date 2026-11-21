@@ -4,6 +4,8 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-11-22
+
 ### Changed
 - **Automatic top notch & status bar safe-area detection** — the mobile notch setting now defaults to **Auto**, dynamically respecting the device hardware safe-area top inset (`env(safe-area-inset-top)`) without requiring manual adjustment. Manual pixel presets and slider adjustments remain available as overrides, with an "Auto" pill button to restore device-native spacing at any time.
 
