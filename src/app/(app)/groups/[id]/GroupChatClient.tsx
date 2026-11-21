@@ -106,7 +106,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           setSavedWords(new Set(d.words.map((w: { word: string }) => w.word)));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -156,11 +156,15 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     const pusher = getPusherClient();
     if (!pusher) return;
 
-    const channelName = `group-${groupId}`;
+    const channelName = `private-group-${groupId}`;
     const channel = pusher.subscribe(channelName);
 
     channel.bind("new-messages", (data: { messages?: GMsg[] }) => {
       if (!Array.isArray(data?.messages) || data.messages.length === 0) return;
+      // While a send is in-flight the HTTP response handler will atomically
+      // swap the optimistic row for the persisted messages. Skip the Pusher
+      // echo to avoid a race that removes then re-adds the same message.
+      if (busyRef.current) return;
       const myUserId = group.members?.find((m) => m.isMe)?.userId;
 
       const formatted = data.messages.map((msg) => ({
@@ -188,10 +192,10 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
   // Poll for new messages (fallback if Pusher is not configured, or periodic safety sync)
   const pollForNewMessages = useCallback(() => {
     if (pollingTimer.current) clearTimeout(pollingTimer.current);
-    
+
     // Only poll for non-persona chats or group chats (where other users might message)
     if (!group || group.kind === "persona") return;
-    
+
     const pollDelay = getPusherClient() ? 30000 : 3000;
 
     const poll = async () => {
@@ -199,15 +203,15 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         if (busyRef.current) return;
         const lastMsg = messagesRef.current[messagesRef.current.length - 1];
         if (!lastMsg || lastMsg.id.startsWith("tmp-")) return;
-        
+
         const res = await fetch(
           `/api/groups/${groupId}?after=${encodeURIComponent(lastMsg.id)}`
         );
         if (!res.ok) return;
-        
+
         const d = await res.json();
         const newMsgs: GMsg[] = d.messages ?? [];
-        
+
         if (newMsgs.length > 0) {
           setMessages((m) => {
             const seen = new Set(m.map((x) => x.id));
@@ -225,7 +229,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         pollingTimer.current = setTimeout(poll, pollDelay);
       }
     };
-    
+
     pollingTimer.current = setTimeout(poll, pollDelay);
   }, [groupId, group]);
 
@@ -250,7 +254,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         setHasMore(Boolean(d.hasMore));
         writeCache(cacheKey, { group: d.group, messages: msgs.slice(-50) });
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [groupId, cacheKey]);
 
   // Fetch the next older page (cursor = oldest loaded message) and prepend it,
@@ -278,7 +282,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           if (el) el.scrollTop = el.scrollHeight - prevHeight;
         });
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         loadingOlderRef.current = false;
         setLoadingOlder(false);
@@ -519,7 +523,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         if (data.summaryUpToId) summaryUpToIdRef.current = data.summaryUpToId;
         return { ...data, mood: data.mood ?? chatMood };
       }
-    } catch {}
+    } catch { }
     return {
       level: "N5",
       reinforce: [],
@@ -545,15 +549,9 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     });
   }
 
-  const isGroupChat = group?.kind === "group";
-  const personaName = group?.persona?.name ?? "Kai";
-  const kaiMentioned = useMemo(() => {
-    if (!isGroupChat || !group?.persona) return false;
-    return mentionsPersona(input, personaName);
-  }, [isGroupChat, group?.persona, input, personaName]);
-
+  const isMentionAllowed = group?.kind === "group" || group?.kind === "dm";
   const mentionCandidates = useMemo(() => {
-    if (!group || group.kind !== "group") return [];
+    if (!group || !isMentionAllowed) return [];
     const list: { id: string; name: string; isAi: boolean }[] = [];
     if (group.persona) {
       list.push({
@@ -574,13 +572,15 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       }
     }
     return list;
-  }, [group]);
+  }, [group, isMentionAllowed]);
 
-  const mentionMatch = isGroupChat ? input.match(/@([^\s@]*)$/) : null;
+  const mentionMatch = isMentionAllowed ? input.match(/@([^\s@]*)$/) : null;
   const isMentioning = Boolean(mentionMatch);
   const mentionQuery = mentionMatch ? mentionMatch[1].toLowerCase() : "";
 
   type MentionCandidate = { id: string; name: string; isAi: boolean };
+
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
 
   const filteredMentions = useMemo(() => {
     if (!isMentioning) return [];
@@ -588,6 +588,12 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       c.name.toLowerCase().startsWith(mentionQuery)
     );
   }, [isMentioning, mentionCandidates, mentionQuery]);
+
+  // Keep selection within bounds when filteredMentions changes
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveMentionIndex(0);
+  }, [filteredMentions.length, mentionQuery]);
 
   const insertMention = useCallback((name: string) => {
     setInput((prev) => prev.replace(/@([^\s@]*)$/, `@${name} `));
@@ -607,26 +613,10 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     consecutiveAi.current = 0;
     busyRef.current = true;
 
-    // Check grammar for Japanese messages (client-side, BYOK)
-    let userCorrection = null;
-    if (hasJapanese(content) && hasAnyKey()) {
-      try {
-        console.log("Checking grammar for:", content);
-        const correction = await checkJapaneseGrammar(content);
-        console.log("Grammar check result:", correction);
-        if (correction.status !== "none" && correction.status !== "correct") {
-          userCorrection = correction;
-          console.log("Grammar correction applied:", userCorrection);
-        } else {
-          console.log("No correction needed, status:", correction.status);
-        }
-      } catch (err) {
-        console.warn("Grammar check failed:", err);
-        // Continue sending even if grammar check fails
-      }
-    } else {
-      console.log("Skipping grammar check - hasJapanese:", hasJapanese(content), "hasKey:", hasAnyKey());
-    }
+    // Check grammar for Japanese messages (client-side, BYOK) in the background
+    // only if the AI isn't going to reply (since Kai's reply already contains grammar correction).
+    let userCorrection: unknown = null;
+    let grammarPromise: Promise<unknown> | null = null;
 
     // When the AI should reply: 1:1 persona chats always; group chats only when
     // the persona is @mentioned. Generation is client-side (BYOK).
@@ -635,6 +625,20 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       !!persona?.personality &&
       group?.clientGenerated &&
       (group.kind === "persona" || mentionsPersona(content, persona.name));
+
+    if (!wantsAi && hasJapanese(content) && hasAnyKey()) {
+      grammarPromise = checkJapaneseGrammar(content)
+        .then((correction) => {
+          if (correction.status !== "none" && correction.status !== "correct") {
+            return correction;
+          }
+          return null;
+        })
+        .catch((err) => {
+          console.warn("Grammar check failed:", err);
+          return null;
+        });
+    }
 
     if (wantsAi) {
       if (!hasAnyKey()) {
@@ -649,7 +653,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         senderName: "You",
         senderKind: "user",
         content,
-        userCorrection: userCorrection ? JSON.stringify(userCorrection) : null,
+        userCorrection: null,
         isMe: true,
         createdAt: new Date().toISOString(),
       };
@@ -659,13 +663,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         setAiTyping(true);
         const ctx = await buildCtx(persona!.id);
         // Only send last 20 messages for context (not the entire conversation)
-        const isGroup = group?.kind === "group";
+        const isMultiParty = group?.kind === "group" || group?.kind === "dm";
         const history = messages.slice(-20).map((m) => ({
           role: (m.senderKind === "persona" ? "model" : "user") as
             | "user"
             | "model",
           content:
-            isGroup && m.senderKind !== "persona"
+            isMultiParty && m.senderKind !== "persona"
               ? `${m.senderName}: ${m.content}`
               : m.content,
         }));
@@ -681,26 +685,26 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           basePersonality + questSuffix,
           history
         );
-          // Extract and strip [OBJECTIVE_COMPLETED:id] tags from reply
-          const { cleanReply, completedIds } = extractQuestCompletions(kai.reply);
-          if (completedIds.length > 0 && questState) {
-            const allCompleted = [
-              ...questState.completedObjectiveIds,
-              ...completedIds.filter((id) => !questState.completedObjectiveIds.includes(id)),
-            ];
-            const isNowDone = allCompleted.length >= questState.quest.objectives.length;
-            const next: ActiveQuestState = {
-              ...questState,
-              completedObjectiveIds: allCompleted,
-              completed: isNowDone,
-            };
-            updateQuestState(groupId, next);
-            setQuestState(next);
-          }
-          // If quest cleaned the reply, store the cleaned version for display
-          const displayReply = completedIds.length > 0 ? cleanReply : kai.reply;
+        // Extract and strip [OBJECTIVE_COMPLETED:id] tags from reply
+        const { cleanReply, completedIds } = extractQuestCompletions(kai.reply);
+        if (completedIds.length > 0 && questState) {
+          const allCompleted = [
+            ...questState.completedObjectiveIds,
+            ...completedIds.filter((id) => !questState.completedObjectiveIds.includes(id)),
+          ];
+          const isNowDone = allCompleted.length >= questState.quest.objectives.length;
+          const next: ActiveQuestState = {
+            ...questState,
+            completedObjectiveIds: allCompleted,
+            completed: isNowDone,
+          };
+          updateQuestState(groupId, next);
+          setQuestState(next);
+        }
+        // If quest cleaned the reply, store the cleaned version for display
+        const displayReply = completedIds.length > 0 ? cleanReply : kai.reply;
 
-          const res = await fetch(`/api/groups/${groupId}/messages`, {
+        const res = await fetch(`/api/groups/${groupId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -721,10 +725,12 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           setError(d.error ?? "Couldn't send.");
         } else {
           setMessages((m) => {
-            const next = dedupeMessages([
-              ...m.filter((x) => x.id !== optimistic.id),
-              ...(d.messages ?? []),
-            ]);
+            // Replace the optimistic row in-place so there's no removal flash.
+            const incoming: GMsg[] = d.messages ?? [];
+            const withoutOptimistic = m.filter((x) => x.id !== optimistic.id);
+            // Insert the persisted messages at the same position the optimistic
+            // row occupied (last position is the common case).
+            const next = dedupeMessages([...withoutOptimistic, ...incoming]);
             void maybeSummarizeOlderMessages(next);
             return next;
           });
@@ -734,7 +740,7 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           if (sugg.length > 0) {
             if (getAutoMemory()) {
               const scope =
-                group?.kind === "group"
+                group?.kind === "group" || group?.kind === "dm"
                   ? { chatId: groupId }
                   : { personaId: persona!.id };
               for (const s of sugg) {
@@ -742,19 +748,19 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
                   typeof s === "string"
                     ? { content: s, ...scope, category: "fact" }
                     : {
-                        content: s.content,
-                        ...scope,
-                        category: s.category,
-                        importance: s.importance,
-                      };
+                      content: s.content,
+                      ...scope,
+                      category: s.category,
+                      importance: s.importance,
+                    };
                 await fetch("/api/memory", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify(payload),
-                }).catch(() => {});
+                }).catch(() => { });
               }
             }
-          setMemSuggestions(sugg);
+            setMemSuggestions(sugg);
           }
           if (typeof d.mood === "string" && isMood(d.mood)) setChatMood(d.mood);
           // Kai answered once; maybe a spontaneous follow-up, then re-arm idle.
@@ -783,12 +789,26 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
     }
 
     // Otherwise (plain human message — DM, or group without @mention) just save.
+    const optimistic: GMsg = {
+      id: `tmp-${Date.now()}`,
+      senderName: "You",
+      senderKind: "user",
+      content,
+      userCorrection: null,
+      isMe: true,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((m) => dedupeMessages([...m, optimistic]));
+
     try {
+      if (grammarPromise) {
+        userCorrection = await grammarPromise;
+      }
       const res = await fetch(`/api/groups/${groupId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          content, 
+        body: JSON.stringify({
+          content,
           quotedMessageId: quotedMsg?.id,
           userCorrection: userCorrection ? JSON.stringify(userCorrection) : undefined,
         }),
@@ -796,12 +816,19 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       const d = await res.json();
       if (!res.ok) {
         setError(d.error ?? "Couldn't send.");
+        setMessages((m) => m.filter((x) => x.id !== optimistic.id));
         setInput(content);
       } else {
-        setMessages((m) => dedupeMessages([...m, ...(d.messages ?? [])]));
+        setMessages((m) =>
+          dedupeMessages([
+            ...m.filter((x) => x.id !== optimistic.id),
+            ...(d.messages ?? []),
+          ])
+        );
       }
     } catch {
       setError("Something went wrong.");
+      setMessages((m) => m.filter((x) => x.id !== optimistic.id));
       setInput(content);
     } finally {
       setSending(false);
@@ -876,13 +903,13 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
       setGroup((g) =>
         g
           ? {
-              ...g,
-              activeMode: data.activeMode ?? null,
-              persona:
-                g.persona && data.personality
-                  ? { ...g.persona, personality: data.personality }
-                  : g.persona,
-            }
+            ...g,
+            activeMode: data.activeMode ?? null,
+            persona:
+              g.persona && data.personality
+                ? { ...g.persona, personality: data.personality }
+                : g.persona,
+          }
           : g
       );
     } finally {
@@ -908,11 +935,10 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
         </Link>
         <div
           onClick={() => group?.persona && setShowProfileDrawer(true)}
-          className={`flex min-w-0 flex-1 items-center gap-2 sm:gap-3 ${
-            group?.persona
-              ? "cursor-pointer rounded-xl p-1 -ml-1 transition-all hover:bg-indigo-ai/10 active:scale-[0.99]"
-              : ""
-          }`}
+          className={`flex min-w-0 flex-1 items-center gap-2 sm:gap-3 ${group?.persona
+            ? "cursor-pointer rounded-xl p-1 -ml-1 transition-all hover:bg-indigo-ai/10 active:scale-[0.99]"
+            : ""
+            }`}
           title={
             group?.persona
               ? `View ${group.persona.name}'s profile & memories`
@@ -985,17 +1011,17 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             kai={
               group.kind !== "group" && group.persona?.kind === "kai"
                 ? {
-                    modes: group.kaiModes ?? [],
-                    activeMode: group.activeMode ?? null,
-                    canEdit: group.isOwner,
-                    canAdd: false,
-                    canRemove: false,
-                    busy: modeBusy,
-                    onSelect: (modeId: string | null) => void changeMode(modeId),
-                    onAdd: () => {},
-                    onRemove: () => {},
-                    onReload: () => void load(),
-                  }
+                  modes: group.kaiModes ?? [],
+                  activeMode: group.activeMode ?? null,
+                  canEdit: group.isOwner,
+                  canAdd: false,
+                  canRemove: false,
+                  busy: modeBusy,
+                  onSelect: (modeId: string | null) => void changeMode(modeId),
+                  onAdd: () => { },
+                  onRemove: () => { },
+                  onReload: () => void load(),
+                }
                 : null
             }
             mute={
@@ -1074,108 +1100,108 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
 
       {/* stream */}
       <div className="relative min-h-0 flex-1">
-      <div
-        ref={scrollRef}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-          if (atBottomRef.current !== near) {
-            atBottomRef.current = near;
-            setAtBottom(near);
-          }
-          if (near && unreadCount > 0) setUnreadCount(0);
-
-          if (el.scrollTop < 80) {
-            if (!scrollThrottleTimer.current) {
-              loadOlder();
-              scrollThrottleTimer.current = setTimeout(() => {
-                scrollThrottleTimer.current = null;
-              }, 200);
+        <div
+          ref={scrollRef}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+            if (atBottomRef.current !== near) {
+              atBottomRef.current = near;
+              setAtBottom(near);
             }
-          }
-        }}
-        className="h-full overflow-y-auto px-4 py-5 sm:px-8"
-      >
-        <div className="mx-auto flex max-w-2xl flex-col">
-          {loadingOlder && (
-            <p className="py-2 text-center text-xs text-muted">Loading earlier messages…</p>
-          )}
-          {messages.length === 0 && (
-            <p className="py-10 text-center text-sm text-muted">
-              Say hi to start the conversation.
-            </p>
-          )}
-          {messages.map((m, i) => {
-            const prev = messages[i - 1];
-            const next = messages[i + 1];
-            // Group consecutive messages from the same sender (Messenger-style).
-            const sameAsPrev =
-              !!prev && prev.senderKind === m.senderKind && prev.isMe === m.isMe;
-            const sameAsNext =
-              !!next && next.senderKind === m.senderKind && next.isMe === m.isMe;
-            // Show a divider when a message starts a new day, or after a long
-            // gap (>1h) from the previous one — separating chat sessions.
-            const divider = sessionDivider(prev?.createdAt, m.createdAt);
-            return (
-              <div key={m.id}>
-                {divider && (
-                  <div className="my-4 flex items-center gap-3">
-                    <span className="h-px flex-1 bg-border" />
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-muted/70">
-                      {divider}
-                    </span>
-                    <span className="h-px flex-1 bg-border" />
-                  </div>
-                )}
-                <GroupBubble
-                  msg={m}
-                  startGroup={!sameAsPrev || !!divider}
-                  endGroup={!sameAsNext}
-                  onReply={() => setQuotedMessage(m)}
-                  savedWords={savedWords}
-                  onSavedWord={handleSavedWord}
-                />
-              </div>
-            );
-          })}
-          {aiTyping && (
-            <div className="mt-2 flex items-end gap-2">
-              {group?.persona && (
-                <Avatar name={group.persona.name} emoji={group.persona.avatar} size={28} />
-              )}
-              <div className="flex flex-col items-start gap-0.5">
+            if (near && unreadCount > 0) setUnreadCount(0);
+
+            if (el.scrollTop < 80) {
+              if (!scrollThrottleTimer.current) {
+                loadOlder();
+                scrollThrottleTimer.current = setTimeout(() => {
+                  scrollThrottleTimer.current = null;
+                }, 200);
+              }
+            }
+          }}
+          className="h-full overflow-y-auto px-4 py-5 sm:px-8"
+        >
+          <div className="mx-auto flex max-w-2xl flex-col">
+            {loadingOlder && (
+              <p className="py-2 text-center text-xs text-muted">Loading earlier messages…</p>
+            )}
+            {messages.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted">
+                Say hi to start the conversation.
+              </p>
+            )}
+            {messages.map((m, i) => {
+              const prev = messages[i - 1];
+              const next = messages[i + 1];
+              // Group consecutive messages from the same sender (Messenger-style).
+              const sameAsPrev =
+                !!prev && prev.senderKind === m.senderKind && prev.isMe === m.isMe;
+              const sameAsNext =
+                !!next && next.senderKind === m.senderKind && next.isMe === m.isMe;
+              // Show a divider when a message starts a new day, or after a long
+              // gap (>1h) from the previous one — separating chat sessions.
+              const divider = sessionDivider(prev?.createdAt, m.createdAt);
+              return (
+                <div key={m.id}>
+                  {divider && (
+                    <div className="my-4 flex items-center gap-3">
+                      <span className="h-px flex-1 bg-border" />
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-muted/70">
+                        {divider}
+                      </span>
+                      <span className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+                  <GroupBubble
+                    msg={m}
+                    startGroup={!sameAsPrev || !!divider}
+                    endGroup={!sameAsNext}
+                    onReply={() => setQuotedMessage(m)}
+                    savedWords={savedWords}
+                    onSavedWord={handleSavedWord}
+                  />
+                </div>
+              );
+            })}
+            {aiTyping && (
+              <div className="mt-2 flex items-end gap-2">
                 {group?.persona && (
-                  <span className="ml-1 text-[10px] font-bold text-indigo-ai/70">
-                    {group.persona.name} is typing…
-                  </span>
+                  <Avatar name={group.persona.name} emoji={group.persona.avatar} size={28} />
                 )}
-                <div className="flex gap-1.5 rounded-3xl rounded-bl-md border-2 border-border bg-card px-4 py-3 shadow-sm">
-                  <Dot d="0ms" />
-                  <Dot d="160ms" />
-                  <Dot d="320ms" />
+                <div className="flex flex-col items-start gap-0.5">
+                  {group?.persona && (
+                    <span className="ml-1 text-[10px] font-bold text-indigo-ai/70">
+                      {group.persona.name} is typing…
+                    </span>
+                  )}
+                  <div className="flex gap-1.5 rounded-3xl rounded-bl-md border-2 border-border bg-card px-4 py-3 shadow-sm">
+                    <Dot d="0ms" />
+                    <Dot d="160ms" />
+                    <Dot d="320ms" />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={endRef} />
+            )}
+            <div ref={endRef} />
+          </div>
         </div>
-      </div>
 
-      {/* Scroll-to-bottom FAB */}
-      {!atBottom && (
-        <button
-          onClick={() => scrollToBottom()}
-          className="absolute bottom-4 right-4 z-10 flex items-center gap-1.5 rounded-full bg-indigo-ai px-3 py-2 text-xs font-bold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl"
-          aria-label="Scroll to latest"
-        >
-          {unreadCount > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sakura px-1 text-[10px]">
-              {unreadCount}
-            </span>
-          )}
-          <span>↓ Latest</span>
-        </button>
-      )}
+        {/* Scroll-to-bottom FAB */}
+        {!atBottom && (
+          <button
+            onClick={() => scrollToBottom()}
+            className="absolute bottom-4 right-4 z-10 flex items-center gap-1.5 rounded-full bg-indigo-ai px-3 py-2 text-xs font-bold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl"
+            aria-label="Scroll to latest"
+          >
+            {unreadCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sakura px-1 text-[10px]">
+                {unreadCount}
+              </span>
+            )}
+            <span>↓ Latest</span>
+          </button>
+        )}
       </div>
 
       {/* composer */}
@@ -1189,9 +1215,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
           {quotedMessage && (
             <div className="mb-2 flex items-start gap-2 overflow-hidden rounded-2xl border-2 border-l-4 border-indigo-ai/20 border-l-indigo-ai bg-indigo-ai/5 px-3 py-2">
               <div className="min-w-0 flex-1">
-                <p className={`text-xs font-extrabold ${
-                  quotedMessage.senderKind === "persona" ? "text-indigo-ai" : "text-muted"
-                }`}>
+                <p className={`text-xs font-extrabold ${quotedMessage.senderKind === "persona" ? "text-indigo-ai" : "text-muted"
+                  }`}>
                   ↩ {quotedMessage.senderName}
                 </p>
                 <p className="mt-0.5 truncate text-xs text-muted">
@@ -1222,46 +1247,33 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
                 Mention
               </div>
               <div className="max-h-40 overflow-y-auto p-1">
-                {filteredMentions.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      insertMention(item.name);
-                    }}
-                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold hover:bg-indigo-ai/10 hover:text-indigo-ai transition-colors"
-                  >
-                    <span className="font-bold">@{item.name}</span>
-                    <span className="text-[10px] text-muted">
-                      {item.isAi ? "AI Companion" : "Member"}
-                    </span>
-                  </button>
-                ))}
+                {filteredMentions.map((item, idx) => {
+                  const isSelected = idx === activeMentionIndex;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        insertMention(item.name);
+                      }}
+                      onMouseEnter={() => setActiveMentionIndex(idx)}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors ${isSelected
+                        ? "bg-indigo-ai text-white"
+                        : "hover:bg-indigo-ai/10 hover:text-indigo-ai"
+                        }`}
+                    >
+                      <span className="font-bold">@{item.name}</span>
+                      <span
+                        className={`text-[10px] ${isSelected ? "text-white/80" : "text-muted"
+                          }`}
+                      >
+                        {item.isAi ? "AI Companion" : "Member"}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
-          )}
-
-          {/* Group Chat: Kai Summon helper chip */}
-          {isGroupChat && group?.persona && (
-            <div className="mb-2 flex items-center gap-1.5 px-1">
-              {kaiMentioned ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-mint/10 border border-mint/30 px-2.5 py-0.5 text-[11px] font-bold text-mint">
-                  ✓ {personaName} will reply
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInput((prev) => (prev ? `@${personaName} ${prev}` : `@${personaName} `));
-                    inputRef.current?.focus();
-                  }}
-                  className="inline-flex items-center gap-1 rounded-full border border-indigo-ai/40 bg-indigo-ai/10 px-2.5 py-0.5 text-[11px] font-bold text-indigo-ai transition-colors hover:bg-indigo-ai hover:text-white"
-                >
-                  <span>@</span>
-                  <span>Summon {personaName}</span>
-                </button>
-              )}
             </div>
           )}
 
@@ -1270,9 +1282,43 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
+              onKeyDown={(e) => {
+                if (isMentioning && filteredMentions.length > 0) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setActiveMentionIndex((prev) =>
+                      prev < filteredMentions.length - 1 ? prev + 1 : 0
+                    );
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setActiveMentionIndex((prev) =>
+                      prev > 0 ? prev - 1 : filteredMentions.length - 1
+                    );
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    const chosen = filteredMentions[activeMentionIndex];
+                    if (chosen) {
+                      insertMention(chosen.name);
+                    }
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    // Cancel mention by appending a space
+                    setInput((prev) => `${prev} `);
+                    return;
+                  }
+                }
+                if (e.key === "Enter") {
+                  send();
+                }
+              }}
               placeholder={
-                group?.kind === "group" && group.persona
+                (group?.kind === "group" || group?.kind === "dm") && group.persona
                   ? `Message… (@${group.persona.name} to summon)`
                   : "Message…"
               }
@@ -1281,9 +1327,8 @@ export default function GroupChatClient({ groupId }: { groupId: string }) {
             {/* Character counter: hidden until 80% full */}
             {len > MAX_MESSAGE_CHARS * 0.8 && (
               <span
-                className={`text-xs tabular-nums font-semibold transition-colors ${
-                  over ? "text-sakura font-bold" : len > MAX_MESSAGE_CHARS * 0.9 ? "text-amber" : "text-muted/60"
-                }`}
+                className={`text-xs tabular-nums font-semibold transition-colors ${over ? "text-sakura font-bold" : len > MAX_MESSAGE_CHARS * 0.9 ? "text-amber" : "text-muted/60"
+                  }`}
               >
                 {MAX_MESSAGE_CHARS - len}
               </span>

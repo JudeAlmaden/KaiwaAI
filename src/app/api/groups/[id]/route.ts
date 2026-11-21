@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { encryptSecret } from "@/lib/crypto";
 import { serializeMessage } from "@/lib/message-serialize";
-import { composePersonaPersonality } from "@/lib/personas";
+import { composePersonaPersonality, KAI_PERSONALITY } from "@/lib/personas";
 import { normalizePersonaRole } from "@/lib/persona-role";
 
 async function membership(userId: string, groupId: string) {
@@ -187,7 +187,15 @@ export async function GET(
             kind: personaKind ?? "custom",
             personality: personality ?? personaMember.persona.personality,
           }
-        : null,
+        : group.kind === "dm"
+          ? {
+              id: "kai",
+              name: "Kai",
+              avatar: "🦊",
+              kind: "kai",
+              personality: KAI_PERSONALITY,
+            }
+          : null,
       activeMode: activeMode
         ? {
             id: activeMode.id,
@@ -203,7 +211,7 @@ export async function GET(
         builtin: m.builtin,
         mine: m.userId === user.id,
       })),
-      clientGenerated: hasPersona,
+      clientGenerated: hasPersona || group.kind === "dm",
       members: group.members
         .filter(
           (m) =>

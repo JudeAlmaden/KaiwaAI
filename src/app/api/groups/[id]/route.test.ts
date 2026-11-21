@@ -200,4 +200,24 @@ describe("/api/groups/[id] GET - polling with 'after' parameter", () => {
     const data = await res.json();
     expect(data.error).toBe("Not a member.");
   });
+
+  it("should provide ambient Kai persona and clientGenerated: true on DM chats", async () => {
+    vi.mocked(authHelpers.getCurrentUser).mockResolvedValue(mockUser as never);
+    vi.mocked(prisma.chatMember.findFirst).mockResolvedValue({ id: "member1" } as never);
+    vi.mocked(prisma.chat.findUnique).mockResolvedValue(mockChat as never);
+    vi.mocked(prisma.message.findMany).mockResolvedValue([]);
+
+    const req = new Request("http://localhost/api/groups/group1");
+    const params = Promise.resolve({ id: "group1" });
+
+    const res = await GET(req, { params });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.group.kind).toBe("dm");
+    expect(data.group.clientGenerated).toBe(true);
+    expect(data.group.persona).toMatchObject({
+      id: "kai",
+      name: "Kai",
+    });
+  });
 });

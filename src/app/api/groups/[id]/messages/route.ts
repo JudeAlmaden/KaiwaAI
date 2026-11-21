@@ -5,6 +5,7 @@ import { decodeKeys } from "@/lib/gemini-server";
 import {
   renderTranscript,
   generatePersonaReply,
+  mentionsPersona,
   type ConvPersona,
   type ConvTurn,
 } from "@/lib/group-chat";
@@ -248,7 +249,18 @@ export async function POST(
   const newMessages = [rowToMsg(humanMsg, user.id)];
   const personaMember = group?.members.find((m) => m.persona);
 
-  if (body.aiReply && body.aiReply.reply && personaMember?.persona) {
+  // Allow client-provided aiReply in 1:1 persona chats or when @Kai is summoned in a 1:1 DM.
+  // In multi-user groups, client-provided persona replies remain disallowed to prevent spoofing.
+  const isDmWithKaiMention =
+    group?.kind === "dm" && mentionsPersona(content, "Kai");
+  const is1on1Persona =
+    group?.kind === "persona" && Boolean(personaMember?.persona);
+
+  if (
+    body.aiReply &&
+    body.aiReply.reply &&
+    (is1on1Persona || isDmWithKaiMention)
+  ) {
     const a = body.aiReply;
     const { tokens: validated } = validateTokens(a.reply, a.tokens);
     const enrichments = await enrichTokensFromDb(
@@ -265,8 +277,8 @@ export async function POST(
     const saved = await prisma.message.create({
       data: {
         chatId: id,
-        memberId: personaMember.id,
-        senderName: personaMember.persona.name,
+        memberId: personaMember?.id ?? null,
+        senderName: personaMember?.persona?.name ?? "Kai",
         senderKind: "persona",
         content: a.reply,
         english: typeof a.english === "string" && a.english ? a.english : null,
