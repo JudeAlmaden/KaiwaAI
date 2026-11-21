@@ -4,6 +4,36 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-11-21
+
+### Added
+- **Ambient @Kai summon in direct 1:1 user DMs** — users can now summon Kai directly inside 1:1 human-to-human DMs by typing `@Kai` or selecting Kai from the mention autocomplete popup. Kai participates in the conversation to translate, answer language questions, or explain Japanese grammar and vocabulary using interactive furigana/audio bubbles, without requiring users to leave their private DM or create a separate group chat.
+
+### Changed
+- **Group chat reply button & bubble grouping polish** — fixed awkward consecutive bubble shaping in `GroupBubble.tsx`. Previously, middle bubbles in a run had symmetric rounded corners that looked inverted next to each other. Adopted standard Messenger/iMessage bubble grouping (top message has rounded-br-sm, middle messages have rounded-r-sm, bottom message has rounded-tr-sm), with reply buttons clean on hover/swipe.
+- **Streamlined Kai summon & keyboard-navigable autocomplete** — removed the floating `✓ Kai will reply` banner above the input box completely. Enhanced the mention autocomplete menu with full keyboard navigation (`ArrowUp` / `ArrowDown` to navigate, `Enter` / `Tab` to select, `Escape` to dismiss) and styled `@mentions` directly inside message bubbles as clean inline pills (`bg-white/20` in user bubbles, `bg-indigo-ai/15` in received bubbles).
+- **Review card breakdown & tricky card UI polish** — merged the separate `⚠️ Leech` tag and `🩺 Kai's Breakdown` button into a single unified helper pill (`💡 Tricky word · Kai's Breakdown ✨`) in `ReviewCardParts.tsx`, decluttering the vertical stack and replacing clinical icons with intuitive learning indicators.
+- **Chat responsiveness & latency optimization** — eliminated the serial upfront `checkJapaneseGrammar` API call that was previously running before Kai's turn generation (Kai's generation already handles Japanese grammar feedback in a single roundtrip). Human messages in group and DM chats now display optimistically and instantly on the UI without waiting for server roundtrips, reducing message dispatch latency by 1.5–3s.
+- **Modularized KanjiClient monolith** — broke down `src/app/(app)/kanji/KanjiClient.tsx` from 1,353 lines down to ~360 lines following single-responsibility principles. Extracted dedicated subcomponents under `src/app/(app)/kanji/components/`: `KanjiHeader`, `KanjiNavigation`, `KanjiFoldersGridView`, `KanjiFolderDetailView`, `KanjiAllGridView`, `KanjiDetailModal`, `CreateFolderModal`, `EditFolderModal`, and `ImageLightbox`. Reduced layout re-render scope and separated modal workflows into clean isolated boundaries.
+- **Modularized KanjiBreakdown monolith** — decomposed `src/app/(app)/chat/KanjiBreakdown.tsx` from 913 lines down to ~330 lines. Extracted dedicated submodules under `src/app/(app)/chat/kanji-breakdown/`: `KanjiGlyphHeader` (glyph, badges, audio), `KanjiDetailsBody` (meanings, readings, primitives), `KanjiMnemonicSection` (AI story generator, textarea draft, save handler), and `KanjiFolderActions` (queue status, move folder, inline create).
+- **Modularized Gemini API library monolith** — decomposed `src/lib/gemini.ts` (870 lines) into focused single-responsibility domain modules under `src/lib/gemini/`: `types.ts`, `sanitizers.ts`, `lookup.ts`, `summary.ts`, `mnemonics.ts`, and `chat.ts`. Retained a backwards-compatible barrel export in `src/lib/gemini.ts` ensuring zero call-site breakage across all routes and background tasks.
+- **Modularized ReviewClient monolith** — refactored `src/app/(app)/review/ReviewClient.tsx` (760 lines down to ~220 lines). Extracted review state machines and active card queues into `useReviewQueue.ts`, encapsulated the 3D-card presentation and keyboard shortcuts in `ReviewSessionView.tsx`, and consolidated shared interfaces into `types.ts`.
+
+### Fixed
+- **Chat message flash/disappear on send** — fixed a race where the Pusher `new-messages` WebSocket event arrived mid-send while `busyRef.current` was true, causing the optimistic message to be briefly removed then re-added. The Pusher handler now skips processing while a send is in-flight; the HTTP response handler performs the atomic swap instead.
+- **Pusher channel authorization & privacy** — transitioned group chat channels from public `group-${groupId}` to authenticated `private-group-${groupId}`. Implemented `POST /api/pusher/auth` ensuring only active, accepted group members can subscribe to real-time chat updates.
+- **AI persona message spoofing mitigation** — restricted client-provided `aiReply` injections in `POST /api/groups/[id]/messages` strictly to 1:1 persona rooms, preventing message forgery in multi-user group chats. Enforced 1:1 chat verification on proactive turn generation.
+- **Shared dictionary table immutability** — prevented global dictionary poisoning in `POST /api/kanji/[character]/learn` and `PATCH /api/flashcards/[id]`. User edits are now strictly isolated to `UserKanji` and `UserFlashcard.note` / `UserFlashcard.customMeaning`, leaving canonical `Kanji` and `Word` dictionary entries immutable across tenants.
+- **Authentication rate limiting** — added sliding-window rate limiters for `POST /api/auth/login` (5 attempts/min per IP and email) and `POST /api/auth/register` (3 attempts/min per IP) to prevent brute-force attacks and automated registration spam.
+- **Session invalidation on password change** — added `tokenVersion` to `User` and JWT session payloads. Password resets increment `tokenVersion`, immediately revoking all other active JWT sessions across devices while seamlessly re-issuing a refreshed token to the updating client.
+
+### Technical
+- Modified: `prisma/schema.prisma`, `src/lib/rate-limiter.ts`, `src/lib/session.ts`, `src/lib/auth-helpers.ts`, `src/lib/gemini.ts`, `src/lib/pusher-client.ts`, `src/lib/pusher-server.ts`, `src/app/api/auth/login/route.ts`, `src/app/api/auth/register/route.ts`, `src/app/api/settings/password/route.ts`, `src/app/api/groups/[id]/route.ts`, `src/app/api/groups/[id]/route.test.ts`, `src/app/api/groups/[id]/messages/route.ts`, `src/app/api/groups/[id]/messages/route.test.ts`, `src/app/api/groups/[id]/proactive/route.ts`, `src/app/api/kanji/[character]/learn/route.ts`, `src/app/api/flashcards/[id]/route.ts`, `src/app/(app)/groups/[id]/GroupChatClient.tsx`, `src/app/(app)/groups/[id]/GroupBubble.tsx`, `src/app/(app)/kanji/KanjiClient.tsx`, `src/app/(app)/kanji/components/EditFolderModal.tsx`, `src/app/(app)/chat/KanjiBreakdown.tsx`, `src/app/(app)/review/ReviewClient.tsx`
+- New: `src/app/api/pusher/auth/route.ts`, `prisma/migrations/20261121150000_add_token_version/migration.sql`, `src/lib/gemini/types.ts`, `src/lib/gemini/sanitizers.ts`, `src/lib/gemini/lookup.ts`, `src/lib/gemini/summary.ts`, `src/lib/gemini/mnemonics.ts`, `src/lib/gemini/chat.ts`, `src/lib/gemini/index.ts`, `src/app/(app)/review/types.ts`, `src/app/(app)/review/hooks/useReviewQueue.ts`, `src/app/(app)/review/components/ReviewSessionView.tsx`, `src/lib/auth-helpers.test.ts`, plus kanji subcomponents
+- Deleted: None
+- Tests: 863 passing, 96 suites — fully lint/typecheck clean
+
+
 ## [2.6.0] - 2026-11-21
 
 ### Added
