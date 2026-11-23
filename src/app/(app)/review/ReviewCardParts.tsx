@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SpeakerHigh } from "@phosphor-icons/react";
 import { speakJa, canSpeak } from "@/lib/speak";
 import { formLabel } from "@/lib/form-label";
-import { isLeech } from "@/lib/review/leech";
+import { canBreakdown } from "@/lib/review/breakdown";
+import { cacheBreakdown, readCachedBreakdown } from "@/lib/review/breakdown-cache";
 import {
   generateCardBreakdownClient,
   type CardBreakdown,
@@ -45,32 +46,46 @@ export function ConjugationBadge({
 }
 
 /**
- * Card back extras: the leech badge, the original chat exchange that gave the
- * word meaning, and Kai's Breakdown for cards that keep slipping away.
+ * Card back extras: the original chat exchange that gave the word meaning,
+ * and Kai's Breakdown for any card that names a word or kanji.
  */
 export function CardExtras({ card }: { card: Card }) {
   const [breakdown, setBreakdown] = useState<CardBreakdown | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const leech = isLeech(card);
   const source = card.sourceContext ?? null;
-  if (!leech && !source) return null;
+  const kanjiContext = card.wordKanji ?? card.components ?? [];
+  // A hint is only valid for the content it was written about.
+  const hintSignature = [
+    card.word || card.character || "",
+    card.meaning || card.customMeaning || "",
+    kanjiContext.map((component) => component.keyword ?? component.glyph).join(","),
+  ].join("|");
+
+  useEffect(() => {
+    const cached = readCachedBreakdown(card.id, hintSignature);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (cached) setBreakdown(cached);
+  }, [card.id, hintSignature]);
+
+  if (!canBreakdown(card) && !source) return null;
 
   async function openBreakdown() {
     if (loading) return;
     setLoading(true);
     setError(null);
     try {
-      setBreakdown(
-        await generateCardBreakdownClient({
-          word: card.word || card.character || "",
-          reading: card.reading,
-          meaning: card.meaning || card.customMeaning || card.meanings?.join(", "),
-          partOfSpeech: card.partOfSpeech,
-          sourceContext: source,
-        })
-      );
+      const result = await generateCardBreakdownClient({
+        word: card.word || card.character || "",
+        reading: card.reading,
+        meaning: card.meaning || card.customMeaning || card.meanings?.join(", "),
+        partOfSpeech: card.partOfSpeech,
+        sourceContext: source,
+        wordKanji: kanjiContext,
+      });
+      cacheBreakdown(card.id, hintSignature, result);
+      setBreakdown(result);
     } catch (err) {
       setError(
         err instanceof Error && err.message === "NO_API_KEY"
@@ -96,25 +111,20 @@ export function CardExtras({ card }: { card: Card }) {
         </div>
       )}
 
-      {leech && (
+      {canBreakdown(card) && (
         <button
           type="button"
           onClick={openBreakdown}
           disabled={loading}
-          className="group flex w-full items-center justify-between rounded-2xl border border-amber/30 bg-amber/5 px-3.5 py-2 text-xs font-semibold text-foreground transition-all hover:border-indigo-ai/40 hover:bg-indigo-ai/5 disabled:opacity-50"
-          title={`Reviewed ${card.timesReviewed ?? 0}× — interval still ${card.interval ?? 0}d`}
+          className="mx-auto flex items-center justify-center rounded-full border border-indigo-ai/25 bg-indigo-ai/5 px-4 py-2 text-[11px] font-semibold tracking-wide text-indigo-ai transition-all hover:border-indigo-ai/50 hover:bg-indigo-ai/10 disabled:opacity-50"
         >
-          <div className="flex items-center gap-1.5 text-amber">
-            <span>💡</span>
-            <span className="text-[11px] font-bold uppercase tracking-wider">Tricky word</span>
-          </div>
-          <span className="flex items-center gap-1 text-[11px] font-bold text-indigo-ai group-hover:underline">
-            {loading ? "Kai is thinking…" : breakdown ? "Ask Kai again" : "Kai's Breakdown ✨"}
-          </span>
+          {loading ? "Kai is thinking…" : breakdown ? "New angle" : "Kai's Breakdown"}
         </button>
       )}
 
-      {error && <p className="text-[11px] font-semibold text-sakura">{error}</p>}
+      {error && (
+        <p className="text-center text-[11px] font-semibold text-sakura">{error}</p>
+      )}
 
       {breakdown && (
         <div className="space-y-2 text-left">

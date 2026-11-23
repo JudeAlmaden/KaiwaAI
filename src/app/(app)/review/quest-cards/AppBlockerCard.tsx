@@ -29,7 +29,7 @@ export default function AppBlockerCard({
   return (
     <button
       onClick={onClick}
-      className="group relative w-full flex flex-col justify-between text-left rounded-3xl border-2 border-border bg-gradient-to-br from-indigo-ai/6 via-card to-card p-5 md:p-6 transition-all hover:-translate-y-1 hover:shadow-lg hover:border-indigo-ai/45 cursor-pointer shadow-sm overflow-hidden min-h-[160px]"
+      className="group relative flex h-full w-full flex-col justify-between text-left rounded-3xl border-2 border-border bg-gradient-to-br from-indigo-ai/6 via-card to-card p-5 md:p-6 transition-all hover:-translate-y-1 hover:shadow-lg hover:border-indigo-ai/45 cursor-pointer shadow-sm overflow-hidden min-h-[160px]"
     >
       {/* Hover shimmer */}
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-ai/0 via-indigo-ai/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />

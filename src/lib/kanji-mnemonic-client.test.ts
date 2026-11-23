@@ -6,17 +6,27 @@ import * as modelConfig from "./model-config";
 vi.mock("./api-keys");
 vi.mock("./model-config");
 
+function promptFromFetch(): string {
+  const callArgs = vi.mocked(global.fetch).mock.calls[0];
+  const body = JSON.parse(callArgs[1]?.body as string);
+  return body.contents[0].parts[0].text as string;
+}
+
 describe("kanji-mnemonic-client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = vi.fn();
+    vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
+    vi.mocked(apiKeys.keysForRequest).mockReturnValue(["test-key"]);
+    vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
+    vi.mocked(modelConfig.getMnemonicModel).mockReturnValue("gemini-2.0-flash-exp");
+    vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
   });
 
   describe("generateKanjiMnemonicClient", () => {
     const mockKanji: KanjiData = {
       character: "一",
       meanings: ["one"],
-      radicals: ["一"],
     };
 
     it("should throw NO_API_KEY if no keys available", async () => {
@@ -26,11 +36,6 @@ describe("kanji-mnemonic-client", () => {
     });
 
     it("should generate mnemonic successfully", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
-      vi.mocked(apiKeys.keysForRequest).mockReturnValue(["test-key"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
-
       const mockResponse = {
         candidates: [
           {
@@ -62,16 +67,28 @@ describe("kanji-mnemonic-client", () => {
       );
     });
 
-    it("should include radicals in prompt when available", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
-      vi.mocked(apiKeys.keysForRequest).mockReturnValue(["test-key"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
-
-      const kanjiWithRadicals: KanjiData = {
-        character: "木",
-        meanings: ["tree", "wood"],
-        radicals: ["木"],
+    it("should give the model a locked keyword for each resolved component", async () => {
+      const kanjiWithComponents: KanjiData = {
+        character: "六",
+        meanings: ["six"],
+        heisigKeyword: "Six",
+        heisigNumber: 6,
+        components: [
+          {
+            glyph: "亠",
+            keyword: null,
+            meanings: [],
+            heisigNumber: null,
+            inDictionary: false,
+          },
+          {
+            glyph: "八",
+            keyword: "eight",
+            meanings: ["eight"],
+            heisigNumber: 42,
+            inDictionary: true,
+          },
+        ],
       };
 
       vi.mocked(global.fetch).mockResolvedValue({
@@ -81,18 +98,35 @@ describe("kanji-mnemonic-client", () => {
         }),
       } as Response);
 
-      await generateKanjiMnemonicClient(kanjiWithRadicals);
+      await generateKanjiMnemonicClient(kanjiWithComponents);
 
-      const callArgs = vi.mocked(global.fetch).mock.calls[0];
-      const body = JSON.parse(callArgs[1]?.body as string);
-      expect(body.contents[0].parts[0].text).toContain("Components: 木");
+      const prompt = promptFromFetch();
+      expect(prompt).toContain('"eight"');
+      expect(prompt).toContain("亠");
+      expect(prompt).toContain("never invent");
+    });
+
+    it("should list raw primitives when no component could be resolved", async () => {
+      const kanjiWithPrimitives: KanjiData = {
+        character: "六",
+        meanings: ["six"],
+        primitives: ["亠", "八"],
+      };
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: "Test mnemonic" }] } }],
+        }),
+      } as Response);
+
+      await generateKanjiMnemonicClient(kanjiWithPrimitives);
+
+      expect(promptFromFetch()).toContain("亠 + 八");
     });
 
     it("should retry with next key on 429 rate limit", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
       vi.mocked(apiKeys.keysForRequest).mockReturnValue(["key1", "key2"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
 
       vi.mocked(global.fetch)
         .mockResolvedValueOnce({
@@ -113,10 +147,7 @@ describe("kanji-mnemonic-client", () => {
     });
 
     it("should throw BAD_API_KEY on 403", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
       vi.mocked(apiKeys.keysForRequest).mockReturnValue(["bad-key"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
 
       vi.mocked(global.fetch).mockResolvedValue({
         ok: false,
@@ -126,11 +157,36 @@ describe("kanji-mnemonic-client", () => {
       await expect(generateKanjiMnemonicClient(mockKanji)).rejects.toThrow("BAD_API_KEY");
     });
 
-    it("should use fallback text when all retries fail", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
+    it("should use fallback text naming resolved components when all retries fail", async () => {
       vi.mocked(apiKeys.keysForRequest).mockReturnValue(["key1"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: false,
+        status: 500,
+      } as Response);
+
+      const result = await generateKanjiMnemonicClient({
+        character: "六",
+        meanings: ["six"],
+        components: [
+          {
+            glyph: "八",
+            keyword: "eight",
+            meanings: ["eight"],
+            heisigNumber: 42,
+            inDictionary: true,
+          },
+        ],
+      });
+
+      expect(result).toContain("六");
+      expect(result).toContain("six");
+      expect(result).toContain("八 (eight)");
+      expect(result.toLowerCase()).not.toContain("radicals");
+    });
+
+    it("should use fallback without components when nothing is resolvable", async () => {
+      vi.mocked(apiKeys.keysForRequest).mockReturnValue(["key1"]);
 
       vi.mocked(global.fetch).mockResolvedValue({
         ok: false,
@@ -141,36 +197,10 @@ describe("kanji-mnemonic-client", () => {
 
       expect(result).toContain("一");
       expect(result).toContain("one");
-      expect(result).toContain("radicals");
-    });
-
-    it("should use fallback without radicals when radicals array is empty", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
-      vi.mocked(apiKeys.keysForRequest).mockReturnValue(["key1"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
-
-      const kanjiNoRadicals: KanjiData = {
-        character: "一",
-        meanings: ["one"],
-        radicals: [],
-      };
-
-      vi.mocked(global.fetch).mockResolvedValue({
-        ok: false,
-        status: 500,
-      } as Response);
-
-      const result = await generateKanjiMnemonicClient(kanjiNoRadicals);
-
-      expect(result).toContain("一");
-      expect(result).toContain("one");
-      expect(result).not.toContain("radicals");
+      expect(result).not.toContain("built from");
     });
 
     it("should try multiple models when auto-fallback is enabled", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
-      vi.mocked(apiKeys.keysForRequest).mockReturnValue(["key1"]);
       vi.mocked(modelConfig.getAutoFallback).mockReturnValue(true);
       vi.mocked(modelConfig.modelFallbackOrder).mockReturnValue([
         "gemini-2.0-flash-exp",
@@ -196,11 +226,6 @@ describe("kanji-mnemonic-client", () => {
     });
 
     it("should handle empty response text", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
-      vi.mocked(apiKeys.keysForRequest).mockReturnValue(["key1"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
-
       vi.mocked(global.fetch).mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -213,12 +238,41 @@ describe("kanji-mnemonic-client", () => {
       expect(result).toBe("");
     });
 
-    it("should use temperature 0.8 for creative mnemonics", async () => {
-      vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
-      vi.mocked(apiKeys.keysForRequest).mockReturnValue(["key1"]);
-      vi.mocked(modelConfig.getModel).mockReturnValue("gemini-2.0-flash-exp");
-      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
+    it("uses the mnemonic model override for the request", async () => {
+      vi.mocked(modelConfig.getMnemonicModel).mockReturnValue("gemini-2.5-flash-lite");
 
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: "Story" }] } }],
+        }),
+      } as Response);
+
+      await generateKanjiMnemonicClient(mockKanji);
+
+      expect(vi.mocked(global.fetch).mock.calls[0][0]).toContain(
+        "models/gemini-2.5-flash-lite:generateContent"
+      );
+    });
+
+    it("builds the fallback order from the mnemonic model", async () => {
+      vi.mocked(modelConfig.getAutoFallback).mockReturnValue(true);
+      vi.mocked(modelConfig.getMnemonicModel).mockReturnValue("gemini-2.5-flash-lite");
+      vi.mocked(modelConfig.modelFallbackOrder).mockReturnValue(["gemini-2.5-flash-lite"]);
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: "Story" }] } }],
+        }),
+      } as Response);
+
+      await generateKanjiMnemonicClient(mockKanji);
+
+      expect(modelConfig.modelFallbackOrder).toHaveBeenCalledWith("gemini-2.5-flash-lite");
+    });
+
+    it("should use temperature 0.8 for creative mnemonics", async () => {
       vi.mocked(global.fetch).mockResolvedValue({
         ok: true,
         json: async () => ({

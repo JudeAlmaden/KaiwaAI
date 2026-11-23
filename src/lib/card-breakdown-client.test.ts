@@ -1,5 +1,34 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { normalizeCardBreakdown } from "./card-breakdown-client";
+import { generateCardBreakdownClient } from "./card-breakdown-client";
+import * as apiKeys from "./api-keys";
+import * as modelConfig from "./model-config";
+
+vi.mock("./api-keys");
+vi.mock("./model-config");
+
+function okResponse(): Response {
+  return {
+    ok: true,
+    json: async () => ({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  mnemonic: "hook",
+                  lookalikes: [],
+                  examples: [],
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  } as Response;
+}
 
 describe("normalizeCardBreakdown", () => {
   const valid = {
@@ -52,5 +81,57 @@ describe("normalizeCardBreakdown", () => {
   it("treats non-array collections as empty", () => {
     const out = normalizeCardBreakdown({ mnemonic: "hook", lookalikes: "x", examples: 5 });
     expect(out).toEqual({ mnemonic: "hook", lookalikes: [], examples: [] });
+  });
+});
+
+describe("generateCardBreakdownClient", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+    vi.mocked(apiKeys.hasAnyKey).mockReturnValue(true);
+    vi.mocked(apiKeys.keysForRequest).mockReturnValue(["test-key"]);
+    vi.mocked(modelConfig.getMnemonicModel).mockReturnValue("gemini-2.5-flash-lite");
+    vi.mocked(modelConfig.getAutoFallback).mockReturnValue(false);
+  });
+
+  it("uses the mnemonic model for the request", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse());
+
+    await generateCardBreakdownClient({ word: "今週", meaning: "this week" });
+
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toContain(
+      "models/gemini-2.5-flash-lite:generateContent"
+    );
+  });
+
+  it("locks in the keywords of the kanji the word is built from", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse());
+
+    await generateCardBreakdownClient({
+      word: "今週",
+      meaning: "this week",
+      wordKanji: [
+        {
+          glyph: "今",
+          keyword: "now",
+          meanings: ["now"],
+          heisigNumber: 12,
+          inDictionary: true,
+        },
+        {
+          glyph: "週",
+          keyword: "week",
+          meanings: ["week"],
+          heisigNumber: null,
+          inDictionary: true,
+        },
+      ],
+    });
+
+    const body = JSON.parse(vi.mocked(global.fetch).mock.calls[0][1]?.body as string);
+    const prompt = body.contents[0].parts[0].text as string;
+    expect(prompt).toContain('keyword "now"');
+    expect(prompt).toContain('keyword "week"');
+    expect(prompt).toContain("never invent");
   });
 });

@@ -3,8 +3,9 @@
 // from the browser, structured JSON back.
 
 import { hasAnyKey, keysForRequest } from "./api-keys";
-import { getModel, getAutoFallback, modelFallbackOrder } from "./model-config";
+import { getMnemonicModel, getAutoFallback, modelFallbackOrder } from "./model-config";
 import type { CardSourceContext } from "./review/card-source";
+import type { ComponentContext } from "./kanji-mnemonic/types";
 
 export type CardBreakdown = {
   /** One fresh, concrete memory hook. */
@@ -21,6 +22,8 @@ export type CardBreakdownInput = {
   meaning?: string | null;
   partOfSpeech?: string | null;
   sourceContext?: CardSourceContext | null;
+  /** Kanji the word is built from, with the keywords the learner already knows. */
+  wordKanji?: ComponentContext[];
 };
 
 const BREAKDOWN_SCHEMA = {
@@ -103,9 +106,28 @@ function buildPrompt(input: CardBreakdownInput): string {
       }`
     : "";
 
+  const wordKanji = input.wordKanji ?? [];
+  const components =
+    wordKanji.length > 0
+      ? `\n\nThe word is built from these kanji. Use the keyword given for each one; never invent a different meaning for one that already has a keyword:\n${wordKanji
+          .map((component) => {
+            const keyword = component.keyword
+              ? `keyword "${component.keyword}"`
+              : "no recorded keyword";
+            const frame = component.heisigNumber
+              ? `, frame #${component.heisigNumber}`
+              : "";
+            const story = component.userMnemonic
+              ? `. Their existing story: "${component.userMnemonic}"`
+              : "";
+            return `- ${component.glyph} — ${keyword}${frame}${story}`;
+          })
+          .join("\n")}`
+      : "";
+
   return `A Japanese learner keeps forgetting this card. Give them a fresh way in.
 
-Card: ${input.word}${reading}${meaning}${pos}${context}
+Card: ${input.word}${reading}${meaning}${pos}${context}${components}
 
 Return:
 - mnemonic: ONE vivid, concrete memory hook of at most 35 words. Use the sound, the kanji components, or a tiny scene — never a generic "imagine a..." template, and never just restate the meaning.
@@ -122,7 +144,8 @@ export async function generateCardBreakdownClient(
   if (!hasAnyKey()) throw new Error("NO_API_KEY");
 
   const keys = keysForRequest();
-  const models = getAutoFallback() ? modelFallbackOrder() : [getModel()];
+  const chosenModel = getMnemonicModel();
+  const models = getAutoFallback() ? modelFallbackOrder(chosenModel) : [chosenModel];
   const requestBody = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: buildPrompt(input) }] }],
     generationConfig: {

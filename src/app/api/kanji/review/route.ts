@@ -16,6 +16,8 @@ import {
   buildReviewPersistData,
   type EarlyReviewStrategy,
 } from "@/lib/fsrs/apply-review";
+import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
+import { mergeComponents } from "@/lib/kanji-mnemonic/context";
 
 function safeJsonArray(val: string | null | undefined): string[] {
   if (!val) return [];
@@ -128,7 +130,16 @@ export async function GET(req: Request) {
     // Sort by Heisig frame order (nulls last)
     allKanji.sort((a, b) => (a.heisigNumber ?? 99999) - (b.heisigNumber ?? 99999));
 
-    return NextResponse.json({ cards: allKanji.slice(0, limit) });
+    const componentMap = await loadComponentMap(
+      user.id,
+      allKanji.flatMap((kanji) => kanji.primitives)
+    );
+    const cards = allKanji.map((kanji) => ({
+      ...kanji,
+      components: mergeComponents(kanji.primitives, componentMap),
+    }));
+
+    return NextResponse.json({ cards: cards.slice(0, limit) });
   }
 
   // Get user's kanji learning records
@@ -154,7 +165,7 @@ export async function GET(req: Request) {
     ];
   } else if (studyMode === "leeches") {
     where.AND = [
-      { timesReviewed: { gte: 8 } },
+      { lapses: { gte: 3 } },
       { interval: { lt: 7 } }
     ];
   }
@@ -299,6 +310,7 @@ export async function GET(req: Request) {
       mnemonic: uk.mnemonic ?? null,
       status: uk.status,
       timesReviewed: uk.timesReviewed,
+      lapses: uk.lapses,
       interval: uk.interval,
       repetitions: uk.repetitions,
       _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance
@@ -307,7 +319,17 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({ cards });
+  const componentMap = await loadComponentMap(
+    user.id,
+    cards.flatMap((card) => card.primitives)
+  );
+
+  return NextResponse.json({
+    cards: cards.map((card) => ({
+      ...card,
+      components: mergeComponents(card.primitives, componentMap),
+    })),
+  });
 }
 
 // Grade a kanji card via FSRS v4 (SM-2 fallback on error).

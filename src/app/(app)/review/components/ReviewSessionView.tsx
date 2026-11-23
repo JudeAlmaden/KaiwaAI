@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import OfflineBanner from "@/components/OfflineBanner";
 import ReviewCard from "../ReviewCard";
+import type { ComponentContext } from "@/lib/kanji-mnemonic/types";
 import { formatComposition, type CompositionCounts } from "@/lib/review/composition";
 import { resolveShowFurigana } from "@/lib/review/furigana";
 import type { FuriganaMode } from "@/lib/review/types";
@@ -28,9 +29,14 @@ export type ReviewSessionViewProps = {
   onClose: () => void;
   onShowHint: () => void;
   onGenerateMnemonic: (
-    kanjiChar: string,
-    meanings: string[],
-    radicals: string[],
+    kanji: {
+      character: string;
+      meanings: string[];
+      primitives?: string[];
+      components?: ComponentContext[];
+      heisigKeyword?: string | null;
+      heisigNumber?: number | null;
+    },
     isRegenerate: boolean
   ) => void;
 };
@@ -163,9 +169,14 @@ export function ReviewSessionView({
           }}
           onGenerateMnemonic={(isRegen) => {
             onGenerateMnemonic(
-              card.character!,
-              card.meanings!,
-              card.radicals || [],
+              {
+                character: card.character!,
+                meanings: card.meanings ?? [],
+                primitives: card.primitives,
+                components: card.components,
+                heisigKeyword: card.heisigKeyword,
+                heisigNumber: card.heisigNumber,
+              },
               isRegen
             );
           }}

@@ -70,7 +70,7 @@ export const SESSION_PLANS: SessionPlan[] = [
   {
     id: "leeches",
     label: "Leeches",
-    hint: "Reviewed 8+ times but still back within a week.",
+    hint: "Failed 3+ times and still back within a week.",
     studyMode: "leeches",
     learningRatio: 0,
   },

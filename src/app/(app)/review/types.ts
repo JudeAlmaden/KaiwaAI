@@ -5,7 +5,7 @@ export type StudyMode =
   | "all"           // Study ahead (any cards)
   | "recent"        // Recently added (last 7 days)
   | "struggling"    // Low ease factor (<2.0) or many reviews
-  | "leeches"       // Cards reviewed 8+ times with interval <7 days
+  | "leeches"       // Cards with 3+ lapses and interval <7 days
   | "new"
   | "custom";
 

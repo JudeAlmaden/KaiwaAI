@@ -18,6 +18,9 @@ import {
 import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
 import { introducedTodayWhere, resolveNewAllowance, startOfToday } from "@/lib/review/intake";
 import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
+import { extractKanji } from "@/lib/kanji-utils";
+import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
+import { mergeComponents } from "@/lib/kanji-mnemonic/context";
 
 // Cards for review with various study modes:
 //   ?studyMode=due         — cards with nextReview in the past (default)
@@ -74,7 +77,7 @@ export async function GET(req: Request) {
     ];
   } else if (studyMode === "leeches") {
     where.AND = [
-      { timesReviewed: { gte: 8 } },
+      { lapses: { gte: 3 } },
       { interval: { lt: 7 } }
     ];
   }
@@ -282,6 +285,7 @@ export async function GET(req: Request) {
       interval: card.interval,
       repetitions: card.repetitions,
       timesReviewed: card.timesReviewed,
+      lapses: card.lapses,
       exposures: card.exposures,
       nextReview: card.nextReview,
       lastReviewedAt: card.lastReviewedAt,
@@ -290,7 +294,19 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({ cards: formattedCards });
+  // One batched lookup for every kanji in the page's words, so the word hint
+  // can build on keywords the learner already studied.
+  const wordComponentMap = await loadComponentMap(
+    user.id,
+    formattedCards.flatMap((card) => extractKanji(card.word))
+  );
+
+  return NextResponse.json({
+    cards: formattedCards.map((card) => ({
+      ...card,
+      wordKanji: mergeComponents(extractKanji(card.word), wordComponentMap),
+    })),
+  });
 }
 
 // Grade a card and reschedule it via FSRS v4 (SM-2 fallback on error).

@@ -2,44 +2,65 @@
 // Similar to gemini.ts, but specialized for kanji mnemonics
 
 import { hasAnyKey, keysForRequest } from "./api-keys";
-import { getModel, getAutoFallback, modelFallbackOrder } from "./model-config";
+import { getMnemonicModel, getAutoFallback, modelFallbackOrder } from "./model-config";
+import { buildMnemonicPrompt } from "./kanji-mnemonic/prompt";
+import type { ComponentContext } from "./kanji-mnemonic/types";
 
 export type KanjiData = {
   character: string;
   meanings: string[];
-  radicals: string[];
   heisigKeyword?: string | null;
   heisigNumber?: number | null;
+  /** Authored RTK buildup, e.g. ["亠", "八"]. */
+  primitives?: string[];
+  /** Primitive glyphs resolved to the keywords the learner already knows. */
+  components?: ComponentContext[];
 };
 
+function fallbackStory(kanji: KanjiData): string {
+  const meaning = kanji.meanings[0] || "this meaning";
+  const named = (kanji.components ?? []).filter((component) => component.keyword);
+  if (named.length > 0) {
+    const buildup = named
+      .map((component) => `${component.glyph} (${component.keyword})`)
+      .join(" + ");
+    return `The kanji ${kanji.character} means "${meaning}". It is built from ${buildup}.`;
+  }
+  if (kanji.primitives && kanji.primitives.length > 0) {
+    return `The kanji ${kanji.character} means "${meaning}". Its components are ${kanji.primitives.join(" + ")}.`;
+  }
+  return `The kanji ${kanji.character} means "${meaning}".`;
+}
+
 /**
- * Generate a mnemonic story for a kanji using Gemini AI (client-side with BYOK)
- * @param kanji - Kanji data
- * @returns Generated mnemonic story
+ * Generate a mnemonic story for a kanji using Gemini AI (client-side with BYOK).
+ * The story builds on the keyword of every component, so later kanji reuse
+ * the meanings the learner already studied instead of inventing new ones.
  */
 export async function generateKanjiMnemonicClient(
   kanji: KanjiData
 ): Promise<string> {
   if (!hasAnyKey()) throw new Error("NO_API_KEY");
-  
-  const primaryKeyword = kanji.heisigKeyword || kanji.meanings[0] || "Meaning";
-  const prompt = `Create a Heisig RTK (Remembering the Kanji) mnemonic story for the kanji "${kanji.character}" (keyword: ${primaryKeyword}${kanji.heisigNumber ? `, Frame #${kanji.heisigNumber}` : ""}).
 
-${kanji.radicals.length > 0 ? `Primitives/Components: ${kanji.radicals.join(", ")}` : ""}
+  const keyword = kanji.heisigKeyword?.trim() || kanji.meanings[0] || "Meaning";
+  const components = kanji.components ?? [];
+  const primitives =
+    kanji.primitives && kanji.primitives.length > 0
+      ? kanji.primitives
+      : components.map((component) => component.glyph);
 
-Format your response EXACTLY like this:
-
-**Components:** [Describe each primitive/radical component vividly]
-**Story:** [2-3 sentence memorable, imaginative story combining the components to lock the keyword into memory]
-
-Example format:
-**Components:** 禾 (grain/plant) + ム (katakana mu, looks like a fence)
-**Story:** A stalk of grain is hidden behind a fence-like shape. You're protecting your grain privately. This represents Private.
-
-Keep it SHORT, VISUAL, and make the connection to "${primaryKeyword}" obvious.`;
+  const prompt = buildMnemonicPrompt({
+    character: kanji.character,
+    keyword,
+    meanings: kanji.meanings,
+    heisigNumber: kanji.heisigNumber ?? null,
+    primitives,
+    components,
+  });
 
   const keys = keysForRequest();
-  const models = getAutoFallback() ? modelFallbackOrder() : [getModel()];
+  const chosenModel = getMnemonicModel();
+  const models = getAutoFallback() ? modelFallbackOrder(chosenModel) : [chosenModel];
 
   const requestBody = JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -81,11 +102,6 @@ Keep it SHORT, VISUAL, and make the connection to "${primaryKeyword}" obvious.`;
     }
   }
 
-  // Fallback for API failures
-  const fallback = kanji.radicals.length > 0
-    ? `The kanji ${kanji.character} means "${kanji.meanings[0]}". It contains the radicals: ${kanji.radicals.join(", ")}.`
-    : `The kanji ${kanji.character} means "${kanji.meanings[0]}".`;
-  
   console.warn("Mnemonic generation failed, using fallback:", lastError);
-  return fallback;
+  return fallbackStory(kanji);
 }

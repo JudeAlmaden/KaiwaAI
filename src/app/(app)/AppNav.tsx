@@ -17,6 +17,7 @@ import {
 } from "@phosphor-icons/react";
 import Kai from "../Kai";
 import LogoutButton from "../LogoutButton";
+import { fetchProjectedMix } from "@/lib/review/session-ready";
 import { useUnreadKaiMessages } from "@/hooks/useUnreadKaiMessages";
 import { useAppBlockerSupported } from "@/lib/app-blocker-platform";
 
@@ -239,10 +240,9 @@ export function Sidebar({
   const [dueCount, setDueCount] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/stats")
-      .then((res) => res.json())
-      .then((data) => {
-        if (typeof data.dueNow === "number") setDueCount(data.dueNow);
+    fetchProjectedMix()
+      .then((mix) => {
+        if (mix) setDueCount(mix.total);
       })
       .catch(() => { });
   }, [pathname]);
@@ -398,10 +398,9 @@ export function BottomTabs({ initialDueNow = 0 }: { initialDueNow?: number }) {
   const [dueCount, setDueCount] = useState(initialDueNow);
 
   useEffect(() => {
-    fetch("/api/stats")
-      .then((res) => res.json())
-      .then((data) => {
-        if (typeof data.dueNow === "number") setDueCount(data.dueNow);
+    fetchProjectedMix()
+      .then((mix) => {
+        if (mix) setDueCount(mix.total);
       })
       .catch(() => {});
   }, [pathname]);

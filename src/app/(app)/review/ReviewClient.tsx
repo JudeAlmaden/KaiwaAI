@@ -12,6 +12,7 @@ import OfflineBanner from "@/components/OfflineBanner";
 import { AppBlocker, type AppBlockerConfig } from "@/plugins/app-blocker";
 import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from "@/lib/fallback-cards";
 import { getLearningConfig } from "@/lib/learning-config";
+import { fetchProjectedMix } from "@/lib/review/session-ready";
 import { mirrorBlockerDefaultsToLearning } from "@/lib/review/blocker-sync";
 import type { FuriganaMode } from "@/lib/review/types";
 import type { Card, CardDirection, ReviewType, Setup, StudyMode } from "./types";
@@ -69,19 +70,9 @@ export default function ReviewClient() {
   };
 
   const refreshDueCount = useCallback(() => {
-    const learningCfg = getLearningConfig();
-    const params = new URLSearchParams({
-      studyMode: "due",
-      limit: "200",
-      learningRatio: String(learningCfg.defaultLearningRatio ?? 0.5),
-      maxLearningPool: String(learningCfg.maxLearningPool),
-      maxNewCards: String(learningCfg.maxNewCards),
-      newPerSession: String(learningCfg.newPerSession),
-      maxDailyReviews: String(learningCfg.maxDailyReviews),
-    });
-    fetch(`/api/review/mixed?${params}`)
-      .then((r) => r.json())
-      .then((d) => setDueCount(d.cards?.length ?? 0))
+    // Same projected session total as the home screen and the nav badge.
+    fetchProjectedMix()
+      .then((mix) => setDueCount(mix?.total ?? 0))
       .catch(() => setDueCount(0));
   }, []);
 

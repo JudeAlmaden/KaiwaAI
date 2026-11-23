@@ -33,6 +33,19 @@ describe("applyFsrsReview — payload rules", () => {
     expect(result.interval).toBe(0);
     expect(result.touchLastReviewed).not.toBe(false);
     expect(buildReviewPersistData(result).interval).toBe(0);
+    expect(result.lapsesIncrement).toBe(1);
+    expect(buildReviewPersistData(result).lapses).toEqual({ increment: 1 });
+  });
+
+  it("does not count an early review as a lapse", () => {
+    const result = applyFsrsReview({
+      card: makeCard({ nextReview: new Date(Date.now() + 5 * DAY_MS) }),
+      grade: 0,
+      cardType: "flashcard",
+      earlyReviewStrategy: "proportional",
+    });
+    expect(result.lapsesIncrement).toBe(0);
+    expect(buildReviewPersistData(result).lapses).toBeUndefined();
   });
 
   it("does not move the scheduling clock for an early practice review", () => {
@@ -45,6 +58,7 @@ describe("applyFsrsReview — payload rules", () => {
     expect(result.touchLastReviewed).toBe(false);
     expect(buildReviewPersistData(result).lastReviewedAt).toBeUndefined();
     expect(result.timesReviewedIncrement).toBe(0);
+    expect(result.lapsesIncrement).toBe(0);
   });
 
   it("stamps firstLearnedAt on the first success only", () => {
@@ -89,6 +103,7 @@ describe("buildReviewPersistData — fallback reset", () => {
     retrievability: 1,
     lastReviewedAt: new Date(),
     timesReviewedIncrement: 1,
+    lapsesIncrement: 0,
   };
 
   it("clears stale FSRS fields when SM-2 took over", () => {

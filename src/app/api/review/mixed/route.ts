@@ -16,6 +16,9 @@ import {
   startOfToday,
 } from "@/lib/review/intake";
 import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
+import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
+import { mergeComponents } from "@/lib/kanji-mnemonic/context";
+import { extractKanji } from "@/lib/kanji-utils";
 
 function safeJsonArray(val: string | null | undefined): string[] {
   if (!val) return [];
@@ -76,11 +79,11 @@ export async function GET(req: Request) {
     ];
   } else if (studyMode === "leeches") {
     vocabWhere.AND = [
-      { timesReviewed: { gte: 8 } },
+      { lapses: { gte: 3 } },
       { interval: { lt: 7 } }
     ];
     kanjiWhere.AND = [
-      { timesReviewed: { gte: 8 } },
+      { lapses: { gte: 3 } },
       { interval: { lt: 7 } }
     ];
   }
@@ -225,10 +228,24 @@ export async function GET(req: Request) {
     const halfLimit = Math.ceil(limit / 2);
     // The allowance is split so the two halves sum to it. Rounding both halves
     // up turned a quota of 3 into 2 + 2 = 4 new cards in one mixed session.
-    const vocabNewBudget =
-      effectiveMaxNewCards !== undefined ? Math.ceil(effectiveMaxNewCards / 2) : undefined;
-    const kanjiNewBudget =
-      effectiveMaxNewCards !== undefined ? Math.floor(effectiveMaxNewCards / 2) : undefined;
+    // A pool with no new cards must not strand its share: with 3 new allowed
+    // and all of them kanji, kanji gets 3, not floor(3/2) = 1.
+    let vocabNewBudget: number | undefined;
+    let kanjiNewBudget: number | undefined;
+    if (effectiveMaxNewCards !== undefined) {
+      const vocabShare = Math.ceil(effectiveMaxNewCards / 2);
+      const kanjiShare = Math.floor(effectiveMaxNewCards / 2);
+      const vocabNewAvailable = allVocab.filter(isNewCard).length;
+      const kanjiNewAvailable = allKanji.filter(isNewCard).length;
+      vocabNewBudget = Math.min(vocabShare, vocabNewAvailable);
+      kanjiNewBudget = Math.min(kanjiShare, kanjiNewAvailable);
+
+      let stranded = effectiveMaxNewCards - vocabNewBudget - kanjiNewBudget;
+      const kanjiExtra = Math.min(stranded, kanjiNewAvailable - kanjiNewBudget);
+      kanjiNewBudget += kanjiExtra;
+      stranded -= kanjiExtra;
+      vocabNewBudget += Math.min(stranded, vocabNewAvailable - vocabNewBudget);
+    }
     const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio, {
       maxNewCards: vocabNewBudget,
       maxNewPerSession: vocabNewBudget,
@@ -369,6 +386,7 @@ export async function GET(req: Request) {
       status: card.status,
       // Counters that drive the leech badge on the card.
       timesReviewed: card.timesReviewed,
+      lapses: card.lapses,
       interval: card.interval,
       repetitions: card.repetitions,
       _pool: (card as typeof card & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
@@ -403,6 +421,7 @@ export async function GET(req: Request) {
       mnemonic: uk.mnemonic,
       status: uk.status,
       timesReviewed: uk.timesReviewed,
+      lapses: uk.lapses,
       interval: uk.interval,
       repetitions: uk.repetitions,
       _pool: (uk as typeof uk & { _isMaintenance?: boolean })._isMaintenance ? ("maintenance" as const) : ("active" as const),
@@ -420,5 +439,17 @@ export async function GET(req: Request) {
   // Limit to requested amount
   const cards = allCards.slice(0, limit);
 
-  return NextResponse.json({ cards });
+  // One batched lookup covers kanji primitives and the kanji inside every word.
+  const componentMap = await loadComponentMap(user.id, [
+    ...kanjiTransformed.flatMap((card) => card.primitives),
+    ...vocabTransformed.flatMap((card) => extractKanji(card.word)),
+  ]);
+
+  return NextResponse.json({
+    cards: cards.map((card) =>
+      card.type === "kanji"
+        ? { ...card, components: mergeComponents(card.primitives, componentMap) }
+        : { ...card, wordKanji: mergeComponents(extractKanji(card.word), componentMap) }
+    ),
+  });
 }

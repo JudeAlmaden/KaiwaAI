@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import type { ActiveCard, Card, Setup } from "../types";
 import { getLearningConfig } from "@/lib/learning-config";
+import type { ComponentContext } from "@/lib/kanji-mnemonic/types";
+import { saveKanjiMnemonicClient } from "@/lib/kanji-mnemonic/save-client";
 import {
   summarizeComposition,
   type CompositionCounts,
@@ -53,7 +55,17 @@ export function useReviewQueue(setup: Setup, onDone: () => void) {
   }, []);
 
   const handleGenerateMnemonic = useCallback(
-    async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
+    async (
+      kanji: {
+        character: string;
+        meanings: string[];
+        primitives?: string[];
+        components?: ComponentContext[];
+        heisigKeyword?: string | null;
+        heisigNumber?: number | null;
+      },
+      isRegenerate: boolean
+    ) => {
       if (isRegenerate) {
         const confirmed = window.confirm(
           "⚠️ Are you sure you want to regenerate the mnemonic?\n\nThis will replace the existing mnemonic with a new one."
@@ -66,17 +78,15 @@ export function useReviewQueue(setup: Setup, onDone: () => void) {
         const { generateKanjiMnemonicClient } = await import("@/lib/kanji-mnemonic-client");
 
         const mnemonic = await generateKanjiMnemonicClient({
-          character: kanjiChar,
-          meanings,
-          radicals,
+          character: kanji.character,
+          meanings: kanji.meanings,
+          primitives: kanji.primitives,
+          components: kanji.components,
+          heisigKeyword: kanji.heisigKeyword,
+          heisigNumber: kanji.heisigNumber,
         });
 
-        // Save to server
-        await fetch(`/api/kanji/${encodeURIComponent(kanjiChar)}/mnemonic`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mnemonic }),
-        });
+        await saveKanjiMnemonicClient(kanji.character, mnemonic);
 
         // Update the current card in activePool
         setActivePool((prev) => {
@@ -120,9 +130,14 @@ export function useReviewQueue(setup: Setup, onDone: () => void) {
 
     // Otherwise, generate it
     await handleGenerateMnemonic(
-      card.character!,
-      card.meanings!,
-      card.radicals || [],
+      {
+        character: card.character!,
+        meanings: card.meanings ?? [],
+        primitives: card.primitives,
+        components: card.components,
+        heisigKeyword: card.heisigKeyword,
+        heisigNumber: card.heisigNumber,
+      },
       false
     );
     setShowHint(true);

@@ -1,3 +1,5 @@
+import type { ComponentContext } from "@/lib/kanji-mnemonic/types";
+
 export type KanjiDetail = {
   id: string;
   character: string;
@@ -13,6 +15,8 @@ export type KanjiDetail = {
   readingsOn: string[];
   readingsKun: string[];
   radicals: string[];
+  primitives?: string[];
+  components?: ComponentContext[];
   wkLevel: number | null;
   mnemonic?: string | null;
   inReviews?: boolean;

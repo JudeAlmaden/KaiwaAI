@@ -58,8 +58,17 @@ export const getDashboardStatsForUser = cache(async (user: User): Promise<Dashbo
   const todayKey = dayKeyFor(now, user.timezone);
   const yesterdayKey = previousDayKey(todayKey);
 
-  const [known, learning, neww, dueNow, totalMessages, kanjiKnown, kanjiLearning, kanjiNew] =
-    await Promise.all([
+  const [
+    known,
+    learning,
+    neww,
+    vocabDue,
+    totalMessages,
+    kanjiKnown,
+    kanjiLearning,
+    kanjiNew,
+    kanjiDue,
+  ] = await Promise.all([
       prisma.userFlashcard.count({ where: { userId: user.id, status: "known" } }),
       prisma.userFlashcard.count({ where: { userId: user.id, status: "learning" } }),
       prisma.userFlashcard.count({ where: { userId: user.id, status: "new" } }),
@@ -76,6 +85,10 @@ export const getDashboardStatsForUser = cache(async (user: User): Promise<Dashbo
       prisma.userKanji.count({ where: { userId: user.id, status: "known" } }),
       prisma.userKanji.count({ where: { userId: user.id, status: "learning" } }),
       prisma.userKanji.count({ where: { userId: user.id, status: "new" } }),
+      // Due means both decks: vocabulary and kanji feed the same review queue.
+      prisma.userKanji.count({
+        where: { userId: user.id, nextReview: { lte: now } },
+      }),
     ]);
 
   const streak = currentStreak(
@@ -108,7 +121,7 @@ export const getDashboardStatsForUser = cache(async (user: User): Promise<Dashbo
       new: kanjiNew,
       total: kanjiKnown + kanjiLearning + kanjiNew,
     },
-    dueNow,
+    dueNow: vocabDue + kanjiDue,
     messagesSent: totalMessages,
   };
 });

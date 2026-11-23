@@ -42,6 +42,8 @@ export interface ReviewUpdatePayload {
   /** SM-2 fallback: drop stale FSRS state so the next review converts cleanly. */
   clearFsrs?: boolean;
   timesReviewedIncrement: number;
+  /** 1 only for a real grade-0 review; early/practice reviews never lapse. */
+  lapsesIncrement: number;
 }
 
 export interface ApplyReviewInput {
@@ -122,6 +124,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       // measured from it, so touching it would weaken the next real review.
       touchLastReviewed: false,
       timesReviewedIncrement: 0,
+      lapsesIncrement: 0,
     };
   }
 
@@ -196,6 +199,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       lastReviewedAt: now,
       firstLearnedAt,
       timesReviewedIncrement: 1,
+      lapsesIncrement: grade === 0 && !isEarly ? 1 : 0,
     };
   } catch (error) {
     const sm2Options =
@@ -227,6 +231,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       // this card, so clear them and let the next review re-convert.
       clearFsrs: true,
       timesReviewedIncrement: 1,
+      lapsesIncrement: grade === 0 && !isEarly ? 1 : 0,
     };
   }
 }
@@ -251,6 +256,7 @@ export function buildReviewPersistData(result: ReviewUpdatePayload) {
     lastReviewedAt?: Date;
     firstLearnedAt?: Date;
     timesReviewed?: { increment: number };
+    lapses?: { increment: number };
     difficulty?: number | null;
     stability?: number | null;
     retrievability?: number | null;
@@ -280,6 +286,9 @@ export function buildReviewPersistData(result: ReviewUpdatePayload) {
   }
   if (result.timesReviewedIncrement > 0) {
     data.timesReviewed = { increment: result.timesReviewedIncrement };
+  }
+  if (result.lapsesIncrement > 0) {
+    data.lapses = { increment: result.lapsesIncrement };
   }
   return data;
 }

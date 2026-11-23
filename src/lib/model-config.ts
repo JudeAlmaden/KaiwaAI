@@ -54,6 +54,7 @@ export const OUTPUT_TOKEN_OPTIONS = [512, 1024, 2048, 4096] as const;
 export const DEFAULT_MAX_OUTPUT_TOKENS = 2048;
 
 const MODEL_KEY = "kaiwa_gemini_model";
+const MNEMONIC_MODEL_KEY = "kaiwa_mnemonic_model";
 const TOKENS_KEY = "kaiwa_max_output_tokens";
 const AUTOSAVE_KEY = "kaiwa_autosave_words";
 
@@ -66,6 +67,22 @@ export function getModel(): string {
 
 export function setModel(id: string) {
   localStorage.setItem(MODEL_KEY, id);
+}
+
+/** Model used for mnemonic stories. Defaults to the chat model until overridden. */
+export function getMnemonicModel(): string {
+  if (typeof window === "undefined") return getModel();
+  const stored = localStorage.getItem(MNEMONIC_MODEL_KEY);
+  if (stored && MODELS.some((m) => m.id === stored)) return stored;
+  return getModel();
+}
+
+export function setMnemonicModel(id: string) {
+  if (!id) {
+    localStorage.removeItem(MNEMONIC_MODEL_KEY);
+    return;
+  }
+  localStorage.setItem(MNEMONIC_MODEL_KEY, id);
 }
 
 // Auto-fallback toggle: when on, the app tries other models if the chosen one
@@ -83,8 +100,7 @@ export function setAutoFallback(on: boolean) {
 
 /** Models to try in order: the chosen one first, then the rest (lighter models
  *  first, since they have higher rate limits and are more likely to succeed). */
-export function modelFallbackOrder(): string[] {
-  const chosen = getModel();
+export function modelFallbackOrder(chosen: string = getModel()): string[] {
   const tierRank = { lite: 0, balanced: 1, pro: 2 };
   const rest = MODELS.filter((m) => m.id !== chosen).sort(
     (a, b) => tierRank[a.tier] - tierRank[b.tier]

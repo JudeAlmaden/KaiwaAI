@@ -61,7 +61,8 @@ describe("/api/stats", () => {
     vi.mocked(prisma.userKanji.count)
       .mockResolvedValueOnce(20) // known
       .mockResolvedValueOnce(5) // learning
-      .mockResolvedValueOnce(3); // new
+      .mockResolvedValueOnce(3) // new
+      .mockResolvedValueOnce(0); // due
 
     const res = await GET();
     expect(res.status).toBe(200);
@@ -81,6 +82,38 @@ describe("/api/stats", () => {
       dueNow: 15,
       messagesSent: 42,
     });
+  });
+
+  it("counts due kanji as well as due vocabulary", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({
+      id: "user1",
+      email: "test@example.com",
+      name: "Test",
+      level: "N5",
+      timezone: "UTC",
+      streakCount: 0,
+      streakBestCount: 0,
+      lastStreakDay: null,
+    } as never);
+    vi.mocked(currentStreak).mockReturnValue(0);
+
+    vi.mocked(prisma.userFlashcard.count)
+      .mockResolvedValueOnce(8) // known
+      .mockResolvedValueOnce(0) // learning
+      .mockResolvedValueOnce(0) // new
+      .mockResolvedValueOnce(8); // due
+    vi.mocked(prisma.message.count).mockResolvedValueOnce(0);
+    vi.mocked(prisma.userKanji.count)
+      .mockResolvedValueOnce(0) // known
+      .mockResolvedValueOnce(0) // learning
+      .mockResolvedValueOnce(0) // new
+      .mockResolvedValueOnce(4); // due
+
+    const res = await GET();
+    const json = await res.json();
+
+    // The nav badge, home quest, and review page all read this one number.
+    expect(json.dueNow).toBe(12);
   });
 
   it("calculates Beginner level correctly", async () => {
@@ -109,7 +142,8 @@ describe("/api/stats", () => {
     vi.mocked(prisma.userKanji.count)
       .mockResolvedValueOnce(5) // known
       .mockResolvedValueOnce(2) // learning
-      .mockResolvedValueOnce(1); // new
+      .mockResolvedValueOnce(1) // new
+      .mockResolvedValueOnce(0); // due
 
     const res = await GET();
     const json = await res.json();
@@ -146,7 +180,8 @@ describe("/api/stats", () => {
     vi.mocked(prisma.userKanji.count)
       .mockResolvedValueOnce(50) // known
       .mockResolvedValueOnce(10) // learning
-      .mockResolvedValueOnce(5); // new
+      .mockResolvedValueOnce(5) // new
+      .mockResolvedValueOnce(0); // due
 
     const res = await GET();
     const json = await res.json();
@@ -183,7 +218,8 @@ describe("/api/stats", () => {
     vi.mocked(prisma.userKanji.count)
       .mockResolvedValueOnce(200) // known
       .mockResolvedValueOnce(30) // learning
-      .mockResolvedValueOnce(10); // new
+      .mockResolvedValueOnce(10) // new
+      .mockResolvedValueOnce(0); // due
 
     const res = await GET();
     const json = await res.json();
@@ -220,7 +256,8 @@ describe("/api/stats", () => {
     vi.mocked(prisma.userKanji.count)
       .mockResolvedValueOnce(1000) // known
       .mockResolvedValueOnce(50) // learning
-      .mockResolvedValueOnce(20); // new
+      .mockResolvedValueOnce(20) // new
+      .mockResolvedValueOnce(0); // due
 
     const res = await GET();
     const json = await res.json();

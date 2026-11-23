@@ -5,7 +5,7 @@ import { GET, POST } from "./route";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     userKanji: {
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),
       update: vi.fn(),
       createMany: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
     },
     kanji: {
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }));
@@ -178,7 +178,7 @@ describe("Kanji Review API - GET", () => {
         where: expect.objectContaining({
           userId: "user-123",
           AND: [
-            { timesReviewed: { gte: 8 } },
+            { lapses: { gte: 3 } },
             { interval: { lt: 7 } },
           ],
         }),
@@ -490,6 +490,7 @@ describe("Kanji Review API - POST", () => {
       retrievability: 1.0,
       lastReviewedAt: new Date(),
       timesReviewedIncrement: 1,
+      lapsesIncrement: 0,
     };
     vi.mocked(applyFsrsReview).mockReturnValueOnce(fsrsResult);
     const persistData = {
@@ -565,6 +566,7 @@ describe("Kanji Review API - POST", () => {
         retrievability: 1.0,
         lastReviewedAt: new Date(),
         timesReviewedIncrement: 1,
+      lapsesIncrement: 0,
       });
       vi.mocked(buildReviewPersistData).mockReturnValueOnce({
         timesReviewed: { increment: 1 },

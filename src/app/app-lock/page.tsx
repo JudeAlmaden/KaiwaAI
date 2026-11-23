@@ -12,6 +12,8 @@ import ReviewCard, { Card } from '@/app/(app)/review/ReviewCard';
 import OfflineBanner from '@/components/OfflineBanner';
 import { getLearningConfig } from '@/lib/learning-config';
 import { resolveShowFurigana } from '@/lib/review/furigana';
+import type { ComponentContext } from '@/lib/kanji-mnemonic/types';
+import { saveKanjiMnemonicClient } from '@/lib/kanji-mnemonic/save-client';
 
 type InitResult =
   | { kind: 'session' }
@@ -103,7 +105,17 @@ export default function StandaloneAppLockPage() {
     router.replace('/home');
   }, [router, isWeb]);
 
-  const handleGenerateMnemonic = useCallback(async (kanjiChar: string, meanings: string[], radicals: string[], isRegenerate: boolean) => {
+  const handleGenerateMnemonic = useCallback(async (
+    kanji: {
+      character: string;
+      meanings: string[];
+      primitives?: string[];
+      components?: ComponentContext[];
+      heisigKeyword?: string | null;
+      heisigNumber?: number | null;
+    },
+    isRegenerate: boolean
+  ) => {
     if (isRegenerate) {
       const confirmed = window.confirm(
         "⚠️ Are you sure you want to regenerate the mnemonic?\n\nThis will replace the existing mnemonic with a new one."
@@ -115,16 +127,15 @@ export default function StandaloneAppLockPage() {
     try {
       const { generateKanjiMnemonicClient } = await import("@/lib/kanji-mnemonic-client");
       const mnemonic = await generateKanjiMnemonicClient({
-        character: kanjiChar,
-        meanings,
-        radicals,
+        character: kanji.character,
+        meanings: kanji.meanings,
+        primitives: kanji.primitives,
+        components: kanji.components,
+        heisigKeyword: kanji.heisigKeyword,
+        heisigNumber: kanji.heisigNumber,
       });
 
-      await fetch(`/api/kanji/${encodeURIComponent(kanjiChar)}/mnemonic`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mnemonic }),
-      });
+      await saveKanjiMnemonicClient(kanji.character, mnemonic);
 
       setCards(prev => {
         const updated = [...prev];
@@ -582,9 +593,14 @@ export default function StandaloneAppLockPage() {
           onGenerateMnemonic={(isRegen) => {
             if (currentCard.character) {
               handleGenerateMnemonic(
-                currentCard.character,
-                currentCard.meanings || [],
-                currentCard.radicals || [],
+                {
+                  character: currentCard.character,
+                  meanings: currentCard.meanings || [],
+                  primitives: currentCard.primitives,
+                  components: currentCard.components,
+                  heisigKeyword: currentCard.heisigKeyword,
+                  heisigNumber: currentCard.heisigNumber,
+                },
                 isRegen
               );
             }

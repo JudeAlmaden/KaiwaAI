@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { generateKanjiMnemonicClient } from "@/lib/kanji-mnemonic-client";
+import { saveKanjiMnemonicClient } from "@/lib/kanji-mnemonic/save-client";
 import { Lightbulb, Sparkle, PencilSimple, FloppyDisk } from "@phosphor-icons/react";
 import type { KanjiDetail } from "./types";
 
@@ -35,7 +36,8 @@ export default function KanjiMnemonicSection({
       const story = await generateKanjiMnemonicClient({
         character: kanjiData.character,
         meanings: kanjiData.meanings || [],
-        radicals: kanjiData.radicals || [],
+        primitives: kanjiData.primitives ?? [],
+        components: kanjiData.components ?? [],
         heisigKeyword: primaryKw,
         heisigNumber: kanjiData.heisigNumber ?? undefined,
       });
@@ -43,13 +45,7 @@ export default function KanjiMnemonicSection({
       setStoryDraft(story);
 
       // Save generated story
-      const res = await fetch(`/api/kanji/${encodeURIComponent(kanjiData.character)}/mnemonic/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mnemonic: story }),
-      });
-
-      if (res.ok) {
+      if (await saveKanjiMnemonicClient(kanjiData.character, story)) {
         onMnemonicUpdated(story);
         setIsEditingStory(false);
       } else {
@@ -68,12 +64,7 @@ export default function KanjiMnemonicSection({
     setStoryError(null);
     try {
       const trimmed = storyDraft.trim();
-      const res = await fetch(`/api/kanji/${encodeURIComponent(kanjiData.character)}/mnemonic/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mnemonic: trimmed }),
-      });
-      if (res.ok) {
+      if (await saveKanjiMnemonicClient(kanjiData.character, trimmed)) {
         onMnemonicUpdated(trimmed || null);
         setIsEditingStory(false);
       } else {

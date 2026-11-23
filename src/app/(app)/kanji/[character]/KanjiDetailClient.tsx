@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { speakJa, canSpeak } from "@/lib/speak";
 import { generateKanjiMnemonicClient } from "@/lib/kanji-mnemonic-client";
+import type { ComponentContext } from "@/lib/kanji-mnemonic/types";
+import { saveKanjiMnemonicClient } from "@/lib/kanji-mnemonic/save-client";
 import { hasAnyKey } from "@/lib/api-keys";
 
 type KanjiDetail = {
@@ -17,6 +19,7 @@ type KanjiDetail = {
   heisigLesson: number | null;
   heisigKeyword: string | null;
   primitives?: string[] | null;
+  components?: ComponentContext[] | null;
   meanings: string[];
   readingsOn: string[];
   readingsKun: string[];
@@ -125,12 +128,7 @@ export default function KanjiDetailClient({ character }: { character: string }) 
   const handleSaveMnemonic = async () => {
     setSavingMnemonic(true);
     try {
-      const res = await fetch(`/api/kanji/${encodeURIComponent(character)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mnemonic: mnemonicDraft }),
-      });
-      if (res.ok) {
+      if (await saveKanjiMnemonicClient(character, mnemonicDraft)) {
         setMnemonic(mnemonicDraft.trim() || null);
         setIsEditingMnemonic(false);
       }
@@ -267,14 +265,13 @@ export default function KanjiDetailClient({ character }: { character: string }) 
       const generated = await generateKanjiMnemonicClient({
         character: kanji.character,
         meanings: kanji.heisigKeyword ? [kanji.heisigKeyword, ...kanji.meanings] : kanji.meanings,
-        radicals: kanji.radicals,
+        primitives: kanji.primitives ?? [],
+        components: kanji.components ?? [],
+        heisigKeyword: kanji.heisigKeyword,
+        heisigNumber: kanji.heisigNumber,
       });
 
-      await fetch(`/api/kanji/${encodeURIComponent(character)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mnemonic: generated }),
-      });
+      await saveKanjiMnemonicClient(character, generated);
 
       setMnemonic(generated);
       setMnemonicDraft(generated);

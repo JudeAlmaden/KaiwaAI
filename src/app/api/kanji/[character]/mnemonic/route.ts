@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { saveKanjiMnemonic } from "@/lib/kanji-mnemonic/mnemonic-store";
 
 // GET: Retrieve current mnemonic for a kanji
 export async function GET(
@@ -30,8 +31,8 @@ export async function GET(
   });
 }
 
-// PATCH: Update mnemonic for a kanji in user's learning list
-export async function PATCH(
+// PUT: The one write path for a mnemonic note. Blank text deletes it.
+export async function PUT(
   req: Request,
   { params }: { params: Promise<{ character: string }> }
 ) {
@@ -39,51 +40,34 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { character } = await params;
+  const decodedChar = decodeURIComponent(character);
 
-  let body: { mnemonic?: string };
+  let body: { mnemonic?: unknown };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const mnemonic = (body.mnemonic ?? "").trim();
-  if (!mnemonic) {
-    return NextResponse.json({ error: "Mnemonic required" }, { status: 400 });
+  if (typeof body.mnemonic !== "string") {
+    return NextResponse.json({ error: "Mnemonic text required" }, { status: 400 });
   }
 
-  // Find the kanji
-  const kanji = await prisma.kanji.findUnique({
-    where: { character },
-    select: { id: true },
-  });
-
-  if (!kanji) {
-    return NextResponse.json({ error: "Kanji not found" }, { status: 404 });
-  }
-
-  // Find or create user's kanji record
-  let userKanji = await prisma.userKanji.findFirst({
-    where: { userId: user.id, kanjiId: kanji.id },
-  });
-
-  if (!userKanji) {
-    // Create new record if user hasn't added this kanji yet
-    userKanji = await prisma.userKanji.create({
-      data: {
-        userId: user.id,
-        kanjiId: kanji.id,
-        mnemonic,
-        status: "new",
-      },
+  try {
+    const kanji = await prisma.kanji.findUnique({
+      where: { character: decodedChar },
     });
-  } else {
-    // Update existing record
-    userKanji = await prisma.userKanji.update({
-      where: { id: userKanji.id },
-      data: { mnemonic },
-    });
-  }
+    if (!kanji) {
+      return NextResponse.json({ error: "Kanji not found" }, { status: 404 });
+    }
 
-  return NextResponse.json({ mnemonic: userKanji.mnemonic });
+    const saved = await saveKanjiMnemonic(user.id, kanji.id, body.mnemonic);
+    return NextResponse.json({ success: true, mnemonic: saved.mnemonic });
+  } catch (error) {
+    console.error("Error saving mnemonic:", error);
+    return NextResponse.json({ error: "Failed to save mnemonic" }, { status: 500 });
+  }
 }
+
+// PATCH kept as an alias for existing clients; same behaviour as PUT.
+export const PATCH = PUT;

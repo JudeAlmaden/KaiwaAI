@@ -23,9 +23,8 @@ import {
   transientLineFor,
 } from "@/lib/kai-mood";
 import type { DailyWord } from "@/lib/kai-word";
-import { formatComposition, projectSessionMix } from "@/lib/review/composition";
-import { getLearningConfig } from "@/lib/learning-config";
-import { remainingDailyReviews } from "@/lib/review/daily-cap";
+import { formatComposition } from "@/lib/review/composition";
+import { fetchProjectedMix, type ProjectedMix } from "@/lib/review/session-ready";
 import { canSpeak, speakJa } from "@/lib/speak";
 import KaiAvatar, { type KaiAvatarHandle } from "./KaiAvatar";
 import KaiSpeechBubble from "./KaiSpeechBubble";
@@ -273,11 +272,7 @@ function WordOfMoment({ moment }: { moment: DailyWord }) {
 export default function KaiRoomClient({ initialStats }: { initialStats: DashboardStats }) {
   const [stats, setStats] = useState<DashboardStats | null>(initialStats);
   const [moment, setMoment] = useState<DailyWord | null>(null);
-  const [mix, setMix] = useState<{
-    newCount: number;
-    reviewCount: number;
-    total: number;
-  } | null>(null);
+  const [mix, setMix] = useState<ProjectedMix | null>(null);
   const [phase, setPhase] = useState<Phase>("greeting");
   const [transient, setTransient] = useState<{ mood: "celebrate" | "poke" | "pet"; id: number } | null>(null);
   const transientId = useRef(0);
@@ -298,26 +293,10 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMoment(d?.word ?? null))
       .catch(() => {});
-    // What a review session would actually contain, using this device's
-    // Learning defaults (new-card cap + review mix).
-    fetch("/api/review/composition")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d?.due) return;
-        const cfg = getLearningConfig();
-        setMix(
-          projectSessionMix(d.due, {
-            learningRatio: cfg.defaultLearningRatio,
-            maxNewCards: cfg.maxNewCards,
-            maxNewPerSession: cfg.newPerSession,
-            // Sessions stop at the daily ceiling, so the projection must too.
-            maxReviews: remainingDailyReviews(cfg.maxDailyReviews, d.reviewedToday ?? 0),
-            introducedToday: d.intake?.introducedToday ?? 0,
-            inProgress: d.intake?.inProgress ?? 0,
-            maxLearningPool: cfg.maxLearningPool,
-          })
-        );
-      })
+    // The session the Daily Quest will open, using this device's Learning
+    // defaults. Same helper as the nav badge and the review page.
+    fetchProjectedMix()
+      .then(setMix)
       .catch(() => {});
   }, []);
 
@@ -344,10 +323,10 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
   }, []);
 
   const ready = stats !== null;
-  const dueNow = stats?.dueNow ?? 0;
+  const readyCount = mix?.total ?? stats?.dueNow ?? 0;
   const streak = stats?.streak ?? 0;
   const activeToday = stats?.activeToday ?? false;
-  const reviewFirst = ready && dueNow > 0;
+  const reviewFirst = ready && readyCount > 0;
 
   const mood = roomMoodFor(stats, hour);
   // Rotate the line by day + hour so a reload doesn't shuffle it, but Kai
@@ -390,7 +369,7 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
         ? greeting
         : bubble.title;
 
-  const questReviewDone = ready && dueNow === 0;
+  const questReviewDone = ready && readyCount === 0;
   const questChatDone = (stats?.messagesSent ?? 0) > 0 && activeToday;
 
   return (
@@ -428,7 +407,7 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
             />
             <HudPill
               icon={<Cards size={14} weight="fill" className="text-indigo-ai" />}
-              value={dueNow}
+              value={readyCount}
               label="due"
               href="/review"
             />
@@ -466,7 +445,11 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
           <div className="flex gap-2 sm:gap-2.5 lg:gap-3">
             <Quest
               done={questReviewDone}
-              label={dueNow > 0 ? `Review ${dueNow} card${dueNow === 1 ? "" : "s"}` : "Reviews cleared"}
+              label={
+                readyCount > 0
+                  ? `Review ${readyCount} card${readyCount === 1 ? "" : "s"}`
+                  : "Reviews cleared"
+              }
               href="/review"
               cta="Review"
             />
@@ -490,8 +473,8 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
                 ready
                   ? mix && mix.total > 0
                     ? formatComposition(mix)
-                    : dueNow > 0
-                      ? `${dueNow} waiting`
+                    : readyCount > 0
+                      ? `${readyCount} waiting`
                       : "All caught up!"
                   : "—"
               }

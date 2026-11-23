@@ -10,6 +10,12 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       count: vi.fn(),
     },
+    kanji: {
+      findMany: vi.fn(),
+    },
+    userKanji: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -39,6 +45,9 @@ describe("Review API - GET", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Word-kanji context is one batched lookup per page.
+    vi.mocked(prisma.kanji.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
   });
 
   it("should return 401 if not authenticated", async () => {
@@ -81,6 +90,66 @@ describe("Review API - GET", () => {
         }),
       })
     );
+  });
+
+  it("attaches wordKanji for the whole page in one batched lookup", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
+    const now = new Date();
+    const card = (id: string, dictionary: string, reading: string) => ({
+      id,
+      userId: "user-123",
+      status: "learning",
+      easeFactor: 2.5,
+      repetitions: 2,
+      interval: 4,
+      nextReview: now,
+      createdAt: now,
+      word: {
+        dictionary,
+        reading,
+        meanings: '["test"]',
+        partOfSpeech: "noun",
+      },
+      wordForm: null,
+      phrase: null,
+    });
+
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce([
+      card("1", "今週", "こんしゅう"),
+      card("2", "日本", "にほん"),
+    ] as never);
+
+    vi.mocked(prisma.kanji.findMany).mockResolvedValueOnce([
+      { character: "今", heisigKeyword: "now", heisigNumber: 12, meanings: '["now"]' },
+      { character: "週", heisigKeyword: "week", heisigNumber: 50, meanings: '["week"]' },
+      { character: "日", heisigKeyword: "sun", heisigNumber: 13, meanings: '["day"]' },
+      { character: "本", heisigKeyword: "origin", heisigNumber: 86, meanings: '["book"]' },
+    ] as never);
+
+    const response = await GET(
+      new Request("http://localhost/api/flashcards/review?studyMode=all")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    const keywordsByWord = Object.fromEntries(
+      data.cards.map((c: { word: string; wordKanji: { keyword: string }[] }) => [
+        c.word,
+        c.wordKanji.map((kanji) => kanji.keyword),
+      ])
+    );
+    expect(keywordsByWord["今週"]).toEqual(["now", "week"]);
+    expect(keywordsByWord["日本"]).toEqual(["sun", "origin"]);
+
+    // Two words, four glyphs, still one IN query.
+    expect(prisma.kanji.findMany).toHaveBeenCalledTimes(1);
+    const lookup = vi.mocked(prisma.kanji.findMany).mock.calls[0][0] as
+      | { where?: { character?: { in?: string[] } } }
+      | undefined;
+    expect([...(lookup?.where?.character?.in ?? [])].sort()).toEqual(
+      ["今", "週", "日", "本"].sort()
+    );
+    expect(prisma.userKanji.findMany).toHaveBeenCalledTimes(1);
   });
 
   it("should prioritize oldest due cards before SRS timing", async () => {
@@ -165,7 +234,7 @@ describe("Review API - GET", () => {
         where: expect.objectContaining({
           userId: "user-123",
           AND: [
-            { timesReviewed: { gte: 8 } },
+            { lapses: { gte: 3 } },
             { interval: { lt: 7 } },
           ],
         }),
@@ -371,6 +440,9 @@ describe("Review API - POST", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Word-kanji context is one batched lookup per page.
+    vi.mocked(prisma.kanji.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
   });
 
   it("should return 401 if not authenticated", async () => {
@@ -486,6 +558,7 @@ describe("Review API - POST", () => {
       retrievability: 1.0,
       lastReviewedAt: new Date(),
       timesReviewedIncrement: 1,
+      lapsesIncrement: 0,
     };
     vi.mocked(applyFsrsReview).mockReturnValueOnce(fsrsResult);
     const persistData = {
@@ -559,6 +632,7 @@ describe("Review API - POST", () => {
       retrievability: 1.0,
       lastReviewedAt: new Date(),
       timesReviewedIncrement: 1,
+      lapsesIncrement: 0,
     });
     vi.mocked(buildReviewPersistData).mockReturnValueOnce({
       timesReviewed: { increment: 1 },
@@ -592,6 +666,7 @@ describe("Review API - POST", () => {
       retrievability: 1.0,
       lastReviewedAt: new Date(),
       timesReviewedIncrement: 1,
+      lapsesIncrement: 0,
     });
     vi.mocked(buildReviewPersistData).mockReturnValueOnce({
       timesReviewed: { increment: 1 },
@@ -625,6 +700,7 @@ describe("Review API - POST", () => {
       retrievability: 1.0,
       lastReviewedAt: new Date(),
       timesReviewedIncrement: 1,
+      lapsesIncrement: 0,
     });
     vi.mocked(buildReviewPersistData).mockReturnValueOnce({
       easeFactor: 2.5,
@@ -682,6 +758,9 @@ describe("Reviews-only due sessions — lapsed cards", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Word-kanji context is one batched lookup per page.
+    vi.mocked(prisma.kanji.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
   });
 
   it("keeps lapsed cards instead of filtering repetitions > 0", async () => {
@@ -730,6 +809,9 @@ describe("Daily review ceiling", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Word-kanji context is one batched lookup per page.
+    vi.mocked(prisma.kanji.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
   });
 
   it("shrinks the session to what is left of today's ceiling", async () => {

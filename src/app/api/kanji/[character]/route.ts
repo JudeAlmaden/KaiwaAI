@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { getVocabWithKanji } from "@/lib/kanji-db";
+import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
+import { mergeComponents } from "@/lib/kanji-mnemonic/context";
+import { saveKanjiMnemonic } from "@/lib/kanji-mnemonic/mnemonic-store";
+import type { ComponentContext } from "@/lib/kanji-mnemonic/types";
 
 export async function GET(
   req: Request,
@@ -111,6 +115,16 @@ export async function GET(
       parsedPrimitives = [];
     }
 
+    // Resolve the primitives to the meanings the learner already knows, in one
+    // batched query, so mnemonic generation can build on earlier keywords.
+    let components: ComponentContext[] = [];
+    try {
+      const componentMap = await loadComponentMap(user.id, parsedPrimitives);
+      components = mergeComponents(parsedPrimitives, componentMap);
+    } catch (componentError) {
+      console.error("[Kanji API] Component context error:", componentError);
+    }
+
     const effectiveKeyword = userKanji?.customMeaning || kanji.heisigKeyword || null;
 
     return NextResponse.json({
@@ -125,6 +139,7 @@ export async function GET(
         heisigLesson: kanji.heisigLesson,
         heisigKeyword: kanji.heisigKeyword,
         primitives: parsedPrimitives,
+        components,
         customMeaning: userKanji?.customMeaning || null,
         effectiveKeyword,
         ...parsedData,
@@ -229,26 +244,13 @@ export async function PATCH(
     });
   }
 
-  // Update mnemonic in UserKanji (if exists) and KanjiMnemonic
+  // Mnemonic writes go through the single store helper.
   if (mnemonic !== undefined) {
-    const trimmed = mnemonic?.trim() || null;
-    const existingUK = await prisma.userKanji.findUnique({
-      where: { userId_kanjiId: { userId: user.id, kanjiId: kanji.id } },
-    });
-    if (existingUK) {
-      await prisma.userKanji.update({
-        where: { id: existingUK.id },
-        data: { mnemonic: trimmed },
-      });
-    }
-
-    if (trimmed) {
-      await prisma.kanjiMnemonic.upsert({
-        where: { userId_kanjiId: { userId: user.id, kanjiId: kanji.id } },
-        create: { userId: user.id, kanjiId: kanji.id, mnemonic: trimmed },
-        update: { mnemonic: trimmed },
-      });
-    }
+    await saveKanjiMnemonic(
+      user.id,
+      kanji.id,
+      typeof mnemonic === "string" ? mnemonic : ""
+    );
   }
 
   return NextResponse.json({ success: true });

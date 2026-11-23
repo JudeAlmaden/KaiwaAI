@@ -1,4 +1,5 @@
 import type { CardSourceContext } from "@/lib/review/card-source";
+import type { ComponentContext } from "@/lib/kanji-mnemonic/types";
 
 export type Card = {
   id: string;
@@ -21,11 +22,15 @@ export type Card = {
   heisigLesson?: number | null;
   customMeaning?: string | null;
   primitives?: string[];
+  components?: ComponentContext[];
+  /** Kanji this word is built from, with keywords the learner already knows. */
+  wordKanji?: ComponentContext[];
   mnemonic?: string;
   status?: "new" | "learning" | "known";
   /** The chat exchange the card was first saved from. */
   sourceContext?: CardSourceContext | null;
-  /** SRS counters — drive the leech badge. */
+  /** SRS counters — lapses drive the leech badge. */
+  lapses?: number;
   timesReviewed?: number;
   interval?: number;
   repetitions?: number;

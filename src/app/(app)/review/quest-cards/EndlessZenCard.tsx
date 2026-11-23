@@ -10,7 +10,7 @@ export default function EndlessZenCard({ onStart }: EndlessZenCardProps) {
   return (
     <button
       onClick={onStart}
-      className="group relative w-full flex flex-col justify-between text-left rounded-3xl border-2 border-border bg-gradient-to-br from-card via-mint/5 to-card p-5 md:p-6 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-mint/15 hover:border-mint/40 cursor-pointer shadow-sm overflow-hidden min-h-[160px]"
+      className="group relative flex h-full w-full flex-col justify-between text-left rounded-3xl border-2 border-border bg-gradient-to-br from-card via-mint/5 to-card p-5 md:p-6 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-mint/15 hover:border-mint/40 cursor-pointer shadow-sm overflow-hidden min-h-[160px]"
     >
       {/* Ambient blobs */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-mint/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000 pointer-events-none" />

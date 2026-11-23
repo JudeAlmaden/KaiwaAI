@@ -21,6 +21,8 @@ import {
   getAutoFallback,
   setAutoFallback,
   modelFallbackOrder,
+  getMnemonicModel,
+  setMnemonicModel,
 } from "./model-config";
 
 describe("model-config", () => {
@@ -61,6 +63,36 @@ describe("model-config", () => {
     expect(getAutoFallback()).toBe(true);
     setAutoFallback(false);
     expect(getAutoFallback()).toBe(false);
+  });
+
+  it("uses the chat model for mnemonics until an override is set", () => {
+    setModel("gemini-2.5-flash");
+    expect(getMnemonicModel()).toBe("gemini-2.5-flash");
+  });
+
+  it("persists an independent mnemonic model", () => {
+    setModel("gemini-2.5-flash");
+    setMnemonicModel("gemini-2.5-flash-lite");
+    expect(getMnemonicModel()).toBe("gemini-2.5-flash-lite");
+    expect(getModel()).toBe("gemini-2.5-flash");
+  });
+
+  it("clears the mnemonic override back to the chat model", () => {
+    setModel("gemini-2.5-flash");
+    setMnemonicModel("gemini-2.5-flash-lite");
+    setMnemonicModel("");
+    expect(getMnemonicModel()).toBe("gemini-2.5-flash");
+  });
+
+  it("ignores an unknown stored mnemonic model", () => {
+    store.set("kaiwa_mnemonic_model", "fake-model");
+    expect(getMnemonicModel()).toBe(getModel());
+  });
+
+  it("can build a fallback order for a specific model", () => {
+    const order = modelFallbackOrder("gemini-2.5-flash-lite");
+    expect(order[0]).toBe("gemini-2.5-flash-lite");
+    expect(order).toHaveLength(MODELS.length);
   });
 
   it("fallback order puts the chosen model first, then others lite→pro", () => {
