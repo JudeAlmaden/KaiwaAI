@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { PartOfSpeech } from "@/generated/prisma/client";
+import { CardKind, PartOfSpeech } from "@/generated/prisma/client";
 
 // Reset a card's SRS progress or update its status.
 export async function PATCH(
@@ -15,7 +15,7 @@ export async function PATCH(
   const owned = await prisma.userFlashcard.findFirst({ where: { id, userId: user.id } });
   if (!owned) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  let body: { action?: string; note?: string | null };
+  let body: { action?: string; note?: string | null; kind?: string };
   try {
     body = await req.json();
   } catch {
@@ -54,6 +54,27 @@ export async function PATCH(
     return NextResponse.json({ card });
   }
 
+  // Move the card between the Words and Phrases tabs. Scoped per user, so the
+  // shared dictionary's part of speech is never touched.
+  if (body.action === "setKind") {
+    if (body.kind !== "word" && body.kind !== "phrase") {
+      return NextResponse.json({ error: "Invalid kind." }, { status: 400 });
+    }
+    // Phrase-backed cards are inherently phrases (see the GET isPhrase safety
+    // net), so only word-backed cards can move between tabs.
+    if (owned.phraseId) {
+      return NextResponse.json(
+        { error: "Saved phrases stay under Phrases." },
+        { status: 400 }
+      );
+    }
+    const card = await prisma.userFlashcard.update({
+      where: { id },
+      data: { kind: body.kind === "phrase" ? CardKind.phrase : CardKind.word },
+    });
+    return NextResponse.json({ card });
+  }
+
   if (body.action === "editCard") {
     const { reading, meaning, partOfSpeech } = body as {
       reading?: string;
@@ -74,19 +95,13 @@ export async function PATCH(
         },
       });
     } else if (owned.wordId) {
-      // For dictionary words, user overrides are saved to personal notes on the
-      // flashcard rather than mutating the shared JMdict Word table for all users.
-      if (meaning || reading) {
-        const noteText = [
-          meaning ? `Meaning: ${meaning.trim()}` : null,
-          reading ? `Reading: ${reading.trim()}` : null,
-        ]
-          .filter(Boolean)
-          .join(" | ");
-        await prisma.userFlashcard.update({
-          where: { id },
-          data: { note: noteText },
-        });
+      // Dictionary words are shared, so corrections live on this user's card.
+      // An empty value clears the override and falls back to the dictionary.
+      const overrides: { readingOverride?: string | null; meaningOverride?: string | null } = {};
+      if (reading !== undefined) overrides.readingOverride = reading.trim() || null;
+      if (meaning !== undefined) overrides.meaningOverride = meaning.trim() || null;
+      if (Object.keys(overrides).length > 0) {
+        await prisma.userFlashcard.update({ where: { id }, data: overrides });
       }
     }
 

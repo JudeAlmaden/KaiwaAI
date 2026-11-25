@@ -359,13 +359,14 @@ export async function GET(req: Request) {
       partOfSpeech = card.phrase.partOfSpeech;
     } else if (card.word) {
       word = card.wordForm?.form || card.word.dictionary;
-      reading = card.wordForm?.reading || card.word.reading;
+      reading = card.wordForm?.reading || card.readingOverride || card.word.reading;
       try {
         const meanings = JSON.parse(card.word.meanings);
         meaning = meanings.join("; ");
       } catch {
         meaning = card.word.meanings;
       }
+      if (card.meaningOverride) meaning = card.meaningOverride;
       partOfSpeech = card.word.partOfSpeech;
     } else {
       word = "Unknown";

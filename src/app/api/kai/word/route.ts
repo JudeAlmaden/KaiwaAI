@@ -53,8 +53,8 @@ export async function GET() {
       candidates.push({
         id: card.id,
         surface: card.wordForm?.form || card.word.dictionary,
-        reading: card.wordForm?.reading || card.word.reading,
-        meaning: firstGloss(card.word.meanings),
+        reading: card.wordForm?.reading || card.readingOverride || card.word.reading,
+        meaning: card.meaningOverride || firstGloss(card.word.meanings),
       });
     }
   }

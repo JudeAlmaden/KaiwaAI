@@ -44,6 +44,10 @@ export default function VocabDetailSheet({
   const [editReading, setEditReading] = useState(card.reading || "");
   const [editMeaning, setEditMeaning] = useState(card.meaning || "");
   const [savingCardEdit, setSavingCardEdit] = useState(false);
+  const [savingKind, setSavingKind] = useState(false);
+  const cardKind = current.kind ?? (current.isPhrase ? "phrase" : "word");
+  // Phrase-backed cards have no Words option: the API keeps them in Phrases.
+  const lockedToPhrase = Boolean(current.phraseId);
 
   useEffect(() => {
     if (!card.wordId || !card.dictionary) return;
@@ -147,6 +151,26 @@ export default function VocabDetailSheet({
       }
     } finally {
       setSavingCardEdit(false);
+    }
+  }
+
+  async function setKind(kind: "word" | "phrase") {
+    if (kind === cardKind || lockedToPhrase) return;
+    setSavingKind(true);
+    try {
+      const res = await fetch(`/api/flashcards/${current.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setKind", kind }),
+      });
+
+      if (res.ok) {
+        const patch = { kind, isPhrase: kind === "phrase" } satisfies Partial<Card>;
+        setCurrent((c) => ({ ...c, ...patch }));
+        onUpdated(patch);
+      }
+    } finally {
+      setSavingKind(false);
     }
   }
 
@@ -285,6 +309,28 @@ export default function VocabDetailSheet({
             {progressOf(current)}% learned
           </span>
         </div>
+
+        {!lockedToPhrase && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
+              Saved as
+            </span>
+            {(["word", "phrase"] as const).map((kind) => (
+              <button
+                key={kind}
+                onClick={() => setKind(kind)}
+                disabled={savingKind || cardKind === kind}
+                className={`rounded-full border px-3 py-1 text-xs font-bold transition-colors disabled:opacity-60 ${
+                  cardKind === kind
+                    ? "border-indigo-ai bg-indigo-ai/10 text-indigo-ai"
+                    : "border-border text-muted hover:border-indigo-ai hover:text-indigo-ai"
+                }`}
+              >
+                {kind === "word" ? "Words" : "Phrases"}
+              </button>
+            ))}
+          </div>
+        )}
 
         <p className="mt-3 text-xs text-muted">
           Next review:{" "}

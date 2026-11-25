@@ -173,13 +173,14 @@ export async function GET(
           }
         } else if (v.word) {
           word = v.word.dictionary;
-          reading = v.word.reading;
+          reading = v.readingOverride || v.word.reading;
           try {
             const meanings = JSON.parse(v.word.meanings);
             meaning = Array.isArray(meanings) ? meanings.join("; ") : String(meanings);
           } catch {
             meaning = v.word.meanings;
           }
+          if (v.meaningOverride) meaning = v.meaningOverride;
         } else {
           word = "Unknown";
           reading = "Unknown";

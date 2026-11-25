@@ -10,6 +10,8 @@ export type Card = {
   interval: number;
   nextReview: string;
   isPhrase: boolean;
+  kind?: "word" | "phrase";
+  phraseId?: string | null;
   formType?: string | null;
   wordId?: number | null;
   dictionary?: string | null;

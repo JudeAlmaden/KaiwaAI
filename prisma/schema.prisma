@@ -438,6 +438,14 @@ enum AdjectiveType {
   na_adjective
 }
 
+// Whether the learner filed a card under Words or Phrases. This lives on the
+// card, not on the shared dictionary row: AI-saved phrases are stored as Word
+// rows, and only the learner knows how they meant to save it.
+enum CardKind {
+  word
+  phrase
+}
+
 enum FlashcardStatus {
   new
   learning
@@ -507,6 +515,9 @@ model UserFlashcard {
   wordFormId String?
   wordForm   WordForm? @relation(fields: [wordFormId], references: [id], onDelete: SetNull)
 
+  // Where this card sits in the vocab tabs (per user).
+  kind CardKind @default(word)
+
   // SM-2 fields (retained for backward compatibility)
   status         FlashcardStatus @default(new)
   easeFactor     Float           @default(2.5)
@@ -527,6 +538,11 @@ model UserFlashcard {
   retrievability Float?
 
   note      String? // User's personal notes
+
+  // Per-user corrections for a dictionary card. Kept on the card so editing one
+  // learner's reading or meaning never mutates the shared Word row.
+  readingOverride String?
+  meaningOverride String?
 
   // Where this card was first saved from (a chat message the user tapped).
   // sourceContext is a denormalized JSON snippet { ai, user } so the review

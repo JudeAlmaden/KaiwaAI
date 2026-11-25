@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { type CachedToken } from "@/lib/types";
 import { lookupWordBySurface } from "@/lib/conjugation-generator";
-import { FlashcardStatus } from "@/generated/prisma/client";
+import { CardKind, FlashcardStatus } from "@/generated/prisma/client";
 import { sanitizeString } from "@/lib/sanitize";
 import { flashcardLimiter } from "@/lib/rate-limiter";
 import { buildCardSourceContext, serializeCardSource } from "@/lib/review/card-source";
@@ -70,12 +70,13 @@ export async function GET(req: Request) {
     } else if (card.word) {
       // It's a dictionary word
       word = card.wordForm?.form || card.word.dictionary;
-      reading = card.wordForm?.reading || card.word.reading;
+      reading = card.wordForm?.reading || card.readingOverride || card.word.reading;
       try {
         meanings = JSON.parse(card.word.meanings);
       } catch {
         meanings = [card.word.meanings];
       }
+      if (card.meaningOverride) meanings = [card.meaningOverride];
       partOfSpeech = card.word.partOfSpeech;
     } else {
       // Shouldn't happen, but handle gracefully
@@ -101,7 +102,12 @@ export async function GET(req: Request) {
       lastReviewedAt: card.lastReviewedAt,
       createdAt: card.createdAt,
       note: card.note,
-      isPhrase: Boolean(card.phrase),
+      // Phrase-backed cards are always phrases, whatever the label says; for
+      // word-backed cards the learner's own kind wins over the shared
+      // dictionary's part of speech.
+      isPhrase: card.phraseId !== null || card.kind === "phrase",
+      kind: card.kind,
+      phraseId: card.phraseId,
       formType: card.wordForm?.formType ?? null,
       wordId: card.wordId ?? null,
       dictionary: card.word?.dictionary ?? null,
@@ -146,6 +152,20 @@ async function resolveCardSource(userId: string, messageId?: string) {
       buildCardSourceContext(message.content, priorUserMessage?.content ?? null)
     ),
   };
+}
+
+/**
+ * A new card starts in the tab the migration backfilled it into: a phrase
+ * token, or a dictionary row whose part of speech is "phrase", is a phrase.
+ * The learner can still move the card afterwards.
+ */
+async function resolveCardKind(wordId: number, tokenPos?: string): Promise<CardKind> {
+  if (tokenPos === "phrase") return CardKind.phrase;
+  const word = await prisma.word.findUnique({
+    where: { id: wordId },
+    select: { partOfSpeech: true },
+  });
+  return word?.partOfSpeech === "phrase" ? CardKind.phrase : CardKind.word;
 }
 
 // Add a word/form to user's flashcards using the new dictionary system.
@@ -422,11 +442,13 @@ export async function POST(req: Request) {
   let card = existing;
 
   if (!card) {
+    const kind = await resolveCardKind(wordId, body.token?.pos);
     card = await prisma.userFlashcard.create({
       data: {
         userId: user.id,
         wordId,
         wordFormId,
+        kind,
         status: FlashcardStatus.learning,
         ...(source ?? {}),
       },
