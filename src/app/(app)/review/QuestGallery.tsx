@@ -6,6 +6,8 @@ import {
   GauntletCard,
   VocabularyCard,
   KanjiQuestCard,
+  ConstructionCard,
+  FillBlankCard,
   EndlessZenCard,
   AppBlockerCard,
   CustomSessionCard,
@@ -193,7 +195,17 @@ export default function QuestGallery({
           />
         </div>
 
-        {/* Row 3: Focus Guard (Android only, 1 col) or Custom Session (1 col) + Endless Zen (2 cols) */}
+        {/* Row 3: sentence practice, one card per mode */}
+        <div className="col-span-1 md:col-span-2">
+          <ConstructionCard />
+        </div>
+
+        <div className="col-span-1">
+          <FillBlankCard />
+        </div>
+
+
+        {/* Row 4: Focus Guard (Android only, 1 col) or Custom Session (1 col) + Endless Zen (2 cols) */}
         {isAndroid ? (
           <>
             <div className="col-span-1 md:col-span-1">

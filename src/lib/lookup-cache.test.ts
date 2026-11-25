@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  LOOKUP_TTL_MS,
+  aiLookupCacheKey,
   cacheGet,
   cacheSet,
   cacheClear,
@@ -20,6 +22,14 @@ describe("lookup-cache", () => {
   it("builds stable dict keys", () => {
     expect(dictLookupCacheKey("食べる", "食べた")).toBe("dict:食べる:食べた");
     expect(dictLookupCacheKey("猫")).toBe("dict:猫:");
+    expect(aiLookupCacheKey("猫", "word")).toBe("ai:word:猫");
+    expect(aiLookupCacheKey("とる", "word", "写真をとる")).toBe(
+      aiLookupCacheKey("とる", "word", "写真をとる")
+    );
+    // Different sentences must not share an AI definition.
+    expect(aiLookupCacheKey("とる", "word", "写真をとる")).not.toBe(
+      aiLookupCacheKey("とる", "word", "席をとる")
+    );
   });
 
   it("round-trips values", () => {
@@ -30,7 +40,7 @@ describe("lookup-cache", () => {
   it("expires after TTL", () => {
     cacheSet("ttl", 1);
     expect(cacheGet<number>("ttl")).toBe(1);
-    vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+    vi.advanceTimersByTime(LOOKUP_TTL_MS + 1);
     expect(cacheGet<number>("ttl")).toBeUndefined();
   });
 

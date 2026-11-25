@@ -59,6 +59,11 @@ model User {
   userFlashcards UserFlashcard[]
   phrases        Phrase[]
 
+  // ── Sentence Forge conjugation practice ──
+  conjugationMastery ConjugationMastery[]
+  // ── Sentence Construction grammar practice ──
+  grammarMastery GrammarMastery[]
+
   // ── Push notifications ──
   pushSubscriptions PushSubscription[]
 
@@ -685,6 +690,61 @@ model StrangerReport {
 
   @@index([sessionId])
   @@index([reportedId, createdAt])
+}
+
+// Per-user mastery for one conjugation pattern (formType). Stage is derived
+// from attempts/correct/streak in src/lib/review/conjugation-mastery.ts, never
+// stored, so progress can't be faked by writing a stage value.
+model ConjugationMastery {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pattern    String // "masu", "masu_past", "te", "past", … (formType)
+  attempts   Int    @default(0)
+  correct    Int    @default(0)
+  streak     Int    @default(0)
+  lastResult Boolean?
+  dueAt      DateTime @default(now())
+
+  // Per-dimension evidence, so recognition, construction and application
+  // progress are visible separately. Overall counts still drive the stage.
+  recognitionAttempts   Int @default(0)
+  recognitionCorrect    Int @default(0)
+  constructionAttempts  Int @default(0)
+  constructionCorrect   Int @default(0)
+  applicationAttempts   Int @default(0)
+  applicationCorrect    Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, pattern])
+  @@index([userId, dueAt])
+}
+
+// Per-user mastery for one sentence-construction grammar topic (word order,
+// を, な-adjectives, te-form, …). These topics are tags, not stages: the
+// endless stream in src/lib/grammar/stream.ts reads these counts to choose the
+// next exercise. Spacing is derived, never stored. Kept separate from
+// vocabulary SRS and from ConjugationMastery.
+model GrammarMastery {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  concept    String // "word-order", "particle-wo", "verb-past", …
+  attempts   Int    @default(0)
+  correct    Int    @default(0)
+  streak     Int    @default(0)
+  lastResult Boolean?
+  dueAt      DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, concept])
+  @@index([userId, dueAt])
 }
 
 // Web Push subscription for a user's device.

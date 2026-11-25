@@ -145,7 +145,7 @@ export async function GET(req: Request) {
     let allCards = await prisma.userFlashcard.findMany({
       where,
       include: {
-        word: true,
+        word: { include: { forms: true } },
         wordForm: true,
         phrase: true,
       },
@@ -167,7 +167,7 @@ export async function GET(req: Request) {
           AND: [...(Array.isArray(where.AND) ? where.AND : []), STUDIED_CARD_WHERE],
         },
         include: {
-          word: true,
+          word: { include: { forms: true } },
           wordForm: true,
           phrase: true,
         },
@@ -223,7 +223,7 @@ export async function GET(req: Request) {
     cards = await prisma.userFlashcard.findMany({
       where,
       include: {
-        word: true,
+        word: { include: { forms: true } },
         wordForm: true,
         phrase: true,
       },
@@ -252,13 +252,14 @@ export async function GET(req: Request) {
       partOfSpeech = card.phrase.partOfSpeech;
     } else if (card.word) {
       word = card.wordForm?.form || card.word.dictionary;
-      reading = card.wordForm?.reading || card.word.reading;
+      reading = card.wordForm?.reading || card.readingOverride || card.word.reading;
       try {
         const meanings = JSON.parse(card.word.meanings);
         meaning = meanings.join("; ");
       } catch {
         meaning = card.word.meanings;
       }
+      if (card.meaningOverride) meaning = card.meaningOverride;
       partOfSpeech = card.word.partOfSpeech;
       jlptTier = card.word.jlptLevel;
     } else {
@@ -274,6 +275,14 @@ export async function GET(req: Request) {
       reading,
       meaning,
       partOfSpeech,
+      verbType: card.word?.verbType ?? null,
+      adjectiveType: card.word?.adjectiveType ?? null,
+      forms:
+        card.word?.forms?.map((form) => ({
+          form: form.form,
+          reading: form.reading,
+          formType: form.formType,
+        })) ?? [],
       formType: card.wordForm?.formType ?? null,
       dictionary: card.word?.dictionary ?? null,
       jlptTier,

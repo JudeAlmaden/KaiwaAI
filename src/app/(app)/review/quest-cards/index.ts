@@ -1,6 +1,8 @@
 export { default as DailyQuestCard } from "./DailyQuestCard";
 export { default as GauntletCard } from "./GauntletCard";
 export { default as VocabularyCard } from "./VocabularyCard";
+export { default as ConstructionCard } from "./ConstructionCard";
+export { default as FillBlankCard } from "./FillBlankCard";
 export { default as KanjiQuestCard } from "./KanjiQuestCard";
 export { default as EndlessZenCard } from "./EndlessZenCard";
 export { default as CustomSessionCard } from "./CustomSessionCard";

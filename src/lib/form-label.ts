@@ -1,14 +1,14 @@
 const FORM_LABELS: Record<string, string> = {
   dictionary: "Dictionary form",
-  masu: "Polite present",
-  masu_negative: "Polite negative",
+  masu: "Polite non-past",
+  masu_negative: "Polite negative non-past",
   masu_past: "Polite past",
   masu_past_negative: "Polite past negative",
   te: "Te-form",
   plain_negative: "Plain negative",
   plain_past: "Plain past",
   plain_past_negative: "Plain past negative",
-  negative: "Negative",
+  negative: "Negative non-past",
   past: "Past",
   past_negative: "Past negative",
 };

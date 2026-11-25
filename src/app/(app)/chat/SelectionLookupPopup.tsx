@@ -11,6 +11,7 @@ import {
 } from "./WordTokenPopup";
 import Furigana from "../review/Furigana";
 import { lookupWord, type LookupResult } from "@/lib/gemini";
+import { aiLookupCacheKey, cacheGet, cacheSet, dictLookupCacheKey } from "@/lib/lookup-cache";
 import { hasAnyKey } from "@/lib/api-keys";
 import { truncateText } from "@/lib/token-selection";
 import {
@@ -65,6 +66,31 @@ export function SelectionLookupPopup({
 
     async function fetchDefinition() {
       const cleanSearchText = text.trim();
+      const dictKey = dictLookupCacheKey(cleanSearchText, cleanSearchText);
+      // Scoped by sentence: the same word can mean something else in another
+      // context, so a cached AI gloss is only valid for the sentence it came from.
+      const aiKey = aiLookupCacheKey(
+        cleanSearchText,
+        singleWord ? "word" : "phrase",
+        messageContent ?? text
+      );
+
+      // A definition seen in this sitting (or earlier today) does not need the
+      // network again — practice sentences repeat words constantly.
+      const cachedDict = cacheGet<WordLookupResult>(dictKey);
+      if (cachedDict) {
+        if (cancelled) return;
+        setDictLookup(cachedDict);
+        setLoading(false);
+        return;
+      }
+      const cachedAi = cacheGet<LookupResult>(aiKey);
+      if (cachedAi) {
+        if (cancelled) return;
+        setAiResult(cachedAi);
+        setLoading(false);
+        return;
+      }
 
       // 1. Try DB lookup first — only if single-word selection.
       //    For multi-word ranges skip exact surface word fallback because the surface
@@ -85,6 +111,7 @@ export function SelectionLookupPopup({
                   data.phrase.meanings.length > 0 &&
                   data.phrase.meanings[0] !== "(no definition)");
               if (hasRealMeaning) {
+                cacheSet(dictKey, data);
                 setDictLookup(data);
                 setLoading(false);
                 return;
@@ -111,6 +138,7 @@ export function SelectionLookupPopup({
                   data.phrase.meanings.length > 0 &&
                   data.phrase.meanings[0] !== "(no definition)";
                 if (isExactPhrase) {
+                  cacheSet(dictKey, data);
                   setDictLookup(data);
                   setLoading(false);
                   return;
@@ -131,6 +159,7 @@ export function SelectionLookupPopup({
             singleWord ? "word" : "phrase",
           );
           if (!cancelled) {
+            cacheSet(aiKey, res);
             setAiResult(res);
             setLoading(false);
             return;
