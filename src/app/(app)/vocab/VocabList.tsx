@@ -49,7 +49,7 @@ export default function VocabList({
   }
 
   return (
-    <div className="relative flex-1 overflow-y-auto px-5 py-2 sm:px-8">
+    <div className="relative flex-1 overflow-y-auto px-5 py-2 pb-24 sm:px-8">
       <div className="mx-auto max-w-3xl">
         {groups.map(([pos, items]) => (
           <div key={pos} className="mb-6">
@@ -117,8 +117,9 @@ export default function VocabList({
         )}
       </div>
 
-      {/* FAB — add word from dictionary */}
-      <div className="sticky bottom-4 flex justify-end pr-1 pt-2">
+      {/* FAB — add word from dictionary, pinned to the viewport so it never
+          scrolls away with the list (and above the floating mobile nav). */}
+      <div className="fixed right-4 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] z-30 sm:right-6 lg:bottom-6">
         <LookupBox onAdded={onAdded} />
       </div>
     </div>

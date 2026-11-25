@@ -71,7 +71,7 @@ export default function LookupBox({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <div className="w-80 sm:w-96 rounded-2xl border-2 border-indigo-ai/40 bg-card p-4 shadow-xl shadow-indigo-ai/10">
+    <div className="w-80 max-w-[calc(100vw-2rem)] rounded-2xl border-2 border-indigo-ai/40 bg-card p-4 shadow-xl shadow-indigo-ai/10 sm:w-96">
         <div className="flex items-center gap-2">
           <input
             autoFocus
