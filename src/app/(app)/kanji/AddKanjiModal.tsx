@@ -142,12 +142,10 @@ export default function AddKanjiModal({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setKanjiDetail(null);
       setKanjiComponents([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLookingUp(false);
       return;
     }
     let active = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLookingUp(true);
     fetch(`/api/kanji/${encodeURIComponent(normalized)}`)
       .then((res) => (res.ok ? res.json() : null))
