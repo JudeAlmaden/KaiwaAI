@@ -3,29 +3,16 @@
 import React, { useMemo, useState } from "react";
 import { SpeakerHigh, Info, BookOpen, Shuffle } from "@phosphor-icons/react";
 import { speakJa, canSpeak } from "@/lib/speak";
+import {
+  buildGodan,
+  buildIchidan,
+  buildIAdj,
+  buildNaAdj,
+  type FormRow,
+  type GodanEnding,
+} from "@/lib/review/conjugation";
 
 /* ── Pure conjugation helpers ─────────────────────────────────────────────── */
-
-type GodanEnding = "う" | "く" | "ぐ" | "す" | "つ" | "ぬ" | "ぶ" | "む" | "る";
-
-const GODAN_ROW: Record<GodanEnding, Record<string, string>> = {
-  う: { a: "わ", i: "い", u: "う", e: "え", o: "お" },
-  く: { a: "か", i: "き", u: "く", e: "け", o: "こ" },
-  ぐ: { a: "が", i: "ぎ", u: "ぐ", e: "げ", o: "ご" },
-  す: { a: "さ", i: "し", u: "す", e: "せ", o: "そ" },
-  つ: { a: "た", i: "ち", u: "つ", e: "て", o: "と" },
-  ぬ: { a: "な", i: "に", u: "ぬ", e: "ね", o: "の" },
-  ぶ: { a: "ば", i: "び", u: "ぶ", e: "べ", o: "ぼ" },
-  む: { a: "ま", i: "み", u: "む", e: "め", o: "も" },
-  る: { a: "ら", i: "り", u: "る", e: "れ", o: "ろ" },
-};
-
-const GODAN_TE: Record<GodanEnding, string> = {
-  う: "って", つ: "って", る: "って",
-  く: "いて", ぐ: "いで",
-  ぬ: "んで", ぶ: "んで", む: "んで",
-  す: "して",
-};
 
 const GODAN_EX: Record<string, string> = {
   う: "会う (あう / meet)",
@@ -39,90 +26,7 @@ const GODAN_EX: Record<string, string> = {
   る: "切る (きる / cut)",
 };
 
-function stemOf(dict: string, strip: number): string {
-  return Array.from(dict).slice(0, -strip).join("");
-}
-
-function lastChar<T extends string>(dict: string, allowed: readonly T[]): T | null {
-  const last = Array.from(dict).slice(-1)[0] || "";
-  return allowed.includes(last as T) ? (last as T) : null;
-}
-
-const GODAN_ENDINGS = ["う", "く", "ぐ", "す", "つ", "ぬ", "ぶ", "む", "る"] as const;
-
 type Category = "godan" | "ichidan" | "i-adj" | "na-adj";
-
-type FormRow = {
-  formType: string;
-  label: string;
-  result: string;
-  rule: string;
-};
-
-/* ── Conjugation table builders ───────────────────────────────────────────── */
-
-function buildGodan(dict: string): FormRow[] | { error: string } {
-  const last = lastChar(dict, GODAN_ENDINGS);
-  if (!last) return { error: "Godan verbs must end in one of う / く / ぐ / す / つ / ぬ / ぶ / む / る" };
-  const stem = stemOf(dict, 1);
-  const row = GODAN_ROW[last];
-  const teEnd = GODAN_TE[last];
-  const taEnd = teEnd.replace("て", "た").replace("で", "だ");
-  const aRow = row["a"];
-  const iRow = row["i"];
-  return [
-    { formType: "dictionary", label: "Dictionary (base)", result: dict, rule: "Ends in -u sound (う/く/ぐ/す/つ/ぬ/ぶ/む/る)" },
-    { formType: "masu", label: "Polite present", result: stem + iRow + "ます", rule: `→ ${iRow}-row + ます` },
-    { formType: "masu_negative", label: "Polite present neg.", result: stem + iRow + "ません", rule: `→ ${iRow}-row + ません` },
-    { formType: "masu_past", label: "Polite past", result: stem + iRow + "ました", rule: `→ ${iRow}-row + ました` },
-    { formType: "masu_past_negative", label: "Polite past neg.", result: stem + iRow + "ませんでした", rule: `→ ${iRow}-row + ませんでした` },
-    { formType: "te", label: "Te-form", result: stem + teEnd, rule: `→ ${teEnd} (sound change rule for 「${last}」)` },
-    { formType: "plain_negative", label: "Plain neg.", result: stem + aRow + "ない", rule: `→ ${aRow}-row + ない` },
-    { formType: "plain_past", label: "Plain past", result: stem + taEnd, rule: `→ ${taEnd} (te-form て↔た)` },
-    { formType: "plain_past_negative", label: "Plain past neg.", result: stem + aRow + "なかった", rule: `→ ${aRow}-row + なかった` },
-  ];
-}
-
-function buildIchidan(dict: string): FormRow[] | { error: string } {
-  if (!dict.endsWith("る")) return { error: "Ichidan verbs always end in る (e.g. 食べる / 見る / 起きる)" };
-  const stem = stemOf(dict, 1);
-  return [
-    { formType: "dictionary", label: "Dictionary (base)", result: dict, rule: "Always ends in る; prior syllable is usually i/e sound" },
-    { formType: "masu", label: "Polite present", result: stem + "ます", rule: "Drop る → add ます" },
-    { formType: "masu_negative", label: "Polite present neg.", result: stem + "ません", rule: "Drop る → add ません" },
-    { formType: "masu_past", label: "Polite past", result: stem + "ました", rule: "Drop る → add ました" },
-    { formType: "masu_past_negative", label: "Polite past neg.", result: stem + "ませんでした", rule: "Drop る → add ませんでした" },
-    { formType: "te", label: "Te-form", result: stem + "て", rule: "Drop る → add て" },
-    { formType: "plain_negative", label: "Plain neg.", result: stem + "ない", rule: "Drop る → add ない" },
-    { formType: "plain_past", label: "Plain past", result: stem + "た", rule: "Drop る → add た" },
-    { formType: "plain_past_negative", label: "Plain past neg.", result: stem + "なかった", rule: "Drop る → add なかった" },
-  ];
-}
-
-function buildIAdj(dict: string): FormRow[] | { error: string } {
-  if (!dict.endsWith("い")) return { error: "I-adjectives always end in い (e.g. 高い / 新しい)" };
-  const stem = stemOf(dict, 1);
-  return [
-    { formType: "dictionary", label: "Dictionary (attributive)", result: dict, rule: "Ends in hiragana い (pronounced [i])" },
-    { formType: "masu", label: "Polite predicate", result: dict + "です", rule: "…い + です (casual→polite)" },
-    { formType: "negative", label: "Plain neg.", result: stem + "くない", rule: "Drop い → add くない" },
-    { formType: "past", label: "Plain past", result: stem + "かった", rule: "Drop い → add かった" },
-    { formType: "past_negative", label: "Plain past neg.", result: stem + "くなかった", rule: "Drop い → add くなかった" },
-  ];
-}
-
-function buildNaAdj(dict: string): FormRow[] | { error: string } {
-  if (dict.length === 0) return { error: "Enter a na-adjective stem (e.g. 綺麗 / 静か / 有名)" };
-  const stem = dict;
-  return [
-    { formType: "dictionary", label: "Dictionary / stem", result: stem, rule: "Stem only (no な / だ in dictionary form)" },
-    { formType: "attributive", label: "Before a noun", result: stem + "な", rule: "Stem + な (e.g. 静かな場所)" },
-    { formType: "masu", label: "Polite predicate", result: stem + "です", rule: "Stem + です (e.g. 静かです)" },
-    { formType: "negative", label: "Plain neg.", result: stem + "じゃない", rule: "Stem + じゃない" },
-    { formType: "past", label: "Plain past", result: stem + "だった", rule: "Stem + だった" },
-    { formType: "past_negative", label: "Plain past neg.", result: stem + "じゃなかった", rule: "Stem + じゃなかった" },
-  ];
-}
 
 /* ── Sample dictionaries ──────────────────────────────────────────────────── */
 
