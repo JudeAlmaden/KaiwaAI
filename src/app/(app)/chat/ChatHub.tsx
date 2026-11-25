@@ -35,6 +35,7 @@ export default function ChatHub({
     starting,
     hideConvo,
     unhideConvo,
+    deleteConvo,
     startPersonaChat,
   } = useInboxContext();
   const { pending } = usePeopleContext();
@@ -167,6 +168,7 @@ export default function ChatHub({
               onStartPersona={startPersonaChat}
               onHide={hideConvo}
               onUnhide={unhideConvo}
+              onDelete={deleteConvo}
               hiddenConvos={hiddenConvos}
               onNewChat={openWrite}
             />

@@ -29,6 +29,7 @@ export default function ChatRail({
     starting,
     hideConvo,
     unhideConvo,
+    deleteConvo,
     startPersonaChat,
   } = useInboxContext();
   const { pending } = usePeopleContext();
@@ -93,6 +94,7 @@ export default function ChatRail({
             onStartPersona={startPersonaChat}
             onHide={hideConvo}
             onUnhide={unhideConvo}
+            onDelete={deleteConvo}
             hiddenConvos={hiddenConvos}
             onNewChat={() => setWrite({ mode: "people", focusSearch: true })}
             activeId={activeId}

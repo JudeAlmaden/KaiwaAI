@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cacheKeys, readCache, writeCache } from "@/lib/chat-cache";
 import { normalizePersonaRole } from "@/lib/persona-role";
 
@@ -37,6 +37,7 @@ export type Persona = {
  */
 export function useInbox() {
   const router = useRouter();
+  const pathname = usePathname();
   const [convos, setConvos] = useState<Conversation[] | null>(null);
   const [hiddenConvos, setHiddenConvos] = useState<Conversation[] | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -139,6 +140,37 @@ export function useInbox() {
     [hiddenConvos, reloadConvos]
   );
 
+  // Remove the conversation for this user only (archived rows): a group they
+  // don't own is left, a persona chat is deleted, an owned shared chat is
+  // refused and has to be deleted for everyone.
+  const deleteConvo = useCallback(
+    async (id: string) => {
+      try {
+        const res = await fetch(`/api/groups/${id}/leave`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          return {
+            ok: false,
+            error: body.error ?? "Couldn't delete this chat.",
+          };
+        }
+        setConvos((cur) => {
+          const next = cur?.filter((c) => c.id !== id) ?? null;
+          if (next) writeCache(cacheKeys.convos, next);
+          return next;
+        });
+        setHiddenConvos((cur) => cur?.filter((c) => c.id !== id) ?? null);
+        if (pathname === `/chat/c/${id}`) router.push("/chat");
+        return { ok: true };
+      } catch {
+        return { ok: false, error: "Couldn't delete this chat." };
+      }
+    },
+    [pathname, router]
+  );
+
   return {
     convos,
     hiddenConvos,
@@ -148,6 +180,7 @@ export function useInbox() {
     reloadPersonas,
     hideConvo,
     unhideConvo,
+    deleteConvo,
     startPersonaChat,
   };
 }

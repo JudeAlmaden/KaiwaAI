@@ -6,6 +6,7 @@ import {
   Archive,
   ArrowCounterClockwise,
   MagnifyingGlass,
+  Trash,
 } from "@phosphor-icons/react/dist/ssr";
 import Avatar from "./Avatar";
 import Kai from "../../Kai";
@@ -31,23 +32,28 @@ function relativeTime(iso?: string): string {
 /**
  * One inbox row. The action is a single, named control instead of an ellipsis
  * menu: swipe left on phones, hover/focus the icon on desktop. Archived rows
- * use the same row with a Restore action.
+ * add a trash action so a chat can be removed for good, not only restored.
  */
 export function ConversationRow({
   convo,
   onHide,
   onUnhide,
+  onDelete,
   archived = false,
   active = false,
 }: {
   convo: Conversation;
   onHide?: (id: string) => void;
   onUnhide?: (id: string) => void;
+  onDelete?: (
+    id: string
+  ) => Promise<{ ok: boolean; error?: string }> | void;
   archived?: boolean;
   active?: boolean;
 }) {
   const [offset, setOffset] = useState(0);
   const [swiping, setSwiping] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const start = useRef<{ x: number; y: number } | null>(null);
   const offsetRef = useRef(0);
   const suppressClick = useRef(false);
@@ -84,6 +90,26 @@ export function ConversationRow({
   function runAction() {
     if (archived) onUnhide?.(convo.id);
     else onHide?.(convo.id);
+  }
+
+  async function handleDelete() {
+    if (deleting || !onDelete) return;
+    const leaving = isGroup && !convo.isOwner;
+    const ok = window.confirm(
+      leaving
+        ? "Leave this group? It disappears from your chats for good. The others keep its history."
+        : "Delete this chat for you? It disappears from your chats for good and can't be restored."
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const result = await onDelete(convo.id);
+      if (result && !result.ok) {
+        window.alert(result.error ?? "Couldn't delete this chat.");
+      }
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function handleTouchStart(e: React.TouchEvent) {
@@ -227,19 +253,37 @@ export function ConversationRow({
         </span>
 
         {hasAction && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              runAction();
-            }}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted/50 transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-            aria-label={actionLabel}
-            title={actionLabel}
-          >
-            <ActionIcon size={16} weight="bold" />
-          </button>
+          <span className="flex shrink-0 items-center gap-0.5">
+            {archived && onDelete && (
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void handleDelete();
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-muted/50 transition-all hover:bg-sakura/10 hover:text-sakura disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                aria-label="Delete chat for me"
+                title="Delete chat for me"
+              >
+                <Trash size={16} weight="bold" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                runAction();
+              }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted/50 transition-all hover:bg-indigo-ai/10 hover:text-indigo-ai sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+              aria-label={actionLabel}
+              title={actionLabel}
+            >
+              <ActionIcon size={16} weight="bold" />
+            </button>
+          </span>
         )}
       </Link>
     </div>
@@ -343,6 +387,7 @@ export default function InboxList({
   onStartPersona,
   onHide,
   onUnhide,
+  onDelete,
   hiddenConvos,
   onNewChat,
   activeId,
@@ -354,6 +399,9 @@ export default function InboxList({
   onStartPersona: (personaId: string) => void;
   onHide: (id: string) => void;
   onUnhide?: (id: string) => void;
+  onDelete?: (
+    id: string
+  ) => Promise<{ ok: boolean; error?: string }> | void;
   hiddenConvos?: Conversation[] | null;
   onNewChat: () => void;
   activeId?: string;
@@ -433,6 +481,7 @@ export default function InboxList({
               convo={c}
               archived
               onUnhide={onUnhide}
+              onDelete={onDelete}
               active={activeId === c.id}
             />
           ))
