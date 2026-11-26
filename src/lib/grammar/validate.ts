@@ -52,6 +52,76 @@ function nearMissNote(exercise: GrammarExercise, normalized: string): string | n
   return hit?.note ?? null;
 }
 
+const PREDICATE_FORMS: { suffix: string; form: string; stem?: string }[] = [
+  { suffix: "ませんでした", form: "past negative" },
+  { suffix: "ました", form: "past tense" },
+  { suffix: "ません", form: "negative" },
+  { suffix: "ます", form: "non-past" },
+  { suffix: "じゃなかったです", form: "past negative", stem: "です" },
+  { suffix: "ではなかったです", form: "past negative", stem: "です" },
+  { suffix: "じゃないです", form: "negative", stem: "です" },
+  { suffix: "ではないです", form: "negative", stem: "です" },
+  { suffix: "じゃありません", form: "negative", stem: "です" },
+  { suffix: "でした", form: "past tense", stem: "です" },
+  { suffix: "です", form: "non-past", stem: "です" },
+];
+
+function describePredicateForm(token: string): { stem: string; form: string } | null {
+  for (const entry of PREDICATE_FORMS) {
+    if (token.endsWith(entry.suffix)) {
+      const stem = entry.stem ?? token.slice(0, -entry.suffix.length);
+      return { stem, form: entry.form };
+    }
+  }
+  return null;
+}
+
+function diffTokens(got: string[], wanted: string[]): { extra: string[]; missing: string[] } {
+  const remaining = [...wanted];
+  const extra: string[] = [];
+  for (const token of got) {
+    const normalized = normalizeJa(token);
+    const index = remaining.findIndex((item) => normalizeJa(item) === normalized);
+    if (index >= 0) {
+      remaining.splice(index, 1);
+    } else {
+      extra.push(token);
+    }
+  }
+  return { extra, missing: remaining };
+}
+
+function wrongTileMistake(
+  exercise: Extract<GrammarExercise, { kind: "assemble" }>,
+  extra: string[],
+  missing: string[]
+): string {
+  for (const got of extra) {
+    const gotForm = describePredicateForm(got);
+    if (!gotForm) continue;
+    for (const wanted of missing) {
+      const wantedForm = describePredicateForm(wanted);
+      if (wantedForm && gotForm.stem === wantedForm.stem && gotForm.form !== wantedForm.form) {
+        const target = exercise.en ? `For "${exercise.en}", use` : "Use";
+        return `You used 「${got}」 (${gotForm.form}). ${target} 「${wanted}」 (${wantedForm.form}).`;
+      }
+    }
+  }
+
+  const wrongParticle = extra.find((token) => PARTICLES.has(token));
+  const wantedParticle = missing.find((token) => PARTICLES.has(token));
+  if (wrongParticle && wantedParticle) {
+    return `You used 「${wrongParticle}」 instead of 「${wantedParticle}」.`;
+  }
+
+  if (extra.length === 1 && missing.length === 1) {
+    return `「${extra[0]}」 doesn't belong in this sentence — use 「${missing[0]}」 instead.`;
+  }
+
+  const list = extra.map((token) => `「${token}」`).join(", ");
+  return `${list} ${extra.length === 1 ? "doesn't" : "don't"} belong in this sentence.`;
+}
+
 function isPredicate(token: string): boolean {
   return PREDICATE_END.test(token);
 }
@@ -80,6 +150,11 @@ function checkAssembly(
     return { correct: true, expected, mistake: null };
   }
 
+  const nearMiss = nearMissNote(exercise, joined);
+  if (nearMiss) {
+    return { correct: false, expected, mistake: nearMiss };
+  }
+
   const canonical = exercise.solution;
   if (tokens.includes("です") && !canonical.includes("です")) {
     return {
@@ -97,6 +172,15 @@ function checkAssembly(
         tokens.length < canonical.length
           ? "Some words are still in the tray — the sentence needs all of them."
           : "One tile doesn't belong in this sentence.",
+    };
+  }
+
+  const { extra, missing } = diffTokens(tokens, canonical);
+  if (extra.length > 0) {
+    return {
+      correct: false,
+      expected,
+      mistake: wrongTileMistake(exercise, extra, missing),
     };
   }
 

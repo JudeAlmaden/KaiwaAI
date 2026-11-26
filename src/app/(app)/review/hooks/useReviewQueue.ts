@@ -158,9 +158,7 @@ export function useReviewQueue(setup: Setup, onDone: () => void) {
       limit: "100",
       learningRatio: String(learningRatio),
       maxLearningPool: String(learningCfg.maxLearningPool),
-      maxNewCards: String(learningCfg.maxNewCards),
       newPerSession: String(learningCfg.newPerSession),
-      maxDailyReviews: String(learningCfg.maxDailyReviews),
     });
     if (setup.studyMode === "new") params.set("status", "new");
     if (setup.practice) params.set("practice", "true");

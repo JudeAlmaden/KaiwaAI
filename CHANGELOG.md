@@ -4,6 +4,37 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-11-26
+
+### Added
+- **Lapse decay** — after 5 consecutive passing reviews (`successesSinceLapse` reaches 5), a card's `lapses` counter decrements by 1 (floored at 0) and the streak resets, allowing recovered cards to naturally exit Trouble Spots / leech status. Failing with Again (unless `suppressLapse` is set) or resetting progress resets the streak.
+- **Server-side emergency pass validation** — Focus Guard's 1/day emergency unlock is now enforced on the server via `User.lastEmergencyPassAt` and `POST /api/app-lock/emergency-pass`, preventing localStorage clears or device switches from bypassing the 24-hour cooldown.
+- **Live kanji count on Kanji Quest card** — the Kanji Quest card now shows a live "N DUE" / "UP TO DATE" badge sourced from `/api/review/composition`, replacing the previous hardcoded "10 CARDS". The kanji-only due total (`new + review`) is surfaced via the extended `ProjectedMix.kanjiDue` field in `session-ready.ts`.
+
+### Changed
+- **Removed per-day review and new-card ceilings from in-app sessions** — removed `maxDailyReviews` and `maxNewCards` from `LearningConfig`, in-app `/review` requests, `/api/review/composition`, and Settings (`ReviewDefaultsCard` / `FsrsSettingsCard`). Focus Guard continues to use `maxNewCards` for intake pacing.
+- **Default learning pool cap** — `maxLearningPool` now defaults to `20` cards instead of unlimited (`0`), keeping the active learning pile bounded by default.
+- **Removed kanji stat from home screen footer** — the "0 kanji" dot in the home stat bar has been removed; kanji status is now visible on the Kanji Quest card instead, eliminating the confusing "0 kanji" indicator.
+
+### Fixed
+- **Duplicate folders on "Add another"** — when adding kanji with "Add another" checked and a new folder name typed, each save was creating a fresh folder instead of reusing the one just created. After the first save, the dropdown now switches to the real folder ID so all subsequent kanji land in the same folder.
+- **Review count mismatch** — the home screen, nav badge (initial render), and "Review N cards" quest button showed a raw `nextReview ≤ now` count that included all cards regardless of study status, inflating the number well above what a session actually delivers. `dueNow` in `dashboard-stats.ts` now uses the same new/review split as `/api/review/composition` (genuinely new = `repetitions=0 & timesReviewed=0`; review = studied at least once), so the displayed count matches what starts when you tap the button.
+- **Review mix removed from Learning settings** — the "Review mix (new vs reviews)" chip section in Settings was silently overwriting the session plan ratio chosen in Focus Guard (e.g. changing to "50/50" would revert Casual Drip). The section is removed: Focus Guard owns its ratio via the named session plan picker, and the global `defaultLearningRatio` fallback for `/review` sessions is unchanged.
+- **Graduation based on interval only** — cards now graduate when their interval reaches 21+ days regardless of `repetitions`, and grading Again no longer resets `repetitions` to 0 (preventing cards with long intervals or prior resets from getting stuck in learning).
+- **Focus Guard new-card count derived from plan ratio** — `/app-lock` now computes `newPerSession` from the active session plan's `learningRatio` (`Math.ceil(count * learningRatio)`) instead of using the global `learningCfg.newPerSession`.
+- **Active pool contains genuinely new cards only** — removed `isWeakAndShort` injection from `session-composer` so Again/weak cards are no longer pulled into the active new-card pool.
+- **Leech threshold raised from 3 to 5 lapses** — `LEECH_MIN_LAPSES` is now 5 across `leech.ts`, `session-plan.ts` ("Missed 5+ times"), and all review routes, reducing premature Trouble Spots labelling.
+- **Stale Focus Guard completion counter cleared on init** — `/app-lock` clears `kaiwa_app_lock_completed` on session initialization so re-entering Focus Guard never immediately triggers goal-met from a previous session.
+- **Dynamic Again-card re-queue buffer** — `/app-lock` scales the in-session Again buffer (`Math.min(2, Math.max(0, Math.floor(cards.length / 2) - 1))`) so small pools don't immediately re-surface a failed card.
+- **Per-card Mixed direction** — "Mixed" card direction in `/app-lock` is now assigned per card rather than once per session.
+- **Sentence assembly feedback identifies wrong tiles (tense, polarity, particles) instead of blaming word order** — `checkAssembly` in `src/lib/grammar/validate.ts` now diffs the placed tiles against the canonical solution before running word-order checks. Choosing a decoy predicate form (e.g. `たべました` instead of `たべます` for `"What do you eat?"`) reports the specific tile and tense/polarity mismatch, choosing a wrong particle reports the particle swap, and other decoy tiles are named directly. Also honours `nearMisses` on `assemble` exercises.
+
+### Technical
+- Modified: `prisma/schema.prisma`, `src/lib/review/lifecycle.ts`, `src/lib/fsrs/apply-review.ts`, `src/lib/session-composer.ts`, `src/lib/review/leech.ts`, `src/lib/review/session-plan.ts`, `src/lib/learning-config.ts`, `src/lib/review/intake.ts`, `src/lib/review/composition.ts`, `src/lib/review/session-ready.ts`, `src/app/api/review/composition/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/(app)/settings/ReviewDefaultsCard.tsx`, `src/app/(app)/settings/FsrsSettingsCard.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/review/hooks/useReviewQueue.ts`, `src/app/app-lock/page.tsx`, `src/lib/grammar/validate.ts`, `src/app/(app)/kanji/AddKanjiModal.tsx`, `src/lib/dashboard-stats.ts`, `src/app/(app)/home/KaiRoomClient.tsx`, `src/app/(app)/review/QuestGallery.tsx`, `src/app/(app)/review/quest-cards/KanjiQuestCard.tsx`, and associated unit/route tests
+- New: `prisma/migrations/20261126220200_add_lapse_decay/migration.sql`, `prisma/migrations/20261126220300_add_emergency_pass_tracking/migration.sql`, `src/app/api/app-lock/emergency-pass/route.ts`, `src/app/api/app-lock/emergency-pass/route.test.ts`
+- Deleted: `src/lib/review/daily-cap.ts`, `src/lib/review/daily-cap.test.ts`
+- Tests: `npm run lint` and `npm run typecheck` clean; `npm run test` 119 files / 1078 tests passing
+
 ## [2.8.0] - 2026-11-26
 
 ### Changed

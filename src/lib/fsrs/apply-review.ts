@@ -20,6 +20,8 @@ export interface ReviewableCard {
   lastReviewedAt: Date | null;
   firstLearnedAt?: Date | null;
   timesReviewed: number;
+  lapses?: number;
+  successesSinceLapse?: number;
   difficulty?: number | null;
   stability?: number | null;
   retrievability?: number | null;
@@ -44,6 +46,10 @@ export interface ReviewUpdatePayload {
   timesReviewedIncrement: number;
   /** 1 only for a real grade-0 review; early/practice reviews never lapse. */
   lapsesIncrement: number;
+  /** 1 when consecutive successes post-lapse reach the decay threshold. */
+  lapsesDecrement?: number;
+  /** Updated streak of consecutive passing grades since the last lapse. */
+  successesSinceLapse?: number;
 }
 
 export interface ApplyReviewInput {
@@ -72,6 +78,25 @@ function hasFsrsState(card: ReviewableCard): boolean {
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const LAPSE_DECAY_STREAK = 5;
+
+function computeLapseDecay(
+  card: Pick<ReviewableCard, "lapses" | "successesSinceLapse">,
+  grade: ReviewGrade
+): { lapsesDecrement: number; successesSinceLapse: number } {
+  if (grade === 0) {
+    return { lapsesDecrement: 0, successesSinceLapse: 0 };
+  }
+  const currentLapses = card.lapses ?? 0;
+  if (currentLapses <= 0) {
+    return { lapsesDecrement: 0, successesSinceLapse: 0 };
+  }
+  const nextStreak = (card.successesSinceLapse ?? 0) + 1;
+  if (nextStreak >= LAPSE_DECAY_STREAK) {
+    return { lapsesDecrement: 1, successesSinceLapse: 0 };
+  }
+  return { lapsesDecrement: 0, successesSinceLapse: nextStreak };
+}
 
 /**
  * Retrievability at review time via the FSRS forgetting curve,
@@ -135,6 +160,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
   }
 
   let fsrsOptions: FSRSOptions = { desiredRetention: retention };
+  const lapseDecay = computeLapseDecay(card, grade);
 
   if (isEarly && earlyReviewStrategy === "proportional") {
     const lastReviewed = card.lastReviewedAt ? new Date(card.lastReviewedAt) : null;
@@ -197,7 +223,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
         ? new Date(now.getTime() + LOCK_LAPSE_COOLDOWN_MS)
         : result.nextReview;
     const interval = grade === 0 ? 0 : sm2IntervalFromStability(result.stability, retention);
-    const repetitions = grade === 0 ? 0 : card.repetitions + 1;
+    const repetitions = grade === 0 ? card.repetitions : card.repetitions + 1;
 
     return {
       easeFactor: card.easeFactor,
@@ -213,6 +239,8 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       firstLearnedAt,
       timesReviewedIncrement: 1,
       lapsesIncrement: grade === 0 && !isEarly && !suppressLapse ? 1 : 0,
+      lapsesDecrement: lapseDecay.lapsesDecrement,
+      successesSinceLapse: lapseDecay.successesSinceLapse,
     };
   } catch (error) {
     const sm2Options =
@@ -245,6 +273,8 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       clearFsrs: true,
       timesReviewedIncrement: 1,
       lapsesIncrement: grade === 0 && !isEarly && !suppressLapse ? 1 : 0,
+      lapsesDecrement: lapseDecay.lapsesDecrement,
+      successesSinceLapse: lapseDecay.successesSinceLapse,
     };
   }
 }
@@ -269,7 +299,8 @@ export function buildReviewPersistData(result: ReviewUpdatePayload) {
     lastReviewedAt?: Date;
     firstLearnedAt?: Date;
     timesReviewed?: { increment: number };
-    lapses?: { increment: number };
+    lapses?: { increment: number } | { decrement: number };
+    successesSinceLapse?: number;
     difficulty?: number | null;
     stability?: number | null;
     retrievability?: number | null;
@@ -302,6 +333,11 @@ export function buildReviewPersistData(result: ReviewUpdatePayload) {
   }
   if (result.lapsesIncrement > 0) {
     data.lapses = { increment: result.lapsesIncrement };
+  } else if (result.lapsesDecrement && result.lapsesDecrement > 0) {
+    data.lapses = { decrement: result.lapsesDecrement };
+  }
+  if (result.successesSinceLapse !== undefined) {
+    data.successesSinceLapse = result.successesSinceLapse;
   }
   return data;
 }

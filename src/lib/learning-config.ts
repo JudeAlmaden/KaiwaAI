@@ -7,10 +7,8 @@ import type { EarlyReviewStrategy, FuriganaMode, ReviewDirection } from "./revie
 
 export interface LearningConfig {
   desiredRetention: number;
-  maxDailyReviews: number;
-  maxNewCards: number;
   newPerSession: number; // Fixed intake of new cards per session (default: 3)
-  maxLearningPool: number; // Max in-progress learning cards before pausing new cards (default: 0 = unlimited)
+  maxLearningPool: number; // Max in-progress learning cards before pausing new cards (default: 20, 0 = unlimited)
   earlyReviewStrategy: EarlyReviewStrategy;
   defaultDirection: ReviewDirection;
   defaultFuriganaMode: FuriganaMode;
@@ -21,10 +19,8 @@ const STORAGE_KEY = "kaiwa.learning-config";
 
 export const DEFAULT_LEARNING_CONFIG: LearningConfig = {
   desiredRetention: 0.9,
-  maxDailyReviews: 50,
-  maxNewCards: 20,
   newPerSession: 3,
-  maxLearningPool: 0,
+  maxLearningPool: 20,
   earlyReviewStrategy: "proportional",
   defaultDirection: "mixed",
   defaultFuriganaMode: "always",
@@ -46,14 +42,6 @@ export function getLearningConfig(): LearningConfig {
       ...parsed,
       desiredRetention: clampRetention(
         parsed.desiredRetention ?? DEFAULT_LEARNING_CONFIG.desiredRetention
-      ),
-      maxDailyReviews: Math.max(
-        1,
-        Math.min(500, parsed.maxDailyReviews ?? DEFAULT_LEARNING_CONFIG.maxDailyReviews)
-      ),
-      maxNewCards: Math.max(
-        0,
-        Math.min(200, parsed.maxNewCards ?? DEFAULT_LEARNING_CONFIG.maxNewCards)
       ),
       newPerSession: Math.max(
         0,

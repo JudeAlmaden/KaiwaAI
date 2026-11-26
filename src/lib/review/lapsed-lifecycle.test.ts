@@ -14,7 +14,7 @@ describe("card lifecycle — new vs lapsed", () => {
 
   it("keeps a lapsed card in the in-progress pool", () => {
     const serialized = JSON.stringify(LEARNING_CARD_WHERE);
-    expect(serialized).toContain('"repetitions":0');
+    expect(serialized).toContain('"interval":{"lt":21}');
     expect(serialized).toContain('"timesReviewed":{"gt":0}');
   });
 });

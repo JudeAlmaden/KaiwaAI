@@ -504,13 +504,6 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
               </span>
               <span>vocab</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-mint" />
-              <span className="font-bold text-foreground">
-                <CountUp target={stats?.kanji.known ?? 0} />
-              </span>
-              <span>kanji</span>
-            </div>
             {stats?.masteredCount && stats.masteredCount > 0 ? (
               <div className="flex items-center gap-1.5">
                 <div className="h-2 w-2 rounded-full bg-amber" />

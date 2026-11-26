@@ -19,9 +19,9 @@ describe("isLeech", () => {
     expect(isLeech({ lapses: null, interval: null })).toBe(false);
   });
 
-  it("matches the leech deck filter boundary (3 lapses, interval < 7)", () => {
-    expect(isLeech({ lapses: 3, interval: 6 })).toBe(true);
-    expect(isLeech({ lapses: 3, interval: 7 })).toBe(false);
+  it("matches the leech deck filter boundary (5 lapses, interval < 7)", () => {
+    expect(isLeech({ lapses: 5, interval: 6 })).toBe(true);
+    expect(isLeech({ lapses: 5, interval: 7 })).toBe(false);
   });
 
   it("does not flag a heavily reviewed card that never failed", () => {

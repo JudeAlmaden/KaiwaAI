@@ -29,7 +29,7 @@ function makeCard(overrides: Partial<ReviewableCard> = {}): ReviewableCard {
 describe("applyFsrsReview — payload rules", () => {
   it("stores interval 0 on a lapse so it matches the 10-minute return", () => {
     const result = applyFsrsReview({ card: makeCard(), grade: 0, cardType: "flashcard" });
-    expect(result.repetitions).toBe(0);
+    expect(result.repetitions).toBe(2);
     expect(result.interval).toBe(0);
     expect(result.touchLastReviewed).not.toBe(false);
     expect(buildReviewPersistData(result).interval).toBe(0);
@@ -131,5 +131,39 @@ describe("buildReviewPersistData — fallback reset", () => {
     const data = buildReviewPersistData(base);
     expect(data.difficulty).toBe(4);
     expect(data.lastReviewedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("applyFsrsReview — lapse decay", () => {
+  it("increments successesSinceLapse on passing grades when lapses > 0", () => {
+    const card = makeCard({ lapses: 3, successesSinceLapse: 2 });
+    const result = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+    expect(result.successesSinceLapse).toBe(3);
+    expect(result.lapsesDecrement).toBe(0);
+    expect(buildReviewPersistData(result).successesSinceLapse).toBe(3);
+    expect(buildReviewPersistData(result).lapses).toBeUndefined();
+  });
+
+  it("decrements lapses by 1 and resets streak on the 5th consecutive pass", () => {
+    const card = makeCard({ lapses: 3, successesSinceLapse: 4 });
+    const result = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+    expect(result.successesSinceLapse).toBe(0);
+    expect(result.lapsesDecrement).toBe(1);
+    expect(buildReviewPersistData(result).lapses).toEqual({ decrement: 1 });
+    expect(buildReviewPersistData(result).successesSinceLapse).toBe(0);
+  });
+
+  it("resets successesSinceLapse on Again even when suppressLapse is set", () => {
+    const card = makeCard({ lapses: 3, successesSinceLapse: 4 });
+    const result = applyFsrsReview({
+      card,
+      grade: 0,
+      cardType: "flashcard",
+      suppressLapse: true,
+    });
+    expect(result.lapsesIncrement).toBe(0);
+    expect(result.lapsesDecrement).toBe(0);
+    expect(result.successesSinceLapse).toBe(0);
+    expect(buildReviewPersistData(result).successesSinceLapse).toBe(0);
   });
 });

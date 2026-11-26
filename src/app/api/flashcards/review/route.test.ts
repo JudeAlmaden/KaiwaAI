@@ -234,7 +234,7 @@ describe("Review API - GET", () => {
         where: expect.objectContaining({
           userId: "user-123",
           AND: [
-            { lapses: { gte: 3 } },
+            { lapses: { gte: 5 } },
             { interval: { lt: 7 } },
           ],
         }),
@@ -814,9 +814,8 @@ describe("Daily review ceiling", () => {
     vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
   });
 
-  it("shrinks the session to what is left of today's ceiling", async () => {
+  it("ignores legacy maxDailyReviews query param without running a daily count", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.userFlashcard.count).mockResolvedValueOnce(7);
     vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce(
       Array.from({ length: 10 }, (_, i) => dueCard(i)) as never
     );
@@ -826,24 +825,8 @@ describe("Daily review ceiling", () => {
     );
     const data = await res.json();
 
-    // 10-card ceiling, 7 already reviewed today → at most 3 cards.
-    expect(data.cards.length).toBeLessThanOrEqual(3);
+    expect(prisma.userFlashcard.count).not.toHaveBeenCalled();
     expect(data.cards.length).toBeGreaterThan(0);
-  });
-
-  it("serves nothing once the ceiling is used up", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(mockUser as never);
-    vi.mocked(prisma.userFlashcard.count).mockResolvedValueOnce(10);
-    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValueOnce(
-      Array.from({ length: 10 }, (_, i) => dueCard(i)) as never
-    );
-
-    const res = await GET(
-      new Request("http://localhost/api/flashcards/review?limit=10&maxDailyReviews=10")
-    );
-
-    expect(await res.json()).toEqual({ cards: [] });
-    expect(prisma.userFlashcard.findMany).not.toHaveBeenCalled();
   });
 
   it("ignores the ceiling when the setting is absent", async () => {

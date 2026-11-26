@@ -34,9 +34,7 @@ describe("new-card intake", () => {
   it("reports a ready allowance with the quota applied", () => {
     expect(
       describeIntake({
-        maxNewCards: 20,
         maxNewPerSession: 3,
-        introducedToday: 1,
         inProgress: 12,
         maxLearningPool: 0,
       })
@@ -46,9 +44,7 @@ describe("new-card intake", () => {
   it("pauses intake when the learning pool is full", () => {
     expect(
       describeIntake({
-        maxNewCards: 20,
         maxNewPerSession: 3,
-        introducedToday: 0,
         inProgress: 48,
         maxLearningPool: 20,
       })
@@ -58,45 +54,17 @@ describe("new-card intake", () => {
   it("treats a zero learning pool as unlimited", () => {
     expect(
       describeIntake({
-        maxNewCards: 20,
         maxNewPerSession: 3,
-        introducedToday: 0,
         inProgress: 48,
         maxLearningPool: 0,
       }).reason
     ).toBe("ready");
   });
 
-  it("reports the daily ceiling once it is reached", () => {
-    expect(
-      describeIntake({
-        maxNewCards: 3,
-        maxNewPerSession: 3,
-        introducedToday: 3,
-        inProgress: 0,
-        maxLearningPool: 0,
-      })
-    ).toEqual({ allowance: 0, reason: "daily-ceiling" });
-  });
-
   it("reports off when the per-session quota is zero", () => {
     expect(
       describeIntake({
-        maxNewCards: 20,
         maxNewPerSession: 0,
-        introducedToday: 0,
-        inProgress: 0,
-        maxLearningPool: 0,
-      })
-    ).toEqual({ allowance: 0, reason: "off" });
-  });
-
-  it("reports intake off when the daily ceiling is zero", () => {
-    expect(
-      describeIntake({
-        maxNewCards: 0,
-        maxNewPerSession: 3,
-        introducedToday: 0,
         inProgress: 0,
         maxLearningPool: 0,
       })

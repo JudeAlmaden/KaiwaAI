@@ -123,6 +123,7 @@ export default function StandaloneAppLockPage() {
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
   const [emergencyCountdown, setEmergencyCountdown] = useState<number | null>(null);
+  const [emergencyError, setEmergencyError] = useState<string | null>(null);
   const [emergencyUsedToday, setEmergencyUsedToday] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     try {
@@ -225,17 +226,15 @@ export default function StandaloneAppLockPage() {
 
     const learningCfg = getLearningConfig();
     const maxLearningPool = learningCfg.maxLearningPool;
-    // Same intake rules as the in-app session: the route combines the daily
-    // ceiling with the per-session quota.
-    const maxNewCards = learningCfg.maxNewCards;
-    const newPerSession = learningCfg.newPerSession;
+    // Derive per-session new-card allowance from the Focus Guard plan ratio so
+    // global `newPerSession` (e.g. 3) does not silently override Active Intake or All New.
+    const newPerSession = Math.ceil(count * learningRatio);
 
     // `fill=1` lets the session reach its card count (due → new → anything
-    // studied). `maxDailyReviews` is deliberately NOT sent: spending the daily
-    // review goal must not turn the lock screen into a free unlock.
+    // studied).
     try {
       const res = await fetch(
-        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&fill=1&maxNewCards=${maxNewCards}&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}`
+        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&fill=1&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -254,6 +253,10 @@ export default function StandaloneAppLockPage() {
 
     async function init() {
       try {
+        try {
+          sessionStorage.removeItem('kaiwa_app_lock_completed');
+        } catch { }
+        setCompletedCount(0);
         const params = new URLSearchParams(window.location.search);
         const pkg = params.get('blocked_package');
         const countParam = params.get('count');
@@ -383,15 +386,15 @@ export default function StandaloneAppLockPage() {
         // Slice down to exact requirement count for the session deck
         const slicedCards = availableCards.slice(0, effectiveRequirement);
 
-        // A mixed block picks one direction for the whole session. Rerolling per
-        // card showed the same card JP→EN in one block and EN→JP in the next.
-        const sessionDirection: 'jp-to-en' | 'en-to-jp' =
-          direction === 'mixed' ? (Math.random() < 0.5 ? 'jp-to-en' : 'en-to-jp') : direction;
-
         setCards(
           slicedCards.map((c) => ({
             ...c,
-            _dir: sessionDirection,
+            _dir:
+              direction === 'mixed'
+                ? Math.random() < 0.5
+                  ? 'jp-to-en'
+                  : 'en-to-jp'
+                : direction,
           }))
         );
         setInitResult({ kind: 'session' });
@@ -494,16 +497,18 @@ export default function StandaloneAppLockPage() {
           // Do NOT increment completedCount!
           // Track as failed card so Good & Easy are disabled when it returns
           setFailedCardIds((prev) => new Set(prev).add(card.id));
-          // Re-insert the card at least 3 positions ahead (so >= 2 cards intervene)
-          // or at the very end when fewer cards remain.
+          // Re-insert the card with a dynamic buffer (up to 2 intervening cards
+          // for normal decks, scaling down for 2-3 card pools).
+          const bufferSize = Math.min(2, Math.max(0, Math.floor(cards.length / 2) - 1));
           const nextCards = [...cards];
           const [failedCard] = nextCards.splice(currentIndex, 1);
           const remainingAhead = nextCards.length - currentIndex;
+          const minOffset = bufferSize + 1;
           let targetIndex: number;
-          if (remainingAhead < 3) {
+          if (remainingAhead < minOffset) {
             targetIndex = nextCards.length;
           } else {
-            const minIndex = currentIndex + 3;
+            const minIndex = currentIndex + minOffset;
             const maxIndex = nextCards.length;
             targetIndex = minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
           }
@@ -574,12 +579,41 @@ export default function StandaloneAppLockPage() {
     if (emergencyCountdown === null) return;
     const timer = setTimeout(() => {
       if (emergencyCountdown <= 1) {
-        try {
-          localStorage.setItem('kaiwa_emergency_pass_date', new Date().toISOString().slice(0, 10));
-        } catch { }
-        setEmergencyUsedToday(true);
-        setEmergencyCountdown(null);
-        void finishUnlock(blockedPackage);
+        void (async () => {
+          try {
+            const res = await fetch('/api/app-lock/emergency-pass', { method: 'POST' });
+            if (!res.ok) {
+              setEmergencyError('Could not verify emergency pass. Please try again.');
+              setEmergencyCountdown(null);
+              return;
+            }
+            const data = (await res.json()) as { granted?: boolean; nextAvailableAt?: string };
+            if (data.granted) {
+              try {
+                localStorage.setItem(
+                  'kaiwa_emergency_pass_date',
+                  new Date().toISOString().slice(0, 10)
+                );
+              } catch { }
+              setEmergencyUsedToday(true);
+              setEmergencyCountdown(null);
+              void finishUnlock(blockedPackage);
+            } else {
+              setEmergencyUsedToday(true);
+              setEmergencyCountdown(null);
+              const when = data.nextAvailableAt
+                ? new Date(data.nextAvailableAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'tomorrow';
+              setEmergencyError(`Emergency pass already used today. Available at ${when}.`);
+            }
+          } catch {
+            setEmergencyError('Could not verify emergency pass. Please try again.');
+            setEmergencyCountdown(null);
+          }
+        })();
       } else {
         setEmergencyCountdown((c) => (c !== null ? c - 1 : null));
       }
@@ -734,6 +768,12 @@ export default function StandaloneAppLockPage() {
             Skip this card
           </button>
 
+          {emergencyError && (
+            <p className="text-[11px] font-medium text-amber-600 text-center max-w-xs">
+              {emergencyError}
+            </p>
+          )}
+
           {!emergencyUsedToday && (
             emergencyCountdown !== null ? (
               <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-600">
@@ -749,7 +789,10 @@ export default function StandaloneAppLockPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => setEmergencyCountdown(5)}
+                onClick={() => {
+                  setEmergencyError(null);
+                  setEmergencyCountdown(5);
+                }}
                 className="text-[11px] font-medium text-muted/70 hover:text-foreground underline-offset-2 hover:underline cursor-pointer"
               >
                 Emergency pass (1/day)

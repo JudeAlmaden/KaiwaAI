@@ -282,6 +282,13 @@ export default function AddKanjiModal({
         setPrimitivesInput("");
         setFrameNumber(nextFrame ? String(nextFrame) : "");
         setSuccessMsg(`Added "${normalized}"! Ready for next kanji.`);
+        // If a new folder was just created, switch to its real ID so subsequent
+        // saves reuse it instead of creating duplicate folders.
+        if (selectedGroupId === "new" && finalGroupId) {
+          setSelectedGroupId(finalGroupId);
+          setIsCreatingNewGroup(false);
+          setNewGroupName("");
+        }
       } else {
         onClose();
       }

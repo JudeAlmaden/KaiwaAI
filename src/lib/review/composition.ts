@@ -23,14 +23,10 @@ export type DueCounts = {
 
 export type SessionMixOptions = {
   learningRatio: number;
-  /** Daily ceiling on new cards. */
-  maxNewCards: number;
   /** Fixed per-session new-card intake. Unlimited when omitted. */
   maxNewPerSession?: number;
   /** Session size cap (Goal / limit). */
   maxReviews?: number;
-  /** New cards already introduced today; subtracted from the daily ceiling. */
-  introducedToday?: number;
   /** Cards currently in progress — blocks intake when the cap is reached. */
   inProgress?: number;
   /** Max in-progress learning cards (0 or omitted = unlimited). */
@@ -71,13 +67,7 @@ export function projectSessionMix(
   const activeTarget =
     ratio === 0 ? 0 : Math.min(size, Math.max(1, Math.round(size * ratio)));
 
-  // The daily ceiling is what is left of it after today's introductions, exactly
-  // as the routes compute it — otherwise home promises cards the session refuses.
-  const dailyRemaining = Math.max(0, Math.max(0, options.maxNewCards) - (options.introducedToday ?? 0));
-  const quota = Math.min(
-    dailyRemaining,
-    options.maxNewPerSession ?? Number.POSITIVE_INFINITY
-  );
+  const quota = options.maxNewPerSession ?? Number.POSITIVE_INFINITY;
 
   // A full learning pool pauses intake, exactly as the routes do, so the home
   // button cannot promise new cards the session will refuse to deliver.

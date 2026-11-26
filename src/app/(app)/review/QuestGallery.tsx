@@ -40,6 +40,7 @@ export type QuestStartParams = {
 
 type QuestGalleryProps = {
   dueCount: number;
+  kanjiDueCount: number | null;
   strugglingCount?: number;
   totalCards?: number;
   isMonitoring: boolean;
@@ -51,6 +52,7 @@ type QuestGalleryProps = {
 
 export default function QuestGallery({
   dueCount,
+  kanjiDueCount,
   isMonitoring,
   isAndroid = true,
   appBlockerConfig,
@@ -192,6 +194,7 @@ export default function QuestGallery({
         <div className="col-span-1">
           <KanjiQuestCard
             onStart={() => setShowKanjiSourceModal(true)}
+            dueCount={kanjiDueCount}
           />
         </div>
 

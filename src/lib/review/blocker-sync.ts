@@ -19,9 +19,10 @@ export function blockerUpdatesForLearningDefaults(
   if (updates.defaultDirection !== undefined) {
     out.direction = updates.defaultDirection;
   }
-  if (updates.defaultLearningRatio !== undefined) {
-    out.learningRatio = updates.defaultLearningRatio;
-  }
+  // defaultLearningRatio is intentionally NOT synced to the app blocker.
+  // Focus Guard has its own named session plan picker (Reviews Only, Casual Drip,
+  // Active Intake, All New) which owns the learningRatio there. Syncing from the
+  // global default would silently overwrite the plan the user chose in Focus Guard.
   if (updates.earlyReviewStrategy !== undefined) {
     out.earlyReviewStrategy = updates.earlyReviewStrategy;
   }
@@ -35,7 +36,8 @@ export function learningDefaultsForBlocker(
   const out: Partial<LearningConfig> = {};
 
   if (update.direction !== undefined) out.defaultDirection = update.direction;
-  if (update.learningRatio !== undefined) out.defaultLearningRatio = update.learningRatio;
+  // learningRatio is intentionally NOT mirrored back: Focus Guard owns that
+  // value through its session plan picker, not from the Learning defaults.
   if (update.earlyReviewStrategy !== undefined) {
     out.earlyReviewStrategy = update.earlyReviewStrategy;
   }

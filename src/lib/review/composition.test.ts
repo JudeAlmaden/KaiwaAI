@@ -30,7 +30,7 @@ describe("summarizeComposition", () => {
 });
 
 describe("projectSessionMix", () => {
-  const base = { learningRatio: 0.5, maxNewCards: 20 };
+  const base = { learningRatio: 0.5 };
 
   it("rations new cards to the per-session quota", () => {
     const mix = projectSessionMix({ new: 16, review: 139 }, { ...base, maxNewPerSession: 3, maxReviews: 10 });
@@ -40,15 +40,6 @@ describe("projectSessionMix", () => {
   it("splits a balanced session 50/50 without a quota", () => {
     const mix = projectSessionMix({ new: 10, review: 10 }, { ...base, maxReviews: 20 });
     expect(mix).toEqual({ newCount: 10, reviewCount: 10, total: 20 });
-  });
-
-  it("honours the daily new-card ceiling", () => {
-    const mix = projectSessionMix(
-      { new: 40, review: 40 },
-      { learningRatio: 0.5, maxNewCards: 5, maxReviews: 20 }
-    );
-    expect(mix.newCount).toBe(5);
-    expect(mix.reviewCount).toBe(15);
   });
 
   it("never pads a session with new cards when reviews are missing", () => {
@@ -70,7 +61,7 @@ describe("projectSessionMix", () => {
   it("excludes new cards entirely at ratio 0", () => {
     const mix = projectSessionMix(
       { new: 10, review: 4 },
-      { learningRatio: 0, maxNewCards: 20, maxNewPerSession: 3, maxReviews: 10 }
+      { learningRatio: 0, maxNewPerSession: 3, maxReviews: 10 }
     );
     expect(mix).toEqual({ newCount: 0, reviewCount: 4, total: 4 });
   });
@@ -97,22 +88,6 @@ describe("projectSessionMix", () => {
       { ...base, maxNewPerSession: 3, maxReviews: 10, inProgress: 19, maxLearningPool: 20 }
     );
     expect(mix.newCount).toBe(3);
-  });
-
-  it("subtracts cards already introduced today from the daily ceiling", () => {
-    const mix = projectSessionMix(
-      { new: 40, review: 40 },
-      { learningRatio: 0.5, maxNewCards: 5, maxNewPerSession: 3, maxReviews: 20, introducedToday: 4 }
-    );
-    expect(mix.newCount).toBe(1);
-  });
-
-  it("projects no new cards once the daily ceiling is spent", () => {
-    const mix = projectSessionMix(
-      { new: 10, review: 10 },
-      { ...base, maxReviews: 10, maxNewCards: 20, introducedToday: 20 }
-    );
-    expect(mix).toEqual({ newCount: 0, reviewCount: 10, total: 10 });
   });
 
   it("returns zeroes for an empty deck", () => {

@@ -1,13 +1,16 @@
 import { getLearningConfig } from "@/lib/learning-config";
 import { projectSessionMix, type CompositionCounts, type DueCounts } from "./composition";
-import { remainingDailyReviews } from "./daily-cap";
 
-export type ProjectedMix = CompositionCounts & { total: number };
+export type ProjectedMix = CompositionCounts & {
+  total: number;
+  /** Kanji-only due count (new + review), straight from the composition API. */
+  kanjiDue: number;
+};
 
 type CompositionPayload = {
   due?: DueCounts;
-  intake?: { introducedToday?: number; inProgress?: number };
-  reviewedToday?: number;
+  intake?: { inProgress?: number };
+  kanji?: { new: number; review: number };
 };
 
 /**
@@ -22,13 +25,12 @@ export async function fetchProjectedMix(): Promise<ProjectedMix | null> {
   if (!data.due) return null;
 
   const cfg = getLearningConfig();
-  return projectSessionMix(data.due, {
+  const mix = projectSessionMix(data.due, {
     learningRatio: cfg.defaultLearningRatio,
-    maxNewCards: cfg.maxNewCards,
     maxNewPerSession: cfg.newPerSession,
-    maxReviews: remainingDailyReviews(cfg.maxDailyReviews, data.reviewedToday ?? 0),
-    introducedToday: data.intake?.introducedToday ?? 0,
     inProgress: data.intake?.inProgress ?? 0,
     maxLearningPool: cfg.maxLearningPool,
   });
+  const kanjiDue = (data.kanji?.new ?? 0) + (data.kanji?.review ?? 0);
+  return { ...mix, kanjiDue };
 }

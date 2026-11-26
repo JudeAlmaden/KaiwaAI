@@ -44,25 +44,6 @@ export default function FsrsSettingsCard() {
         </p>
       </div>
 
-      <div className="mt-5 border-t-2 border-border pt-4">
-        <label className="space-y-1">
-          <span className="text-sm font-bold">Max daily reviews</span>
-          <input
-            type="number"
-            min={1}
-            max={500}
-            value={config.maxDailyReviews}
-            onChange={(e) =>
-              patch({ maxDailyReviews: Math.max(1, Number(e.target.value) || 1) })
-            }
-            className="w-full rounded-2xl border-2 border-border bg-background px-3 py-2 text-sm"
-          />
-        </label>
-        <p className="mt-2 text-xs text-muted">
-          Sessions stop once you have reviewed this many cards in a day (your timezone).
-        </p>
-      </div>
-
       <div className="mt-5 border-t-2 border-border pt-4 space-y-2">
         <p className="text-sm font-bold">Early review (before due)</p>
         <div className="grid grid-cols-2 gap-2">

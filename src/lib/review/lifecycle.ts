@@ -37,10 +37,7 @@ export function isNewCard(card: CardLifecycleState): boolean {
 }
 
 export function isGraduated(card: CardLifecycleState): boolean {
-  return (
-    (card.repetitions ?? 0) >= GRADUATED_REPETITIONS &&
-    (card.interval ?? 0) >= GRADUATED_INTERVAL_DAYS
-  );
+  return (card.interval ?? 0) >= GRADUATED_INTERVAL_DAYS;
 }
 
 export function isLearningCard(card: CardLifecycleState): boolean {
@@ -65,15 +62,10 @@ export const STUDIED_CARD_WHERE = {
 };
 
 /**
- * Prisma filter for cards actively being learned (not new, not graduated).
+ * Prisma filter for cards actively being learned (studied at least once, not graduated).
  * Kept as a value so query sites cannot invent their own definition.
  */
 export const LEARNING_CARD_WHERE = {
-  OR: [
-    // Graded but not graduated.
-    { repetitions: { gt: 0, lt: GRADUATED_REPETITIONS } },
-    { repetitions: { gte: GRADUATED_REPETITIONS }, interval: { lt: GRADUATED_INTERVAL_DAYS } },
-    // Lapsed back to repetitions 0 — still in progress, so the pool cap counts it.
-    { repetitions: 0, timesReviewed: { gt: 0 } },
-  ],
+  interval: { lt: GRADUATED_INTERVAL_DAYS },
+  ...STUDIED_CARD_WHERE,
 };

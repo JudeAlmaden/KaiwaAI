@@ -16,8 +16,7 @@ import {
   needsMaintenanceTopUp,
 } from "@/lib/review/maintenance-window";
 import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
-import { introducedTodayWhere, resolveNewAllowance, startOfToday } from "@/lib/review/intake";
-import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
+import { LEECH_MAX_INTERVAL_DAYS, LEECH_MIN_LAPSES } from "@/lib/review/leech";
 import { DEFAULT_LEARNING_CONFIG } from "@/lib/learning-config";
 import { extractKanji } from "@/lib/kanji-utils";
 import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
@@ -42,23 +41,16 @@ export async function GET(req: Request) {
   const status = sp.get("status");
   const pos = sp.get("pos");
   const jlpt = sp.get("jlpt");
-  let limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
+  const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
   const rawRatio = sp.get("learningRatio");
   const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
-  const rawMaxNew = sp.get("maxNewCards");
   const rawMaxLearning = sp.get("maxLearningPool");
   const rawNewPerSession = sp.get("newPerSession");
-  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
   const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
-  // A caller that sends neither quota gets the learner's default drip instead of
-  // an unlimited one.
-  const unsetQuota = maxNewCards === undefined && newPerSession === undefined;
   // The blocked-app session asks for a full card count; a normal study session
   // must not quietly pull in new words or study-ahead cards.
   const fillSession = sp.get("fill") === "1" || sp.get("fill") === "true";
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
-  const rawMaxDaily = sp.get("maxDailyReviews");
-  const maxDailyReviews = rawMaxDaily !== null && !isNaN(parseInt(rawMaxDaily, 10)) ? parseInt(rawMaxDaily, 10) : undefined;
 
   // Build base where clause
   const where: Prisma.UserFlashcardWhereInput = { userId: user.id };
@@ -84,8 +76,8 @@ export async function GET(req: Request) {
     ];
   } else if (studyMode === "leeches") {
     where.AND = [
-      { lapses: { gte: 3 } },
-      { interval: { lt: 7 } }
+      { lapses: { gte: LEECH_MIN_LAPSES } },
+      { interval: { lt: LEECH_MAX_INTERVAL_DAYS } }
     ];
   }
 
@@ -118,21 +110,6 @@ export async function GET(req: Request) {
     if (orFilters.length > 0) {
       where.OR = orFilters;
     }
-  }
-
-  // Daily ceiling: shrink the session to what is left of today's review goal.
-  if (maxDailyReviews !== undefined) {
-    const reviewedToday =
-      Number(
-        await prisma.userFlashcard.count({
-          where: {
-            userId: user.id,
-            lastReviewedAt: { gte: startOfToday(new Date(), user.timezone) },
-          },
-        })
-      ) || 0;
-    limit = clampSessionToDailyCap(limit, remainingDailyReviews(maxDailyReviews, reviewedToday));
-    if (limit === 0) return NextResponse.json({ cards: [] });
   }
 
   // Use session composition for all standard review modes
@@ -224,31 +201,13 @@ export async function GET(req: Request) {
       allCards = mergeUniqueById(allCards, reviewed ?? []);
     }
 
-    let effectiveMaxNewCards = unsetQuota
-      ? DEFAULT_LEARNING_CONFIG.maxNewCards
-      : maxNewCards;
-    const effectiveNewPerSession = unsetQuota
-      ? DEFAULT_LEARNING_CONFIG.newPerSession
-      : newPerSession;
-    if (maxNewCards !== undefined || newPerSession !== undefined) {
-      const introducedToday =
-        Number(
-          await prisma.userFlashcard.count({
-            where: introducedTodayWhere(user.id, new Date(), user.timezone),
-          })
-        ) || 0;
-      effectiveMaxNewCards = resolveNewAllowance({
-        maxNewCards: maxNewCards ?? Number.POSITIVE_INFINITY,
-        maxNewPerSession: newPerSession,
-        introducedToday,
-      });
-    }
+    let effectiveNewPerSession = newPerSession ?? DEFAULT_LEARNING_CONFIG.newPerSession;
     if (maxLearningPool !== undefined && maxLearningPool > 0) {
       const inLearningCount = await prisma.userFlashcard.count({
         where: { userId: user.id, ...LEARNING_CARD_WHERE },
       });
       if (inLearningCount >= maxLearningPool) {
-        effectiveMaxNewCards = 0;
+        effectiveNewPerSession = 0;
       }
     }
 
@@ -259,7 +218,7 @@ export async function GET(req: Request) {
       limit,
       ignoreDueDate,
       learningRatio,
-      { maxNewCards: effectiveMaxNewCards, maxNewPerSession: effectiveNewPerSession, fillSession }
+      { maxNewPerSession: effectiveNewPerSession, fillSession }
     );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
