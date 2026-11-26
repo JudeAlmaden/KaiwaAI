@@ -76,6 +76,37 @@ describe("sentence assembly", () => {
   it("asks for tiles when nothing is placed", () => {
     expect(checkExercise(ex("m1-order-1"), []).mistake).toMatch(/tile/i);
   });
+
+  it("identifies a wrong verb tense tile instead of blaming word order", () => {
+    const result = checkExercise(ex("m5-qw-3"), [
+      "あなた",
+      "は",
+      "なに",
+      "を",
+      "たべました",
+      "か",
+    ]);
+    expect(result.correct).toBe(false);
+    expect(result.mistake).toContain("たべました");
+    expect(result.mistake).toContain("past tense");
+    expect(result.mistake).toContain("たべます");
+    expect(result.mistake).not.toMatch(/order/i);
+  });
+
+  it("identifies a wrong particle tile instead of blaming word order", () => {
+    const result = checkExercise(ex("m5-qw-3"), [
+      "あなた",
+      "が",
+      "なに",
+      "を",
+      "たべます",
+      "か",
+    ]);
+    expect(result.correct).toBe(false);
+    expect(result.mistake).toContain("が");
+    expect(result.mistake).toContain("は");
+    expect(result.mistake).not.toMatch(/order/i);
+  });
 });
 
 describe("particle selection", () => {
