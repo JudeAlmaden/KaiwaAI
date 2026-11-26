@@ -34,8 +34,7 @@ describe("session-composer", () => {
       // Active pool (new cards)
       createCard({ id: "new-1", repetitions: 0, easeFactor: 2.5, interval: 0, nextReview: now }),
       createCard({ id: "new-2", repetitions: 0, easeFactor: 2.5, interval: 0, nextReview: now }),
-      // Active pool (struggling cards: easeFactor < 2.2 AND interval < 3)
-      createCard({ id: "struggle-1", repetitions: 2, easeFactor: 2.0, interval: 2, nextReview: past }),
+      createCard({ id: "new-3", repetitions: 0, easeFactor: 2.5, interval: 0, nextReview: now }),
       // Maintenance pool (due cards)
       createCard({ id: "due-1", repetitions: 5, easeFactor: 2.5, interval: 10, nextReview: past }),
       createCard({ id: "due-2", repetitions: 4, easeFactor: 2.6, interval: 15, nextReview: past }),
@@ -48,29 +47,26 @@ describe("session-composer", () => {
     expect(activeCards.length).toBe(3); // 50% of 5 = 3
     expect(maintenanceCards.length).toBe(2); // 50% of 5 = 2
 
-    // Active cards should be in the active pool
-    expect(activeCards.every(c => 
-      c.repetitions === 0 || (c.easeFactor < 2.2 && c.interval < 3)
-    )).toBe(true);
+    // Active cards should only be new cards
+    expect(activeCards.every(c => c.repetitions === 0)).toBe(true);
 
-    // Maintenance cards should NOT be in active pool
-    expect(maintenanceCards.every(c => 
-      !(c.repetitions === 0 || (c.easeFactor < 2.2 && c.interval < 3))
-    )).toBe(true);
+    // Maintenance cards should only be studied cards
+    expect(maintenanceCards.every(c => c.repetitions > 0)).toBe(true);
   });
 
-  it("should prioritize struggling cards in active pool", () => {
-    // Cards should be pre-sorted by caller (easeFactor, repetitions, createdAt)
+  it("keeps active pool limited to new cards even when struggling studied cards exist", () => {
+    const past = new Date(Date.now() - 1000 * 60 * 60 * 24);
     const cards = [
-      createCard({ id: "struggle-low", repetitions: 3, easeFactor: 1.8, interval: 2 }),
-      createCard({ id: "struggle-high", repetitions: 3, easeFactor: 2.1, interval: 2 }),
+      createCard({ id: "struggle-low", repetitions: 3, easeFactor: 1.8, interval: 2, nextReview: past }),
+      createCard({ id: "struggle-high", repetitions: 3, easeFactor: 2.1, interval: 2, nextReview: past }),
       createCard({ id: "new-1", repetitions: 0, easeFactor: 2.5, interval: 0 }),
     ];
 
-    const { activeCards } = composeSession(cards, 5);
+    const { activeCards, maintenanceCards } = composeSession(cards, 5);
 
-    // Lower ease factor should come first (already sorted by caller)
-    expect(activeCards[0].id).toBe("struggle-low");
+    expect(activeCards.map(c => c.id)).toEqual(["new-1"]);
+    expect(maintenanceCards.map(c => c.id)).toContain("struggle-low");
+    expect(maintenanceCards.map(c => c.id)).toContain("struggle-high");
   });
 
   it("should exclude active cards from maintenance pool", () => {
@@ -231,26 +227,23 @@ describe("session-composer", () => {
     expect(session.length).toBe(8);
   });
 
-  it("should prioritize new cards over weak old cards in active pool", () => {
+  it("keeps weak old cards in maintenance rather than active pool", () => {
+    const past = new Date(Date.now() - 1000 * 60 * 60 * 24);
     const cards = [
-      // Weak old card that meets BOTH criteria (ease < 2.2 AND interval < 3)
-      createCard({ id: "weak-old", repetitions: 3, easeFactor: 1.8, interval: 2 }),
+      // Weak old card — still maintenance, not active
+      createCard({ id: "weak-old", repetitions: 3, easeFactor: 1.8, interval: 2, nextReview: past }),
       // New cards
       createCard({ id: "new-1", repetitions: 0, easeFactor: 2.5, interval: 0 }),
       createCard({ id: "new-2", repetitions: 0, easeFactor: 2.5, interval: 0 }),
     ];
 
-    // Use larger session size to get all 3 active cards
-    const { activeCards } = composeSession(cards, 8);
+    const { activeCards, maintenanceCards } = composeSession(cards, 8);
 
-    // All three should be in active pool (50% of 8 = 4)
-    expect(activeCards.length).toBe(3);
-    
-    // New cards should be included (repetitions = 0)
+    expect(activeCards.length).toBe(2);
     expect(activeCards.some(c => c.id === "new-1")).toBe(true);
     expect(activeCards.some(c => c.id === "new-2")).toBe(true);
-    // Weak old card meets both criteria
-    expect(activeCards.some(c => c.id === "weak-old")).toBe(true);
+    expect(activeCards.some(c => c.id === "weak-old")).toBe(false);
+    expect(maintenanceCards.some(c => c.id === "weak-old")).toBe(true);
   });
 
   it("should exclude active-pool cards reviewed within the last 10 minutes (cooldown)", () => {
@@ -259,70 +252,46 @@ describe("session-composer", () => {
     const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
 
     const cards = [
-      // Weak FSRS card, reviewed 5 min ago — should be excluded by cooldown
-      createCard({
-        id: "cooling-down",
-        repetitions: 2,
-        easeFactor: 2.0,
-        interval: 2,
-        nextReview: past,
-        difficulty: 8,
-        stability: 2,
-        retrievability: 1.0,
-        lastReviewedAt: fiveMinAgo,
-      }),
-      // Same-kind weak card, reviewed 15 min ago — cooldown expired
-      createCard({
-        id: "cooldown-expired",
-        repetitions: 2,
-        easeFactor: 2.0,
-        interval: 2,
-        nextReview: past,
-        difficulty: 8,
-        stability: 2,
-        retrievability: 1.0,
-        lastReviewedAt: fifteenMinAgo,
-      }),
-      // Brand-new card reviewed 5 min ago — also excluded (same guard)
+      // Brand-new card reviewed 5 min ago — excluded by 10-minute active cooldown
       createCard({
         id: "new-cooling",
         repetitions: 0,
         nextReview: past,
         lastReviewedAt: fiveMinAgo,
       }),
+      // Brand-new card reviewed 15 min ago — cooldown expired
+      createCard({
+        id: "new-cooldown-expired",
+        repetitions: 0,
+        nextReview: past,
+        lastReviewedAt: fifteenMinAgo,
+      }),
     ];
 
-    const { activeCards, maintenanceCards } = composeSession(cards, 10);
+    const { activeCards } = composeSession(cards, 10);
 
-    expect(activeCards.some(c => c.id === "cooling-down")).toBe(false);
     expect(activeCards.some(c => c.id === "new-cooling")).toBe(false);
-    expect(activeCards.some(c => c.id === "cooldown-expired")).toBe(true);
-    // The 5-min-ago card is out of the active pool (10-minute cooldown) but its
-    // maintenance cooldown (2 minutes) has expired, so it can come back as a
-    // review card — that is what makes a second session non-empty.
-    expect(maintenanceCards.some(c => c.id === "cooling-down")).toBe(true);
+    expect(activeCards.some(c => c.id === "new-cooldown-expired")).toBe(true);
   });
 
-  it("should exclude old weak cards with longer intervals from active pool", () => {
+  it("places all studied cards in maintenance regardless of difficulty or interval", () => {
     const past = new Date(Date.now() - 1000 * 60 * 60 * 24);
     
     const cards = [
       // New card - should be active
       createCard({ id: "new-1", repetitions: 0, easeFactor: 2.5, interval: 0 }),
-      // Weak but long interval - should NOT be active
+      // Weak but long interval - maintenance
       createCard({ id: "weak-long", repetitions: 5, easeFactor: 1.9, interval: 7, nextReview: past }),
-      // Weak AND short interval - should be active
+      // Weak AND short interval - also maintenance
       createCard({ id: "weak-short", repetitions: 3, easeFactor: 1.8, interval: 2, nextReview: past }),
     ];
 
     const { activeCards, maintenanceCards } = composeSession(cards, 5);
 
-    // New and weak-short should be active
     expect(activeCards.some(c => c.id === "new-1")).toBe(true);
-    expect(activeCards.some(c => c.id === "weak-short")).toBe(true);
-    
-    // Weak-long should be in maintenance
+    expect(activeCards.some(c => c.id === "weak-short")).toBe(false);
     expect(activeCards.some(c => c.id === "weak-long")).toBe(false);
+    expect(maintenanceCards.some(c => c.id === "weak-short")).toBe(true);
     expect(maintenanceCards.some(c => c.id === "weak-long")).toBe(true);
   });
 

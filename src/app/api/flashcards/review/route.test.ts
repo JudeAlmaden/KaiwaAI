@@ -234,7 +234,7 @@ describe("Review API - GET", () => {
         where: expect.objectContaining({
           userId: "user-123",
           AND: [
-            { lapses: { gte: 3 } },
+            { lapses: { gte: 5 } },
             { interval: { lt: 7 } },
           ],
         }),

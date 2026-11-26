@@ -9,6 +9,7 @@ import {
   needsMaintenanceTopUp,
 } from "@/lib/review/maintenance-window";
 import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE, isNewCard } from "@/lib/review/lifecycle";
+import { LEECH_MAX_INTERVAL_DAYS, LEECH_MIN_LAPSES } from "@/lib/review/leech";
 import {
   introducedTodayWhere,
   isLearningPoolFull,
@@ -86,12 +87,12 @@ export async function GET(req: Request) {
     ];
   } else if (studyMode === "leeches") {
     vocabWhere.AND = [
-      { lapses: { gte: 3 } },
-      { interval: { lt: 7 } }
+      { lapses: { gte: LEECH_MIN_LAPSES } },
+      { interval: { lt: LEECH_MAX_INTERVAL_DAYS } }
     ];
     kanjiWhere.AND = [
-      { lapses: { gte: 3 } },
-      { interval: { lt: 7 } }
+      { lapses: { gte: LEECH_MIN_LAPSES } },
+      { interval: { lt: LEECH_MAX_INTERVAL_DAYS } }
     ];
   }
 

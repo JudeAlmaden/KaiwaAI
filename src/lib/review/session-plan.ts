@@ -67,8 +67,8 @@ export const SESSION_PLANS: SessionPlan[] = [
   {
     id: "trouble-spots",
     label: "Trouble Spots",
-    badge: "Missed 3+ times",
-    hint: "Targets stubborn cards you've stumbled on 3 or more times with short intervals.",
+    badge: "Missed 5+ times",
+    hint: "Targets stubborn cards you've stumbled on 5 or more times with short intervals.",
     studyMode: "leeches",
     learningRatio: 0,
   },

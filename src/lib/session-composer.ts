@@ -106,19 +106,11 @@ export function composeSession<T extends Card>(
 
   for (const card of allCards) {
     const isNew = isNewCard(card);
-    const hasFsrs =
-      card.difficulty != null &&
-      card.stability != null &&
-      !isNaN(card.difficulty) &&
-      !isNaN(card.stability);
-    const isWeakAndShort = hasFsrs
-      ? card.difficulty! > 7 && card.stability! < 5
-      : card.easeFactor < 2.2 && card.interval < 3;
 
     // A filling session carries new cards even at ratio 0: it still has to reach
     // its card count once the due pool runs out.
     const canAddNew = isNew && newCardsAdded < newQuota;
-    const isActive = (canAddNew || isWeakAndShort) && (ratio > 0 || fillSession);
+    const isActive = canAddNew && (ratio > 0 || fillSession);
     const wasJustReviewed =
       card.lastReviewedAt != null && card.lastReviewedAt >= activeCooldownAgo;
 

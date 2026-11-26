@@ -256,6 +256,10 @@ export default function StandaloneAppLockPage() {
 
     async function init() {
       try {
+        try {
+          sessionStorage.removeItem('kaiwa_app_lock_completed');
+        } catch { }
+        setCompletedCount(0);
         const params = new URLSearchParams(window.location.search);
         const pkg = params.get('blocked_package');
         const countParam = params.get('count');
@@ -385,15 +389,15 @@ export default function StandaloneAppLockPage() {
         // Slice down to exact requirement count for the session deck
         const slicedCards = availableCards.slice(0, effectiveRequirement);
 
-        // A mixed block picks one direction for the whole session. Rerolling per
-        // card showed the same card JP→EN in one block and EN→JP in the next.
-        const sessionDirection: 'jp-to-en' | 'en-to-jp' =
-          direction === 'mixed' ? (Math.random() < 0.5 ? 'jp-to-en' : 'en-to-jp') : direction;
-
         setCards(
           slicedCards.map((c) => ({
             ...c,
-            _dir: sessionDirection,
+            _dir:
+              direction === 'mixed'
+                ? Math.random() < 0.5
+                  ? 'jp-to-en'
+                  : 'en-to-jp'
+                : direction,
           }))
         );
         setInitResult({ kind: 'session' });
@@ -496,16 +500,18 @@ export default function StandaloneAppLockPage() {
           // Do NOT increment completedCount!
           // Track as failed card so Good & Easy are disabled when it returns
           setFailedCardIds((prev) => new Set(prev).add(card.id));
-          // Re-insert the card at least 3 positions ahead (so >= 2 cards intervene)
-          // or at the very end when fewer cards remain.
+          // Re-insert the card with a dynamic buffer (up to 2 intervening cards
+          // for normal decks, scaling down for 2-3 card pools).
+          const bufferSize = Math.min(2, Math.max(0, Math.floor(cards.length / 2) - 1));
           const nextCards = [...cards];
           const [failedCard] = nextCards.splice(currentIndex, 1);
           const remainingAhead = nextCards.length - currentIndex;
+          const minOffset = bufferSize + 1;
           let targetIndex: number;
-          if (remainingAhead < 3) {
+          if (remainingAhead < minOffset) {
             targetIndex = nextCards.length;
           } else {
-            const minIndex = currentIndex + 3;
+            const minIndex = currentIndex + minOffset;
             const maxIndex = nextCards.length;
             targetIndex = minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
           }

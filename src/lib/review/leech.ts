@@ -6,7 +6,7 @@
  * /api/review/mixed, /api/flashcards/review and /api/kanji/review so the badge
  * and the deck filter never disagree.
  */
-export const LEECH_MIN_LAPSES = 3;
+export const LEECH_MIN_LAPSES = 5;
 export const LEECH_MAX_INTERVAL_DAYS = 7;
 
 export type LeechInput = {

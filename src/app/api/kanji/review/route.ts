@@ -9,6 +9,7 @@ import {
   needsMaintenanceTopUp,
 } from "@/lib/review/maintenance-window";
 import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
+import { LEECH_MAX_INTERVAL_DAYS, LEECH_MIN_LAPSES } from "@/lib/review/leech";
 import { introducedTodayWhere, resolveNewAllowance, startOfToday } from "@/lib/review/intake";
 import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
 import { DEFAULT_LEARNING_CONFIG } from "@/lib/learning-config";
@@ -172,8 +173,8 @@ export async function GET(req: Request) {
     ];
   } else if (studyMode === "leeches") {
     where.AND = [
-      { lapses: { gte: 3 } },
-      { interval: { lt: 7 } }
+      { lapses: { gte: LEECH_MIN_LAPSES } },
+      { interval: { lt: LEECH_MAX_INTERVAL_DAYS } }
     ];
   }
 
