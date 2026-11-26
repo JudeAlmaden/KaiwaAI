@@ -48,20 +48,22 @@ describe("resolvePlan — legacy and hand-tuned configs", () => {
     ratio?: number;
     expected: string;
   }[] = [
-    { studyMode: "due", ratio: 0, expected: "due-reviews" },
-    { studyMode: "due", ratio: 0.2, expected: "gentle" },
-    { studyMode: "due", ratio: 0.5, expected: "due-new" },
+    { studyMode: "due", ratio: 0, expected: "reviews-only" },
+    { studyMode: "due", ratio: 0.2, expected: "casual-drip" },
+    { studyMode: "due", ratio: 0.5, expected: "active-intake" },
+    { studyMode: "due", ratio: 1, expected: "all-new" },
     // Missing ratio falls back to the composer's 0.5 default.
-    { studyMode: "due", expected: "due-new" },
-    { studyMode: "all", ratio: 0.5, expected: "ahead" },
-    { studyMode: "all", expected: "ahead" },
-    // Ratio is inert on these pools, so any value is the same session.
-    { studyMode: "struggling", ratio: 0, expected: "weak" },
-    { studyMode: "struggling", ratio: 0.5, expected: "weak" },
-    { studyMode: "leeches", ratio: 1, expected: "leeches" },
+    { studyMode: "due", expected: "active-intake" },
+    // Study ahead and Weak cards are gone: their old configs stay editable as
+    // a custom mix (study-ahead only happens as the composer's last resort).
+    { studyMode: "all", ratio: 0.5, expected: CUSTOM_PLAN_ID },
+    { studyMode: "all", expected: CUSTOM_PLAN_ID },
+    // Ratio is inert on this pool, so any value is the same session.
+    { studyMode: "struggling", ratio: 0, expected: CUSTOM_PLAN_ID },
+    { studyMode: "struggling", ratio: 0.5, expected: CUSTOM_PLAN_ID },
+    { studyMode: "leeches", ratio: 1, expected: "trouble-spots" },
     // Genuinely hand-tuned combinations keep their settings via "custom".
     { studyMode: "due", ratio: 0.7, expected: CUSTOM_PLAN_ID },
-    { studyMode: "due", ratio: 1, expected: CUSTOM_PLAN_ID },
     { studyMode: "all", ratio: 0, expected: CUSTOM_PLAN_ID },
     { studyMode: "all", ratio: 1, expected: CUSTOM_PLAN_ID },
     { studyMode: "recent", ratio: 0.5, expected: CUSTOM_PLAN_ID },
@@ -78,10 +80,10 @@ describe("resolvePlan — legacy and hand-tuned configs", () => {
 
 describe("session plans → composer split", () => {
   const expected: Record<string, { active: number; maintenance: number }> = {
-    "due-reviews": { active: 0, maintenance: 10 },
-    gentle: { active: 2, maintenance: 8 },
-    "due-new": { active: 5, maintenance: 5 },
-    ahead: { active: 5, maintenance: 5 },
+    "reviews-only": { active: 0, maintenance: 10 },
+    "casual-drip": { active: 2, maintenance: 8 },
+    "active-intake": { active: 5, maintenance: 5 },
+    "all-new": { active: 10, maintenance: 0 },
   };
 
   for (const plan of SESSION_PLANS) {

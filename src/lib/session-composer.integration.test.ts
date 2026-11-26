@@ -112,7 +112,7 @@ describe("session-composer integration with app blocker", () => {
       expect(session.length).toBe(requiredCount);
     });
 
-    it("should prioritize new cards for new users", () => {
+    it("fills a new user's blocked session with new cards when there are no reviews", () => {
       const now = new Date();
       
       // Scenario: New user just added 20 words
@@ -127,12 +127,16 @@ describe("session-composer integration with app blocker", () => {
         })
       );
 
-      const { session, activeCards } = composeSession(cards, 10);
+      const { session, activeCards } = composeSession(cards, 10, false, 0.5, {
+        fillSession: true,
+        maxNewCards: 20,
+        maxNewPerSession: 20,
+      });
 
-      // All new cards go to active pool (50% = 5 cards for session of 10)
-      // But since there are no maintenance cards, overflowActive fills the rest in session
-      expect(session.length).toBeGreaterThan(0);
-      expect(activeCards.length).toBe(5); // 50% target of 10
+      // No reviews exist to fall back on, so the blocked session still reaches
+      // its full size with new cards instead of returning a half session.
+      expect(session.length).toBe(10);
+      expect(activeCards.length).toBe(10);
       expect(activeCards.every(card => card.repetitions === 0)).toBe(true);
     });
 
@@ -230,9 +234,10 @@ describe("session-composer integration with app blocker", () => {
 
       const { session, activeCards } = composeSession(cards, 5);
 
-      // With only new cards, we get 50% target in activeCards (3), overflowActive fills session
-      expect(session.length).toBeGreaterThan(0);
-      expect(activeCards.length).toBe(3); // 50% target of 5
+      // A normal session keeps its 50% active target; only the blocked app asks
+      // for the session to be filled.
+      expect(session.length).toBe(3);
+      expect(activeCards.length).toBe(3);
     });
   });
 
@@ -289,19 +294,18 @@ describe("session-composer integration with app blocker", () => {
 
       const { session, activeCards } = composeSession(cards, 5);
 
-      // All new cards, so activeCards hits the 50% target (3); overflow fills session
-      expect(session.length).toBeGreaterThan(0);
-      expect(activeCards.length).toBe(3); // 50% target of 5
-      // Practice mode doesn't affect card selection, only grading
+      // Practice mode only changes grading, not the mix.
+      expect(session.length).toBe(3);
+      expect(activeCards.length).toBe(3);
     });
   });
 
-  describe("noDueAction compatibility", () => {
-    it("should handle noDueAction=autoOpen (no due cards scenario)", () => {
+  describe("empty due pool", () => {
+    it("serves study-ahead cards instead of skipping the session", () => {
       const now = new Date();
       const future = new Date(now.getTime() + 1000 * 60 * 60 * 24);
-      
-      // All cards are in future (none due)
+
+      // Nothing is due yet.
       const cards = Array.from({ length: 10 }, (_, i) =>
         createMockCard({
           id: `future-${i}`,
@@ -312,15 +316,49 @@ describe("session-composer integration with app blocker", () => {
         })
       );
 
-      const { session, maintenanceCards } = composeSession(cards, 5);
+      const { session, maintenanceCards } = composeSession(cards, 5, false, 0.5, {
+        fillSession: true,
+      });
 
-      // No maintenance cards (none are due)
-      expect(maintenanceCards.length).toBe(0);
-      // Should still return session if there are cards
-      expect(session.length).toBeGreaterThanOrEqual(0);
+      // A blocked app still gets its cards, taken before their due date.
+      expect(maintenanceCards.length).toBe(5);
+      expect(session.length).toBe(5);
     });
 
-    it("should handle noDueAction=studyAny (fallback to all cards)", () => {
+    it("leaves a normal due session short rather than studying ahead", () => {
+      const now = new Date();
+      const future = new Date(now.getTime() + 1000 * 60 * 60 * 24);
+
+      // Three due cards and a pile of cards that aren't due yet.
+      const cards = [
+        ...Array.from({ length: 3 }, (_, i) =>
+          createMockCard({
+            id: `due-${i}`,
+            repetitions: 5,
+            easeFactor: 2.5,
+            interval: 10,
+            nextReview: now,
+          })
+        ),
+        ...Array.from({ length: 10 }, (_, i) =>
+          createMockCard({
+            id: `future-${i}`,
+            repetitions: 5,
+            easeFactor: 2.5,
+            interval: 10,
+            nextReview: future,
+          })
+        ),
+      ];
+
+      const { session } = composeSession(cards, 10, false, 0);
+
+      // No study-ahead leakage without fillSession.
+      expect(session.length).toBe(3);
+      expect(session.every((card) => card.nextReview <= now)).toBe(true);
+    });
+
+    it("falls back to any card when only some are due", () => {
       const now = new Date();
       const past = new Date(now.getTime() - 1000 * 60 * 60 * 24);
       
@@ -337,7 +375,7 @@ describe("session-composer integration with app blocker", () => {
         }),
       ];
 
-      const { session } = composeSession(cards, 3);
+      const { session } = composeSession(cards, 3, false, 0.5, { fillSession: true });
 
       // Should create a session with available cards
       expect(session.length).toBeGreaterThan(0);

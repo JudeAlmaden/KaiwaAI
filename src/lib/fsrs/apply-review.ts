@@ -52,6 +52,12 @@ export interface ApplyReviewInput {
   cardType: "flashcard" | "kanji";
   earlyReviewStrategy?: EarlyReviewStrategy;
   desiredRetention?: number;
+  /**
+   * A blocked-app session: grade 0 still reschedules, but it is not counted as a
+   * lapse. Being interrupted into your hardest cards must not push a card toward
+   * the leech threshold it is then fed back as.
+   */
+  suppressLapse?: boolean;
 }
 
 function hasFsrsState(card: ReviewableCard): boolean {
@@ -97,7 +103,7 @@ function sm2IntervalFromStability(stability: number, retention: number): number 
  * Apply FSRS scheduling (with SM-2 fallback) to a card review.
  */
 export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
-  const { card, grade, cardType, earlyReviewStrategy } = input;
+  const { card, grade, cardType, earlyReviewStrategy, suppressLapse } = input;
   const retention =
     parseDesiredRetention(input.desiredRetention) ?? getServerDesiredRetention();
   const now = new Date();
@@ -183,6 +189,13 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
     const result = scheduler.schedule(state, grade as FSRSGrade, fsrsOptions);
     // A lapse is due again in 10 minutes, so the stored interval must not claim
     // days — the two used to disagree and skew mastery/leech displays.
+    // When triggered from Focus Guard (suppressLapse), use a 4-hour cooldown so
+    // failed cards don't haunt every subsequent app open.
+    const LOCK_LAPSE_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+    const nextReview =
+      grade === 0 && suppressLapse
+        ? new Date(now.getTime() + LOCK_LAPSE_COOLDOWN_MS)
+        : result.nextReview;
     const interval = grade === 0 ? 0 : sm2IntervalFromStability(result.stability, retention);
     const repetitions = grade === 0 ? 0 : card.repetitions + 1;
 
@@ -192,14 +205,14 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       repetitions,
       // One graduation rule for both schedulers (see review/lifecycle.ts).
       status: cardStatus({ repetitions, interval }),
-      nextReview: result.nextReview,
+      nextReview,
       difficulty: result.difficulty,
       stability: result.stability,
       retrievability: result.retrievability,
       lastReviewedAt: now,
       firstLearnedAt,
       timesReviewedIncrement: 1,
-      lapsesIncrement: grade === 0 && !isEarly ? 1 : 0,
+      lapsesIncrement: grade === 0 && !isEarly && !suppressLapse ? 1 : 0,
     };
   } catch (error) {
     const sm2Options =
@@ -231,7 +244,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
       // this card, so clear them and let the next review re-convert.
       clearFsrs: true,
       timesReviewedIncrement: 1,
-      lapsesIncrement: grade === 0 && !isEarly ? 1 : 0,
+      lapsesIncrement: grade === 0 && !isEarly && !suppressLapse ? 1 : 0,
     };
   }
 }

@@ -37,6 +37,20 @@ describe("applyFsrsReview — payload rules", () => {
     expect(buildReviewPersistData(result).lapses).toEqual({ increment: 1 });
   });
 
+  it("does not count a blocked-session grade 0 as a lapse and spaces it 4 hours out", () => {
+    const before = Date.now();
+    const result = applyFsrsReview({
+      card: makeCard({ nextReview: new Date(Date.now() - DAY_MS) }),
+      grade: 0,
+      cardType: "flashcard",
+      earlyReviewStrategy: "proportional",
+      suppressLapse: true,
+    });
+    expect(result.lapsesIncrement).toBe(0);
+    const diffMs = result.nextReview.getTime() - before;
+    expect(diffMs).toBeGreaterThanOrEqual(3.9 * 60 * 60 * 1000);
+  });
+
   it("does not count an early review as a lapse", () => {
     const result = applyFsrsReview({
       card: makeCard({ nextReview: new Date(Date.now() + 5 * DAY_MS) }),

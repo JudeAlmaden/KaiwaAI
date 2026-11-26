@@ -616,7 +616,6 @@ export default function QuestGallery({
         studyMode={appBlockerConfig.studyMode}
         practice={appBlockerConfig.practice}
         learningRatio={appBlockerConfig.learningRatio}
-        noDueAction={appBlockerConfig.noDueAction}
         onUpdateAppBlockerConfig={onUpdateAppBlockerConfig}
         showAppManagerLink={true}
       />

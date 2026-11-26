@@ -5,9 +5,11 @@ export type BlockerStudyMode =
   | 'struggling'  // Low ease factor (<2.0)
   | 'leeches';    // Many reviews but still short interval
 
+// Stored in the native config and the interception URL, but no longer a choice:
+// an empty pool always falls back to any card. Kept so old payloads still parse.
 export type BlockerNoDueAction =
-  | 'autoOpen'    // Nothing due — just unlock and launch the blocked app
-  | 'studyAny';   // Fallback to studyMode="all" (use any available cards)
+  | 'autoOpen'
+  | 'studyAny';
 
 export type BlockerEarlyReviewStrategy = 'practice' | 'proportional';
 export type BlockerFuriganaMode = 'always' | 'learning_only' | 'never';

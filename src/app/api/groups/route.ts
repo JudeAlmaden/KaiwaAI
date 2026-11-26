@@ -97,6 +97,7 @@ export async function GET(req: Request) {
         lastAt: last?.createdAt ?? m.chat.createdAt,
         members: m.chat.members.map((mem) => ({
           kind: mem.kind,
+          status: mem.status,
           name:
             mem.nickname ??
             (mem.kind === "user"

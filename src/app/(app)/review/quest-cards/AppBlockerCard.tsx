@@ -16,8 +16,8 @@ type AppBlockerCardProps = {
 export default function AppBlockerCard({
   isMonitoring,
   requirementCount,
-  studyMode = 'all',
-  learningRatio = 0.5,
+  studyMode = 'due',
+  learningRatio = 0.2,
   reviewType = 'vocabulary',
   onClick,
 }: AppBlockerCardProps) {

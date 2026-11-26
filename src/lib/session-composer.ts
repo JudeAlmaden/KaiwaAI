@@ -25,24 +25,31 @@ export interface ComposeSessionOptions {
   maxNewCards?: number;
   /** Fixed per-session intake of new cards (default: unlimited for backwards compatibility). */
   maxNewPerSession?: number;
+  /**
+   * Keep the session at its requested size by carrying on past the plan: new
+   * cards at any ratio, then studied cards that aren't due yet. Only the blocked
+   * app turns this on — a normal study session must respect what it asked for.
+   */
+  fillSession?: boolean;
 }
 
 /**
  * Composes a review session from active (focused learning) and maintenance
  * (retention) pools.
  *
- * Active slots: `learningRatio` share of the session. Filled by new cards (up to
- * the per-session intake quota AND the daily ceiling) and then by weak cards.
+ * Active slots: `learningRatio` share of the session, filled by new cards (up to
+ * the per-session intake quota AND the daily ceiling) and then weak cards.
  *
- * Maintenance slots: the rest of the session. Reviewed cards only, rotated by
+ * Maintenance slots: the rest of the session, reviewed cards only, rotated by
  * least-recently-reviewed so consecutive sessions don't replay the same cards.
  *
  * Composition rules:
  *   - New cards are rationed: never more than `maxNewCards`/`maxNewPerSession`,
- *     and never used to pad a session past the active target.
- *   - Reviews fill every remaining slot, so a short active pool means more
- *     maintenance (never more new cards).
- *   - If reviews run short the session is simply shorter; new cards never pad it.
+ *     and never used to pad a session past the active target while reviews exist.
+ *   - With `fillSession` (the blocked app) a short pool still reaches the full
+ *     card count: due reviews first, then new cards within the intake quota, then
+ *     any studied card (study-ahead, nearest due date first). The quota still caps
+ *     new cards, so reaching it means the session continues on existing cards.
  *   - Cards reviewed in the last 2 minutes are held back from maintenance, and
  *     cards reviewed in the last 10 minutes from active, so a second session
  *     started immediately after the first still gets review cards.
@@ -90,9 +97,11 @@ export function composeSession<T extends Card>(
     options?.maxNewCards ?? Number.POSITIVE_INFINITY,
     options?.maxNewPerSession ?? Number.POSITIVE_INFINITY
   );
+  const fillSession = options?.fillSession === true;
 
   const activePool: T[] = [];
   const maintenancePool: T[] = [];
+  const aheadPool: T[] = [];
   let newCardsAdded = 0;
 
   for (const card of allCards) {
@@ -106,8 +115,10 @@ export function composeSession<T extends Card>(
       ? card.difficulty! > 7 && card.stability! < 5
       : card.easeFactor < 2.2 && card.interval < 3;
 
+    // A filling session carries new cards even at ratio 0: it still has to reach
+    // its card count once the due pool runs out.
     const canAddNew = isNew && newCardsAdded < newQuota;
-    const isActive = (canAddNew || isWeakAndShort) && ratio > 0;
+    const isActive = (canAddNew || isWeakAndShort) && (ratio > 0 || fillSession);
     const wasJustReviewed =
       card.lastReviewedAt != null && card.lastReviewedAt >= activeCooldownAgo;
 
@@ -115,11 +126,14 @@ export function composeSession<T extends Card>(
       activePool.push(card);
       if (isNew) newCardsAdded++;
     } else if (!isNew) {
-      const isDue = ignoreDueDate || card.nextReview <= now;
       const wasRecentlyReviewed =
         card.lastReviewedAt != null && card.lastReviewedAt >= maintenanceCooldownAgo;
-      if (isDue && !wasRecentlyReviewed) {
+      if (wasRecentlyReviewed) continue;
+      if (ignoreDueDate || card.nextReview <= now) {
         maintenancePool.push(card);
+      } else if (fillSession) {
+        // Studied but not due yet: the last resort that keeps a session full.
+        aheadPool.push(card);
       }
     }
   }
@@ -137,21 +151,44 @@ export function composeSession<T extends Card>(
 
   const maintenanceTarget = safeSize - activeTarget;
   const selectedMaintenance = rotatedMaintenance.slice(0, maintenanceTarget);
-  const maintenanceExtra = rotatedMaintenance.slice(selectedMaintenance.length);
-  const activeExtra = activePool.slice(activeTarget);
 
-  // Reviews fill the session; a short active pool donates its slots to reviews.
-  const missing = safeSize - selectedActive.length - selectedMaintenance.length;
+  // Cascade: due reviews → new cards inside the quota → any studied card.
+  let missing = safeSize - selectedActive.length - selectedMaintenance.length;
+
   if (missing > 0) {
-    selectedMaintenance.push(...maintenanceExtra.slice(0, missing));
+    const queueable = rotatedMaintenance.slice(
+      selectedMaintenance.length,
+      selectedMaintenance.length + missing
+    );
+    selectedMaintenance.push(...queueable);
+    missing -= queueable.length;
   }
 
-  // Remaining gaps may only be filled by reviewed cards — never by extra new
-  // cards beyond the intake quota.
-  const stillMissing = safeSize - selectedActive.length - selectedMaintenance.length;
-  if (stillMissing > 0) {
-    const reviewedExtras = activeExtra.filter((c) => (c.repetitions ?? 0) > 0);
-    selectedActive.push(...reviewedExtras.slice(0, stillMissing));
+  const activeExtras = activePool.slice(activeTarget);
+  if (fillSession && missing > 0) {
+    const extraNew = activeExtras.filter((c) => isNewCard(c)).slice(0, missing);
+    selectedActive.push(...extraNew);
+    missing -= extraNew.length;
+  }
+
+  if (missing > 0) {
+    const extraReviewed = activeExtras
+      .filter((c) => !isNewCard(c))
+      .slice(0, missing);
+    selectedActive.push(...extraReviewed);
+    missing -= extraReviewed.length;
+  }
+
+  if (fillSession && missing > 0) {
+    const selectedIds = new Set([
+      ...selectedActive.map((c) => c.id),
+      ...selectedMaintenance.map((c) => c.id),
+    ]);
+    const ahead = aheadPool
+      .filter((c) => !selectedIds.has(c.id))
+      .sort((a, b) => a.nextReview.getTime() - b.nextReview.getTime())
+      .slice(0, missing);
+    selectedMaintenance.push(...ahead);
   }
 
   // Rotate selection, then shuffle within the chosen set for session order.

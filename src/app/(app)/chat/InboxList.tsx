@@ -92,12 +92,21 @@ export function ConversationRow({
     else onHide?.(convo.id);
   }
 
+  // Pending invitees are dropped with the chat, so only accepted members keep
+  // it alive after the delete.
+  const sharedWithHumans =
+    convo.members.filter((m) => m.kind === "user" && m.status !== "pending")
+      .length > 1;
+
   async function handleDelete() {
     if (deleting || !onDelete) return;
-    const leaving = isGroup && !convo.isOwner;
     const ok = window.confirm(
-      leaving
-        ? "Leave this group? It disappears from your chats for good. The others keep its history."
+      isGroup
+        ? convo.isOwner
+          ? sharedWithHumans
+            ? "Leave this group? It disappears from your chats for good; the other members keep its history and take over. This can't be undone."
+            : "Delete this group for good? No one else is in it, so it and its messages are deleted permanently."
+          : "Leave this group? It disappears from your chats for good. The others keep its history."
         : "Delete this chat for you? It disappears from your chats for good and can't be restored."
     );
     if (!ok) return;

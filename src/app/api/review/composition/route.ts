@@ -23,6 +23,8 @@ export async function GET() {
     kanjiIntroduced,
     vocabReviewedToday,
     kanjiReviewedToday,
+    vocabAhead,
+    kanjiAhead,
   ] = await Promise.all([
     // `timesReviewed: 0` is part of the definition of new: a card that lapsed
     // back to repetitions 0 is maintenance, not an introduction.
@@ -49,12 +51,29 @@ export async function GET() {
     prisma.userKanji.count({
       where: { userId: user.id, lastReviewedAt: { gte: startOfToday(now, user.timezone) } },
     }),
+    // Studied but not due yet: the session keeps going with these once the due
+    // pool is spent, so the projected total has to count them.
+    prisma.userFlashcard.count({
+      where: {
+        userId: user.id,
+        AND: [STUDIED_CARD_WHERE],
+        nextReview: { gt: now },
+      },
+    }),
+    prisma.userKanji.count({
+      where: {
+        userId: user.id,
+        AND: [STUDIED_CARD_WHERE],
+        nextReview: { gt: now },
+      },
+    }),
   ]);
 
   return NextResponse.json({
     due: {
       new: vocabNew + kanjiNew,
       review: vocabReview + kanjiReview,
+      ahead: vocabAhead + kanjiAhead,
     },
     vocab: { new: vocabNew, review: vocabReview },
     kanji: { new: kanjiNew, review: kanjiReview },
