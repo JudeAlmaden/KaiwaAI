@@ -4,6 +4,8 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-11-26
+
 ### Added
 - **Lapse decay** — after 5 consecutive passing reviews (`successesSinceLapse` reaches 5), a card's `lapses` counter decrements by 1 (floored at 0) and the streak resets, allowing recovered cards to naturally exit Trouble Spots / leech status. Failing with Again (unless `suppressLapse` is set) or resetting progress resets the streak.
 - **Server-side emergency pass validation** — Focus Guard's 1/day emergency unlock is now enforced on the server via `User.lastEmergencyPassAt` and `POST /api/app-lock/emergency-pass`, preventing localStorage clears or device switches from bypassing the 24-hour cooldown.
