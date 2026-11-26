@@ -2,6 +2,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { dayKeyFor, previousDayKey, startOfDayInTimezone } from "@/lib/day";
 import { currentStreak } from "@/lib/streak";
+import { STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
 import type { User } from "@/generated/prisma/client";
 
 export type DashboardStats = {
@@ -72,8 +73,18 @@ export const getDashboardStatsForUser = cache(async (user: User): Promise<Dashbo
       prisma.userFlashcard.count({ where: { userId: user.id, status: "known" } }),
       prisma.userFlashcard.count({ where: { userId: user.id, status: "learning" } }),
       prisma.userFlashcard.count({ where: { userId: user.id, status: "new" } }),
+      // Due vocab: same split as /api/review/composition (new = never studied,
+      // review = studied at least once). Raw nextReview <= now counted all cards
+      // regardless of study status, inflating dueNow vs what a session delivers.
       prisma.userFlashcard.count({
-        where: { userId: user.id, nextReview: { lte: now } },
+        where: {
+          userId: user.id,
+          nextReview: { lte: now },
+          OR: [
+            { repetitions: 0, timesReviewed: 0 },   // genuinely new
+            { AND: [STUDIED_CARD_WHERE] },            // reviewed at least once
+          ],
+        },
       }),
       prisma.message.count({
         where: {
@@ -85,9 +96,16 @@ export const getDashboardStatsForUser = cache(async (user: User): Promise<Dashbo
       prisma.userKanji.count({ where: { userId: user.id, status: "known" } }),
       prisma.userKanji.count({ where: { userId: user.id, status: "learning" } }),
       prisma.userKanji.count({ where: { userId: user.id, status: "new" } }),
-      // Due means both decks: vocabulary and kanji feed the same review queue.
+      // Due kanji: same split as /api/review/composition.
       prisma.userKanji.count({
-        where: { userId: user.id, nextReview: { lte: now } },
+        where: {
+          userId: user.id,
+          nextReview: { lte: now },
+          OR: [
+            { repetitions: 0, timesReviewed: 0 },
+            { AND: [STUDIED_CARD_WHERE] },
+          ],
+        },
       }),
     ]);
 

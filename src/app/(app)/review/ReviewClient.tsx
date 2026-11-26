@@ -32,6 +32,7 @@ export default function ReviewClient() {
     activeLimit: 5,
   });
   const [dueCount, setDueCount] = useState<number | null>(null);
+  const [kanjiDueCount, setKanjiDueCount] = useState<number | null>(null);
   const [furiganaMode, setFuriganaMode] = useState<FuriganaMode>("always");
 
   const queue = useReviewQueue(setup, () => setPhase("done"));
@@ -72,8 +73,14 @@ export default function ReviewClient() {
   const refreshDueCount = useCallback(() => {
     // Same projected session total as the home screen and the nav badge.
     fetchProjectedMix()
-      .then((mix) => setDueCount(mix?.total ?? 0))
-      .catch(() => setDueCount(0));
+      .then((mix) => {
+        setDueCount(mix?.total ?? 0);
+        setKanjiDueCount(mix?.kanjiDue ?? 0);
+      })
+      .catch(() => {
+        setDueCount(0);
+        setKanjiDueCount(0);
+      });
   }, []);
 
   useEffect(() => {
@@ -247,6 +254,7 @@ export default function ReviewClient() {
         <PageHeader title="Review" jp="復習" subtitle="Choose a quest to begin your session." />
         <QuestGallery
           dueCount={dueCount || 0}
+          kanjiDueCount={kanjiDueCount}
           isMonitoring={isMonitoring}
           isAndroid={true}
           appBlockerConfig={appBlockerConfig}

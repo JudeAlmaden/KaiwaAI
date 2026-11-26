@@ -4,9 +4,20 @@
 
 type KanjiQuestCardProps = {
   onStart: () => void;
+  /** Live due kanji count from the composition API. Null while loading. */
+  dueCount: number | null;
 };
 
-export default function KanjiQuestCard({ onStart }: KanjiQuestCardProps) {
+export default function KanjiQuestCard({ onStart, dueCount }: KanjiQuestCardProps) {
+  const countLabel =
+    dueCount === null
+      ? null
+      : dueCount === 0
+        ? "UP TO DATE"
+        : dueCount > 50
+          ? "50+ DUE"
+          : `${dueCount} DUE`;
+
   return (
     <button
       onClick={onStart}
@@ -31,7 +42,11 @@ export default function KanjiQuestCard({ onStart }: KanjiQuestCardProps) {
 
       <div className="relative z-10 flex flex-wrap gap-1.5 mt-4">
         <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-amber/15 text-amber border border-amber/20">KANJI FOCUS</span>
-        <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-amber/10 text-amber">10 CARDS</span>
+        {countLabel && (
+          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold ${dueCount === 0 ? "bg-mint/10 text-mint" : "bg-amber/10 text-amber"}`}>
+            {countLabel}
+          </span>
+        )}
       </div>
     </button>
   );
