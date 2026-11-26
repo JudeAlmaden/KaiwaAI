@@ -133,3 +133,37 @@ describe("buildReviewPersistData — fallback reset", () => {
     expect(data.lastReviewedAt).toBeInstanceOf(Date);
   });
 });
+
+describe("applyFsrsReview — lapse decay", () => {
+  it("increments successesSinceLapse on passing grades when lapses > 0", () => {
+    const card = makeCard({ lapses: 3, successesSinceLapse: 2 });
+    const result = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+    expect(result.successesSinceLapse).toBe(3);
+    expect(result.lapsesDecrement).toBe(0);
+    expect(buildReviewPersistData(result).successesSinceLapse).toBe(3);
+    expect(buildReviewPersistData(result).lapses).toBeUndefined();
+  });
+
+  it("decrements lapses by 1 and resets streak on the 5th consecutive pass", () => {
+    const card = makeCard({ lapses: 3, successesSinceLapse: 4 });
+    const result = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+    expect(result.successesSinceLapse).toBe(0);
+    expect(result.lapsesDecrement).toBe(1);
+    expect(buildReviewPersistData(result).lapses).toEqual({ decrement: 1 });
+    expect(buildReviewPersistData(result).successesSinceLapse).toBe(0);
+  });
+
+  it("resets successesSinceLapse on Again even when suppressLapse is set", () => {
+    const card = makeCard({ lapses: 3, successesSinceLapse: 4 });
+    const result = applyFsrsReview({
+      card,
+      grade: 0,
+      cardType: "flashcard",
+      suppressLapse: true,
+    });
+    expect(result.lapsesIncrement).toBe(0);
+    expect(result.lapsesDecrement).toBe(0);
+    expect(result.successesSinceLapse).toBe(0);
+    expect(buildReviewPersistData(result).successesSinceLapse).toBe(0);
+  });
+});

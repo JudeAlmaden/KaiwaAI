@@ -1,0 +1,5 @@
+ALTER TABLE "UserKanji"
+  ADD COLUMN "successesSinceLapse" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "UserFlashcard"
+  ADD COLUMN "successesSinceLapse" INTEGER NOT NULL DEFAULT 0;
