@@ -518,7 +518,7 @@ describe("Reviews-only due sessions — lapsed cards (mixed)", () => {
     vi.clearAllMocks();
   });
 
-  it("filters both halves by studied cards and skips the maintenance top-up", async () => {
+  it("fills a blocked session with new cards, then study-ahead cards", async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce({
       id: "user-123",
       email: "test@example.com",
@@ -528,7 +528,7 @@ describe("Reviews-only due sessions — lapsed cards (mixed)", () => {
     vi.mocked(prisma.userKanji.findMany).mockResolvedValue([]);
 
     const res = await GET(
-      new Request("http://localhost/api/review/mixed?studyMode=due&learningRatio=0&limit=10")
+      new Request("http://localhost/api/review/mixed?studyMode=due&learningRatio=0&limit=10&fill=1")
     );
     expect(res.status).toBe(200);
 
@@ -538,12 +538,23 @@ describe("Reviews-only due sessions — lapsed cards (mixed)", () => {
     const kanjiWhere = vi.mocked(prisma.userKanji.findMany).mock.calls[0][0]
       ?.where as unknown as Record<string, unknown>;
 
+    // The reviews-only pool still excludes never-studied cards.
     expect(vocabWhere.AND).toEqual(studied);
     expect(kanjiWhere.AND).toEqual(studied);
     expect(vocabWhere).not.toHaveProperty("repetitions");
     expect(kanjiWhere).not.toHaveProperty("repetitions");
-    // Reviews-only already excludes new cards, so no second top-up query.
-    expect(vi.mocked(prisma.userFlashcard.findMany)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(prisma.userKanji.findMany)).toHaveBeenCalledTimes(1);
+
+    // The pool came back empty, so new cards and then study-ahead cards are
+    // merged in to reach the goal instead of ending the session short.
+    expect(vi.mocked(prisma.userFlashcard.findMany)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(prisma.userKanji.findMany)).toHaveBeenCalledTimes(3);
+    const freshWhere = vi.mocked(prisma.userFlashcard.findMany).mock.calls[1][0]
+      ?.where as unknown as Record<string, unknown>;
+    expect(freshWhere.repetitions).toBe(0);
+    expect(freshWhere.timesReviewed).toBe(0);
+    const aheadWhere = vi.mocked(prisma.userFlashcard.findMany).mock.calls[2][0]
+      ?.where as unknown as Record<string, unknown>;
+    expect(aheadWhere.nextReview).toEqual({ gt: expect.any(Date) });
+    expect(aheadWhere.AND).toEqual(studied);
   });
 });

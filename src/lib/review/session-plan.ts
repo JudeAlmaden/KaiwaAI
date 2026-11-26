@@ -15,17 +15,17 @@ import type { BlockerStudyMode } from "@/plugins/app-blocker/definitions";
  * legacy pair back to a plan, or to `custom`.
  */
 export type SessionPlanId =
-  | "due-reviews"
-  | "gentle"
-  | "due-new"
-  | "ahead"
-  | "weak"
-  | "leeches"
+  | "reviews-only"
+  | "casual-drip"
+  | "active-intake"
+  | "all-new"
+  | "trouble-spots"
   | "custom";
 
 export interface SessionPlan {
   id: SessionPlanId;
   label: string;
+  badge: string;
   hint: string;
   studyMode: BlockerStudyMode;
   learningRatio: number;
@@ -33,44 +33,42 @@ export interface SessionPlan {
 
 export const SESSION_PLANS: SessionPlan[] = [
   {
-    id: "due-reviews",
-    label: "Due reviews",
-    hint: "Only cards the SRS says are due now — no new words.",
+    id: "reviews-only",
+    label: "Reviews Only",
+    badge: "100% Reviews",
+    hint: "Keep what you know fresh. Only due reviews are shown; no new words are introduced.",
     studyMode: "due",
     learningRatio: 0,
   },
   {
-    id: "gentle",
-    label: "Gentle",
-    hint: "Due reviews plus 1–2 new words.",
+    id: "casual-drip",
+    label: "Casual Drip",
+    badge: "80% Reviews · 20% New",
+    hint: "Mostly due reviews, with 1–2 new words mixed in for effortless passive learning.",
     studyMode: "due",
     learningRatio: 0.2,
   },
   {
-    id: "due-new",
-    label: "Due + new",
-    hint: "Half due reviews, half new or weak cards.",
+    id: "active-intake",
+    label: "Active Intake",
+    badge: "50% Reviews · 50% New",
+    hint: "An even split of due reviews and brand-new words to expand your vocabulary faster.",
     studyMode: "due",
     learningRatio: 0.5,
   },
   {
-    id: "ahead",
-    label: "Study ahead",
-    hint: "Half reviews taken before their due date, half new cards.",
-    studyMode: "all",
-    learningRatio: 0.5,
+    id: "all-new",
+    label: "All New",
+    badge: "100% New",
+    hint: "Focus purely on unstudied cards from your deck (falls back to reviews if quota is met).",
+    studyMode: "due",
+    learningRatio: 1,
   },
   {
-    id: "weak",
-    label: "Weak cards",
-    hint: "High-difficulty cards — repair them before they lapse.",
-    studyMode: "struggling",
-    learningRatio: 0,
-  },
-  {
-    id: "leeches",
-    label: "Leeches",
-    hint: "Failed 3+ times and still back within a week.",
+    id: "trouble-spots",
+    label: "Trouble Spots",
+    badge: "Missed 3+ times",
+    hint: "Targets stubborn cards you've stumbled on 3 or more times with short intervals.",
     studyMode: "leeches",
     learningRatio: 0,
   },
@@ -92,10 +90,9 @@ export function resolvePlan(
 ): SessionPlanId {
   if (!studyMode) return CUSTOM_PLAN_ID;
 
-  // Struggling/leeches review routes ignore the ratio entirely (they take a
+  // The trouble-spots (leeches) route ignores the ratio entirely (it takes a
   // plain ordered slice), so every ratio means the same session there.
-  if (studyMode === "struggling") return "weak";
-  if (studyMode === "leeches") return "leeches";
+  if (studyMode === "leeches") return "trouble-spots";
 
   const ratio =
     typeof learningRatio === "number" && !Number.isNaN(learningRatio)

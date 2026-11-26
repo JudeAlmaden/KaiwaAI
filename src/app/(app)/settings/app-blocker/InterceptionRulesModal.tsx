@@ -5,7 +5,6 @@ import Link from 'next/link';
 import type {
   AppBlockerConfig,
   BlockerStudyMode,
-  BlockerNoDueAction,
 } from '@/plugins/app-blocker/definitions';
 import SessionPlanPicker from './SessionPlanPicker';
 
@@ -19,7 +18,6 @@ export interface InterceptionRulesModalProps {
   studyMode?: BlockerStudyMode;
   practice?: boolean;
   learningRatio?: number;
-  noDueAction?: BlockerNoDueAction;
   onUpdateAppBlockerConfig: (updates: Partial<AppBlockerConfig>) => void;
   showAppManagerLink?: boolean;
   isMonitoring?: boolean;
@@ -33,10 +31,8 @@ export default function InterceptionRulesModal({
   unlockDurationMinutes = 45,
   reviewType = 'vocabulary',
   direction = 'mixed',
-  studyMode = 'all',
-  practice = false,
-  learningRatio = 0.5,
-  noDueAction = 'autoOpen',
+  studyMode = 'due',
+  learningRatio = 0.2,
   onUpdateAppBlockerConfig,
   showAppManagerLink = false,
   isMonitoring,
@@ -110,27 +106,10 @@ export default function InterceptionRulesModal({
           <div className="space-y-3">
             <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Goal</span>
 
-            {/* Cards goal: typed amount + presets */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={count}
-                  onChange={(e) => {
-                    const next = parseInt(e.target.value, 10);
-                    handleCountChange(
-                      Number.isNaN(next) ? 1 : Math.min(100, Math.max(1, next))
-                    );
-                  }}
-                  aria-label="Cards required to unlock"
-                  className="w-16 h-8 rounded-xl border border-border bg-background text-center font-display font-extrabold text-foreground text-base focus:outline-none focus:border-indigo-ai"
-                />
-                <p className="text-[10px] text-muted font-medium">cards</p>
-              </div>
+            {/* Cards goal: unified presets + custom input */}
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1">
-                {[5, 10, 15, 20].map((preset) => (
+                {[3, 5, 10, 15].map((preset) => (
                   <button
                     key={preset}
                     type="button"
@@ -145,32 +124,67 @@ export default function InterceptionRulesModal({
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Unlock grace: typed amount */}
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/50">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-semibold text-muted">Unlock for</span>
-                <span className="text-[9px] text-muted">Grace before it re-arms</span>
-              </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <input
                   type="number"
                   min={1}
-                  max={240}
-                  value={unlockDurationMinutes}
+                  max={100}
+                  value={count}
                   onChange={(e) => {
                     const next = parseInt(e.target.value, 10);
-                    onUpdateAppBlockerConfig({
-                      unlockDurationMinutes: Number.isNaN(next)
-                        ? 1
-                        : Math.min(240, Math.max(1, next)),
-                    });
+                    handleCountChange(
+                      Number.isNaN(next) ? 1 : Math.min(100, Math.max(1, next))
+                    );
                   }}
-                  aria-label="Unlock duration in minutes"
-                  className="w-16 h-7 rounded-xl border border-border bg-background text-center font-bold text-foreground text-xs focus:outline-none focus:border-indigo-ai"
+                  aria-label="Cards required to unlock"
+                  className="w-14 h-7 rounded-xl border border-border bg-background text-center font-bold text-foreground text-xs focus:outline-none focus:border-indigo-ai"
                 />
-                <p className="text-[10px] text-muted font-medium">min</p>
+                <p className="text-[10px] text-muted font-medium">cards</p>
+              </div>
+            </div>
+
+            {/* Unlock grace: unified presets + custom input */}
+            <div className="space-y-2 pt-2 border-t border-border/50">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[10px] font-semibold text-muted">Unlock for</span>
+                <span className="text-[9px] text-muted">Grace before it re-arms</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  {[15, 30, 45, 60].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => onUpdateAppBlockerConfig({ unlockDurationMinutes: preset })}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                        unlockDurationMinutes === preset
+                          ? 'bg-indigo-ai text-white'
+                          : 'border border-border bg-background text-muted hover:text-foreground'
+                      }`}
+                    >
+                      {preset}m
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    max={240}
+                    value={unlockDurationMinutes}
+                    onChange={(e) => {
+                      const next = parseInt(e.target.value, 10);
+                      onUpdateAppBlockerConfig({
+                        unlockDurationMinutes: Number.isNaN(next)
+                          ? 1
+                          : Math.min(240, Math.max(1, next)),
+                      });
+                    }}
+                    aria-label="Unlock duration in minutes"
+                    className="w-14 h-7 rounded-xl border border-border bg-background text-center font-bold text-foreground text-xs focus:outline-none focus:border-indigo-ai"
+                  />
+                  <p className="text-[10px] text-muted font-medium">min</p>
+                </div>
               </div>
             </div>
           </div>
@@ -236,64 +250,6 @@ export default function InterceptionRulesModal({
             </div>
           </div>
 
-          {/* ── SECTION 3: Options ──────────────────────────── */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Options</span>
-            <div className="rounded-2xl border border-border overflow-hidden divide-y divide-border/60">
-              {/* Practice mode */}
-              <div className="flex items-center justify-between px-3 py-2.5 gap-2 bg-card">
-                <div>
-                  <span className="text-xs font-semibold text-foreground block">Practice mode</span>
-                  <span className="text-[9px] text-muted">No SRS or interval updates</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onUpdateAppBlockerConfig({ practice: !practice })}
-                  className={`w-9 h-5 rounded-full relative transition shrink-0 cursor-pointer ${
-                    practice ? 'bg-violet-500' : 'bg-muted/40'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-                      practice ? 'left-4' : 'left-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* No cards due */}
-              <div className="flex items-center justify-between px-3 py-2 gap-2 bg-card">
-                <div>
-                  <span className="text-xs font-semibold text-foreground block">When nothing due</span>
-                  <span className="text-[9px] text-muted">Behavior when pool is empty</span>
-                </div>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onUpdateAppBlockerConfig({ noDueAction: 'autoOpen' })}
-                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                      noDueAction === 'autoOpen'
-                        ? 'bg-emerald-500 text-white'
-                        : 'text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Skip
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateAppBlockerConfig({ noDueAction: 'studyAny' })}
-                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                      noDueAction === 'studyAny'
-                        ? 'bg-sky-500 text-white'
-                        : 'text-muted hover:text-foreground'
-                    }`}
-                  >
-                    Study any
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Kai from '@/app/Kai';
 import { ShieldWarning, Sliders, ArrowsClockwise, CheckCircle, XCircle } from '@phosphor-icons/react';
-import type { BlockerStudyMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
+import type { BlockerStudyMode } from '@/plugins/app-blocker/definitions';
 import InterceptionRulesModal from './InterceptionRulesModal';
 
 interface FocusGuardStatusCardProps {
@@ -16,7 +16,6 @@ interface FocusGuardStatusCardProps {
   studyMode?: BlockerStudyMode;
   practice?: boolean;
   learningRatio?: number;
-  noDueAction?: BlockerNoDueAction;
   earlyReviewStrategy?: 'practice' | 'proportional';
   hasPermissions: boolean;
   usageStatsGranted?: boolean;
@@ -34,7 +33,6 @@ interface FocusGuardStatusCardProps {
     studyMode?: BlockerStudyMode;
     practice?: boolean;
     learningRatio?: number;
-    noDueAction?: BlockerNoDueAction;
     earlyReviewStrategy?: 'practice' | 'proportional';
   }) => void;
 }
@@ -46,10 +44,8 @@ export default function FocusGuardStatusCard({
   unlockDurationMinutes = 45,
   reviewType = 'mixed',
   direction = 'mixed',
-  studyMode = 'all',
-  practice = false,
-  learningRatio = 0.5,
-  noDueAction = 'autoOpen',
+  studyMode = 'due',
+  learningRatio = 0.2,
   hasPermissions,
   usageStatsGranted,
   overlayGranted,
@@ -216,9 +212,7 @@ export default function FocusGuardStatusCard({
         reviewType={reviewType as 'mixed' | 'vocabulary' | 'kanji'}
         direction={direction as 'jp-to-en' | 'en-to-jp' | 'mixed'}
         studyMode={studyMode}
-        practice={practice}
         learningRatio={learningRatio}
-        noDueAction={noDueAction}
         onUpdateAppBlockerConfig={(updates) => {
           if (updates.count !== undefined) {
             onUpdateFlashcardCount(updates.count);

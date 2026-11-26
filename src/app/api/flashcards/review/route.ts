@@ -18,6 +18,7 @@ import {
 import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE } from "@/lib/review/lifecycle";
 import { introducedTodayWhere, resolveNewAllowance, startOfToday } from "@/lib/review/intake";
 import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
+import { DEFAULT_LEARNING_CONFIG } from "@/lib/learning-config";
 import { extractKanji } from "@/lib/kanji-utils";
 import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
 import { mergeComponents } from "@/lib/kanji-mnemonic/context";
@@ -46,9 +47,15 @@ export async function GET(req: Request) {
   const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
   const rawMaxNew = sp.get("maxNewCards");
   const rawMaxLearning = sp.get("maxLearningPool");
-  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
   const rawNewPerSession = sp.get("newPerSession");
+  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
   const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
+  // A caller that sends neither quota gets the learner's default drip instead of
+  // an unlimited one.
+  const unsetQuota = maxNewCards === undefined && newPerSession === undefined;
+  // The blocked-app session asks for a full card count; a normal study session
+  // must not quietly pull in new words or study-ahead cards.
+  const fillSession = sp.get("fill") === "1" || sp.get("fill") === "true";
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
   const rawMaxDaily = sp.get("maxDailyReviews");
   const maxDailyReviews = rawMaxDaily !== null && !isNaN(parseInt(rawMaxDaily, 10)) ? parseInt(rawMaxDaily, 10) : undefined;
@@ -157,9 +164,49 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
+    // A due pool smaller than the session still has to fill it: the composer
+    // carries on with new cards and then studied cards that aren't due yet, so
+    // hand it that second pool instead of ending the session short.
+    if (fillSession && studyMode === "due" && allCards.length < limit) {
+      // A reviews-only pool holds no new cards; the cascade needs them too.
+      if (learningRatio === 0) {
+        const fresh = await prisma.userFlashcard.findMany({
+          where: {
+            userId: user.id,
+            repetitions: 0,
+            timesReviewed: 0,
+            nextReview: { lte: new Date() },
+          },
+          include: {
+            word: { include: { forms: true } },
+            wordForm: true,
+            phrase: true,
+          },
+          orderBy: [{ createdAt: "asc" }],
+          take: fetchLimit,
+        });
+        allCards = mergeUniqueById(allCards, fresh ?? []);
+      }
+      const ahead = await prisma.userFlashcard.findMany({
+        where: {
+          ...where,
+          nextReview: { gt: new Date() },
+          // Reviews-only already carries the studied filter; don't stack it twice.
+          AND: Array.isArray(where.AND) ? where.AND : [STUDIED_CARD_WHERE],
+        },
+        include: {
+          word: { include: { forms: true } },
+          wordForm: true,
+          phrase: true,
+        },
+        orderBy: [{ nextReview: "asc" }],
+        take: fetchLimit,
+      });
+      allCards = mergeUniqueById(allCards, ahead ?? []);
+    }
+
     // Weakest-first ordering lets a large new-card backlog fill the entire
     // window, so the maintenance pool never forms. Top it up separately.
-    // Reviews-only sessions are already all studied cards; nothing to top up.
     if (learningRatio > 0 && needsMaintenanceTopUp(allCards, limit, learningRatio)) {
       const reviewed = await prisma.userFlashcard.findMany({
         where: {
@@ -177,7 +224,12 @@ export async function GET(req: Request) {
       allCards = mergeUniqueById(allCards, reviewed ?? []);
     }
 
-    let effectiveMaxNewCards = maxNewCards;
+    let effectiveMaxNewCards = unsetQuota
+      ? DEFAULT_LEARNING_CONFIG.maxNewCards
+      : maxNewCards;
+    const effectiveNewPerSession = unsetQuota
+      ? DEFAULT_LEARNING_CONFIG.newPerSession
+      : newPerSession;
     if (maxNewCards !== undefined || newPerSession !== undefined) {
       const introducedToday =
         Number(
@@ -207,7 +259,7 @@ export async function GET(req: Request) {
       limit,
       ignoreDueDate,
       learningRatio,
-      { maxNewCards: effectiveMaxNewCards, maxNewPerSession: newPerSession }
+      { maxNewCards: effectiveMaxNewCards, maxNewPerSession: effectiveNewPerSession, fillSession }
     );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
@@ -328,6 +380,8 @@ export async function POST(req: Request) {
     grade?: number;
     earlyReviewStrategy?: EarlyReviewStrategy;
     desiredRetention?: number;
+    /** Sent by the blocked-app screen; grade 0 there must not count as a lapse. */
+    fromLock?: boolean;
   };
   try {
     body = await req.json();
@@ -365,6 +419,7 @@ export async function POST(req: Request) {
     cardType: "flashcard",
     earlyReviewStrategy: body.earlyReviewStrategy,
     desiredRetention: body.desiredRetention,
+    suppressLapse: body.fromLock === true,
   });
 
   const persist = buildReviewPersistData(fsrsResult);

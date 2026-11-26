@@ -16,6 +16,7 @@ import {
   startOfToday,
 } from "@/lib/review/intake";
 import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
+import { DEFAULT_LEARNING_CONFIG } from "@/lib/learning-config";
 import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
 import { mergeComponents } from "@/lib/kanji-mnemonic/context";
 import { extractKanji } from "@/lib/kanji-utils";
@@ -42,9 +43,15 @@ export async function GET(req: Request) {
   const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
   const rawMaxNew = sp.get("maxNewCards");
   const rawMaxLearning = sp.get("maxLearningPool");
-  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
   const rawNewPerSession = sp.get("newPerSession");
+  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
   const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
+  // A caller that sends neither quota gets the learner's default drip instead of
+  // an unlimited one (an unrationed new-card dump).
+  const unsetQuota = maxNewCards === undefined && newPerSession === undefined;
+  // The blocked-app session asks for a full card count; a normal study session
+  // must not quietly pull in new words or study-ahead cards.
+  const fillSession = sp.get("fill") === "1" || sp.get("fill") === "true";
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
   const rawMaxDaily = sp.get("maxDailyReviews");
   const maxDailyReviews = rawMaxDaily !== null && !isNaN(parseInt(rawMaxDaily, 10)) ? parseInt(rawMaxDaily, 10) : undefined;
@@ -155,6 +162,71 @@ export async function GET(req: Request) {
       take: fetchLimit,
     });
 
+    // A due pool smaller than the session still has to fill it: the composer
+    // carries on with new cards and then studied cards that aren't due yet, so
+    // hand it that second pool instead of ending the session short.
+    if (fillSession && studyMode === "due" && allVocab.length + allKanji.length < limit) {
+      // A reviews-only pool holds no new cards; the cascade needs them too.
+      if (learningRatio === 0) {
+        const [freshVocab, freshKanji] = await Promise.all([
+          prisma.userFlashcard.findMany({
+            where: {
+              userId: user.id,
+              repetitions: 0,
+              timesReviewed: 0,
+              nextReview: { lte: new Date() },
+            },
+            include: { word: true, wordForm: true, phrase: true },
+            orderBy: [{ createdAt: "asc" }],
+            take: fetchLimit,
+          }),
+          prisma.userKanji.findMany({
+            where: {
+              userId: user.id,
+              repetitions: 0,
+              timesReviewed: 0,
+              nextReview: { lte: new Date() },
+            },
+            include: { kanji: true },
+            orderBy: [{ createdAt: "asc" }],
+            take: fetchLimit,
+          }),
+        ]);
+        allVocab = mergeUniqueById(allVocab, freshVocab ?? []);
+        allKanji = mergeUniqueById(allKanji, freshKanji ?? []);
+      }
+      const aheadSince = new Date();
+      const [aheadVocab, aheadKanji] = await Promise.all([
+        prisma.userFlashcard.findMany({
+          where: {
+            ...vocabWhere,
+            nextReview: { gt: aheadSince },
+            // Reviews-only already carries the studied filter; don't stack it twice.
+            AND: Array.isArray(vocabWhere.AND)
+              ? vocabWhere.AND
+              : [STUDIED_CARD_WHERE],
+          },
+          include: { word: true, wordForm: true, phrase: true },
+          orderBy: [{ nextReview: "asc" }],
+          take: fetchLimit,
+        }),
+        prisma.userKanji.findMany({
+          where: {
+            ...kanjiWhere,
+            nextReview: { gt: aheadSince },
+            AND: Array.isArray(kanjiWhere.AND)
+              ? kanjiWhere.AND
+              : [STUDIED_CARD_WHERE],
+          },
+          include: { kanji: true },
+          orderBy: [{ nextReview: "asc" }],
+          take: fetchLimit,
+        }),
+      ]);
+      allVocab = mergeUniqueById(allVocab, aheadVocab ?? []);
+      allKanji = mergeUniqueById(allKanji, aheadKanji ?? []);
+    }
+
     // Each type gets half the session, so each half needs its own maintenance
     // cards. Weakest-first windows otherwise return only new cards.
     const perTypeSession = Math.ceil(limit / 2);
@@ -196,7 +268,12 @@ export async function GET(req: Request) {
       allKanji = mergeUniqueById(allKanji, reviewedKanji ?? []);
     }
 
-    let effectiveMaxNewCards = maxNewCards;
+    let effectiveMaxNewCards = unsetQuota
+      ? DEFAULT_LEARNING_CONFIG.maxNewCards
+      : maxNewCards;
+    const effectiveNewPerSession = unsetQuota
+      ? DEFAULT_LEARNING_CONFIG.newPerSession
+      : newPerSession;
     if (maxNewCards !== undefined || newPerSession !== undefined) {
       const [introducedVocab, introducedKanji] = await Promise.all([
         prisma.userFlashcard.count({ where: introducedTodayWhere(user.id, new Date(), user.timezone) }),
@@ -248,11 +325,13 @@ export async function GET(req: Request) {
     }
     const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio, {
       maxNewCards: vocabNewBudget,
-      maxNewPerSession: vocabNewBudget,
+      maxNewPerSession: vocabNewBudget ?? effectiveNewPerSession,
+      fillSession,
     });
     const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate, learningRatio, {
       maxNewCards: kanjiNewBudget,
-      maxNewPerSession: kanjiNewBudget,
+      maxNewPerSession: kanjiNewBudget ?? effectiveNewPerSession,
+      fillSession,
     });
 
     const vocabActual = vocabSession.session.length;
@@ -278,6 +357,7 @@ export async function GET(req: Request) {
       const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate, learningRatio, {
         maxNewCards: remainingNew,
         maxNewPerSession: remainingNew,
+        fillSession,
       });
       kanjiFinal = extraKanji.session;
       kanjiMaintenanceCards = extraKanji.maintenanceCards;
@@ -290,6 +370,7 @@ export async function GET(req: Request) {
       const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate, learningRatio, {
         maxNewCards: remainingNew,
         maxNewPerSession: remainingNew,
+        fillSession,
       });
       vocabFinal = extraVocab.session;
       vocabMaintenanceCards = extraVocab.maintenanceCards;

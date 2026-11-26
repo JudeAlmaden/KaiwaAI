@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Question } from "@phosphor-icons/react";
 import type {
   BlockerNoDueAction,
   BlockerStudyMode,
@@ -165,25 +164,6 @@ export default function InterceptionRulesEditor({
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <SectionTitle>No cards due</SectionTitle>
-          <div className="flex gap-1">
-            <Segmented
-              active={values.noDueAction === "autoOpen"}
-              onClick={() => onChange({ noDueAction: "autoOpen" })}
-              className="flex-1 py-1.5"
-            >
-              Skip / unlock
-            </Segmented>
-            <Segmented
-              active={values.noDueAction === "studyAny"}
-              onClick={() => onChange({ noDueAction: "studyAny" })}
-              className="flex-1 py-1.5"
-            >
-              Study any
-            </Segmented>
-          </div>
-        </div>
       </div>
 
       <div className="space-y-3 border-t border-border pt-4">
@@ -226,20 +206,6 @@ export default function InterceptionRulesEditor({
             learningRatio={values.learningRatio}
             onChange={(updates) => onChange({ ...updates, useReviewDefaults: false })}
           />
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-1">
-            <SectionTitle>Practice mode</SectionTitle>
-            <Question size={12} className="text-muted" />
-          </div>
-          <Segmented
-            active={values.practice}
-            onClick={() => onChange({ practice: !values.practice })}
-            className="w-full py-1.5"
-          >
-            {values.practice ? "On — no SRS updates" : "Off"}
-          </Segmented>
         </div>
 
         <div className="space-y-1.5">

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { AppBlocker } from '@/plugins/app-blocker';
-import type { BlockerStudyMode, AppBlockerConfig, BlockerFuriganaMode, BlockerNoDueAction } from '@/plugins/app-blocker/definitions';
+import type { BlockerStudyMode, AppBlockerConfig, BlockerFuriganaMode } from '@/plugins/app-blocker/definitions';
 import { getUnlockStatus, grantUnlock } from '@/lib/app-blocker-unlock';
 import { FALLBACK_OFFLINE_CARDS, FALLBACK_OFFLINE_KANJI_CARDS } from '@/lib/fallback-cards';
 import Kai from '@/app/Kai';
@@ -20,6 +20,53 @@ type InitResult =
   | { kind: 'redirect-home' }
   | { kind: 'auto-unlocked' };
 
+/**
+ * Grades made in a blocked session are queued when the request fails (offline,
+ * flaky signal) and flushed on the next mount or `online` event. Losing a block
+ * session's reviews silently is the fastest way to make reviewing feel pointless.
+ */
+const PENDING_REVIEWS_KEY = 'kaiwa_app_lock_pending_reviews';
+
+type PendingReview = { endpoint: string; body: string };
+
+function readPendingReviews(): PendingReview[] {
+  try {
+    const raw = localStorage.getItem(PENDING_REVIEWS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as PendingReview[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingReviews(items: PendingReview[]) {
+  try {
+    if (items.length === 0) localStorage.removeItem(PENDING_REVIEWS_KEY);
+    else localStorage.setItem(PENDING_REVIEWS_KEY, JSON.stringify(items));
+  } catch { }
+}
+
+/** Resolves true when the review is saved (or rejected outright), false to retry. */
+function sendPendingReview(review: PendingReview): Promise<boolean> {
+  return fetch(review.endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: review.body,
+  })
+    .then((res) => res.ok || res.status < 500)
+    .catch(() => false);
+}
+
+async function flushPendingReviews() {
+  const pending = readPendingReviews();
+  if (pending.length === 0) return;
+  const remaining: PendingReview[] = [];
+  for (const review of pending) {
+    if (!(await sendPendingReview(review))) remaining.push(review);
+  }
+  writePendingReviews(remaining);
+}
+
 type Direction = 'jp-to-en' | 'en-to-jp' | 'mixed';
 
 export default function StandaloneAppLockPage() {
@@ -27,6 +74,8 @@ export default function StandaloneAppLockPage() {
   const finishingRef = useRef(false);
   const isGradingRef = useRef(false);
   const [blockedPackage, setBlockedPackage] = useState<string | null>(null);
+  // What the learner asked for, before the pool shrank the goal.
+  const [requestedCount, setRequestedCount] = useState<number | null>(null);
   const [requiredCount, setRequiredCount] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const countParam = new URLSearchParams(window.location.search).get('count');
@@ -59,18 +108,30 @@ export default function StandaloneAppLockPage() {
     return 0;
   });
   const [flipped, setFlipped] = useState(false);
+  // Set when the goal is met: the learner gets a recap instead of being dropped
+  // straight into the app, so the session registers as study rather than a toll.
+  const [recapCount, setRecapCount] = useState<number | null>(null);
   const [cardEpoch, setCardEpoch] = useState(0);
   const [loading, setLoading] = useState(true);
   const [initResult, setInitResult] = useState<InitResult | null>(null);
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [failedCardIds, setFailedCardIds] = useState<Set<string>>(new Set());
-  const [practice, setPractice] = useState(false);
   const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>(
     () => getLearningConfig().earlyReviewStrategy
   );
   const [furiganaMode, setFuriganaMode] = useState<BlockerFuriganaMode>('always');
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
+  const [emergencyCountdown, setEmergencyCountdown] = useState<number | null>(null);
+  const [emergencyUsedToday, setEmergencyUsedToday] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      return localStorage.getItem('kaiwa_emergency_pass_date') === today;
+    } catch {
+      return false;
+    }
+  });
 
   const isWeb = Capacitor.getPlatform() === 'web';
 
@@ -169,9 +230,12 @@ export default function StandaloneAppLockPage() {
     const maxNewCards = learningCfg.maxNewCards;
     const newPerSession = learningCfg.newPerSession;
 
+    // `fill=1` lets the session reach its card count (due → new → anything
+    // studied). `maxDailyReviews` is deliberately NOT sent: spending the daily
+    // review goal must not turn the lock screen into a free unlock.
     try {
       const res = await fetch(
-        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&maxNewCards=${maxNewCards}&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}&maxDailyReviews=${learningCfg.maxDailyReviews}`
+        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&fill=1&maxNewCards=${maxNewCards}&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -210,7 +274,6 @@ export default function StandaloneAppLockPage() {
         // Pull full config (URL params take precedence, then saved native prefs)
         const urlReviewType = params.get('reviewType') as AppBlockerConfig['reviewType'] | null;
         const urlStudyMode = params.get('studyMode') as BlockerStudyMode | null;
-        const urlPractice = params.get('practice');
         const urlDirection = params.get('direction') as Direction | null;
 
         let savedConfig: AppBlockerConfig | null = null;
@@ -233,14 +296,11 @@ export default function StandaloneAppLockPage() {
           ? parseInt(countParam, 10) || 10
           : (savedConfig?.count ?? localConfigCount ?? 10);
         setRequiredCount(targetCount);
+        setRequestedCount(targetCount);
 
         const reviewType: AppBlockerConfig['reviewType'] = urlReviewType ?? savedConfig?.reviewType ?? 'vocabulary';
-        const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'all';
-        const practiceEnabled: boolean =
-          urlPractice !== null ? urlPractice === '1' || urlPractice === 'true' : (savedConfig?.practice ?? false);
+        const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'due';
         const direction: Direction = urlDirection ?? (savedConfig?.direction as Direction | undefined | null) ?? 'jp-to-en';
-        const urlNoDueAction = params.get('noDueAction') as BlockerNoDueAction | null;
-        const noDueAction: BlockerNoDueAction = urlNoDueAction ?? savedConfig?.noDueAction ?? 'autoOpen';
         const urlEarlyStrategy = params.get('earlyReviewStrategy') as 'practice' | 'proportional' | null;
         const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? getLearningConfig().earlyReviewStrategy;
 
@@ -263,9 +323,8 @@ export default function StandaloneAppLockPage() {
         const resolvedLearningRatio: number =
           urlLearningRatio !== null && !isNaN(parseFloat(urlLearningRatio))
             ? parseFloat(urlLearningRatio)
-            : (savedConfig?.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.5);
+            : (savedConfig?.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.2);
 
-        setPractice(practiceEnabled);
         setEarlyReviewStrategy(earlyStrategy);
         setFuriganaMode(resolvedFuriganaMode);
 
@@ -285,9 +344,9 @@ export default function StandaloneAppLockPage() {
         let pulledCards = await fetchCards(reviewType, studyMode, resolvedLearningRatio, targetCount);
         if (cancelled) return;
 
-        // If nothing was returned for this studyMode (e.g. studyMode === 'due' and 0 cards due),
-        // check noDueAction. If 'studyAny', fall back to 'all' cards before giving up.
-        if (!('offline' in pulledCards) && pulledCards.length === 0 && studyMode !== 'all' && noDueAction === 'studyAny') {
+        // Nothing for this pool (e.g. no due cards, no leeches): study any card
+        // instead of skipping the block — a lock session always has cards to show.
+        if (!('offline' in pulledCards) && pulledCards.length === 0 && studyMode !== 'all') {
           pulledCards = await fetchCards(reviewType, 'all', resolvedLearningRatio, targetCount);
           if (cancelled) return;
         }
@@ -324,17 +383,15 @@ export default function StandaloneAppLockPage() {
         // Slice down to exact requirement count for the session deck
         const slicedCards = availableCards.slice(0, effectiveRequirement);
 
+        // A mixed block picks one direction for the whole session. Rerolling per
+        // card showed the same card JP→EN in one block and EN→JP in the next.
+        const sessionDirection: 'jp-to-en' | 'en-to-jp' =
+          direction === 'mixed' ? (Math.random() < 0.5 ? 'jp-to-en' : 'en-to-jp') : direction;
+
         setCards(
           slicedCards.map((c) => ({
             ...c,
-            _dir:
-              direction === 'jp-to-en'
-                ? 'jp-to-en'
-                : direction === 'en-to-jp'
-                  ? 'en-to-jp'
-                  : Math.random() < 0.5
-                    ? 'jp-to-en'
-                    : 'en-to-jp',
+            _dir: sessionDirection,
           }))
         );
         setInitResult({ kind: 'session' });
@@ -359,6 +416,13 @@ export default function StandaloneAppLockPage() {
     }
   }, [initResult, router]);
 
+  useEffect(() => {
+    void flushPendingReviews();
+    const onOnline = () => void flushPendingReviews();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, []);
+
   const handleGrade = useCallback(
     (grade: number) => {
       if (isGradingRef.current) return;
@@ -366,26 +430,34 @@ export default function StandaloneAppLockPage() {
       if (!card) return;
 
       const isFirstAttempt = !gradedIds.has(card.id);
+      // Only the first attempt is graded for scheduling. A card that comes back
+      // after "Again" is a relearning pass you have just seen the answer to, so it
+      // can't earn a full pass: Good and Easy stay closed and Hard is the ceiling.
       if (!isFirstAttempt && (grade === 2 || grade === 3)) return;
 
       isGradingRef.current = true;
 
       try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(grade === 0 ? [20, 40, 20] : 12);
+        }
+
         // Enforce async: persist review grade in the background without blocking the UI
-        if (isFirstAttempt && !practice) {
+        if (isFirstAttempt) {
           const cardType = card.type || 'vocabulary';
-          const endpoint = cardType === 'kanji' ? '/api/kanji/review' : '/api/flashcards/review';
-          fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+          const review: PendingReview = {
+            endpoint: cardType === 'kanji' ? '/api/kanji/review' : '/api/flashcards/review',
             body: JSON.stringify({
               cardId: card.id,
               grade,
+              // Being interrupted into your hardest cards must not breed leeches.
+              fromLock: true,
               earlyReviewStrategy,
               desiredRetention: getLearningConfig().desiredRetention,
             }),
-          }).catch((err) => {
-            console.error('[app-lock] Failed to persist review grade:', err);
+          };
+          void sendPendingReview(review).then((saved) => {
+            if (!saved) writePendingReviews([...readPendingReviews(), review]);
           });
         }
 
@@ -412,7 +484,7 @@ export default function StandaloneAppLockPage() {
           nextCards.splice(currentIndex, 1);
 
           if (newCompleted >= requiredCount || nextCards.length === 0) {
-            void finishUnlock(blockedPackage);
+            setRecapCount(newCompleted);
           } else {
             setCards(nextCards);
             setCurrentIndex((prev) => (nextCards.length > 0 ? prev % nextCards.length : 0));
@@ -422,18 +494,16 @@ export default function StandaloneAppLockPage() {
           // Do NOT increment completedCount!
           // Track as failed card so Good & Easy are disabled when it returns
           setFailedCardIds((prev) => new Set(prev).add(card.id));
-          // Re-insert the card randomly towards the back (minimum 2 positions ahead if available)
+          // Re-insert the card at least 3 positions ahead (so >= 2 cards intervene)
+          // or at the very end when fewer cards remain.
           const nextCards = [...cards];
           const [failedCard] = nextCards.splice(currentIndex, 1);
           const remainingAhead = nextCards.length - currentIndex;
           let targetIndex: number;
-          if (remainingAhead <= 0) {
+          if (remainingAhead < 3) {
             targetIndex = nextCards.length;
-          } else if (remainingAhead === 1) {
-            targetIndex = currentIndex + 1;
           } else {
-            // Pick a random index between (currentIndex + 2) and the end of the deck
-            const minIndex = currentIndex + 2;
+            const minIndex = currentIndex + 3;
             const maxIndex = nextCards.length;
             targetIndex = minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
           }
@@ -448,8 +518,21 @@ export default function StandaloneAppLockPage() {
         }, 100);
       }
     },
-    [completedCount, requiredCount, cards, currentIndex, blockedPackage, gradedIds, practice, earlyReviewStrategy, finishUnlock]
+    [completedCount, requiredCount, cards, currentIndex, gradedIds, earlyReviewStrategy]
   );
+
+  // Move the current card to the back without grading it: the only other way past
+  // a card you cannot read is to grade it, which pollutes the schedule.
+  const skipCard = useCallback(() => {
+    if (cards.length < 2) return;
+    const nextCards = [...cards];
+    const [card] = nextCards.splice(currentIndex, 1);
+    nextCards.push(card);
+    setCards(nextCards);
+    setCurrentIndex(Math.min(currentIndex, nextCards.length - 1));
+    setFlipped(false);
+    setCardEpoch((e) => e + 1);
+  }, [cards, currentIndex]);
 
   const currentCard = cards[currentIndex];
   const isCardFailed = currentCard ? failedCardIds.has(currentCard.id) : false;
@@ -477,6 +560,33 @@ export default function StandaloneAppLockPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleGrade, isCardFailed, flipped]);
 
+  // Auto-launch into the blocked app ~1.2s after completing the goal.
+  useEffect(() => {
+    if (recapCount === null) return;
+    const timer = setTimeout(() => {
+      void finishUnlock(blockedPackage);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [recapCount, blockedPackage, finishUnlock]);
+
+  // 5-second breath countdown for the 1/day emergency pass.
+  useEffect(() => {
+    if (emergencyCountdown === null) return;
+    const timer = setTimeout(() => {
+      if (emergencyCountdown <= 1) {
+        try {
+          localStorage.setItem('kaiwa_emergency_pass_date', new Date().toISOString().slice(0, 10));
+        } catch { }
+        setEmergencyUsedToday(true);
+        setEmergencyCountdown(null);
+        void finishUnlock(blockedPackage);
+      } else {
+        setEmergencyCountdown((c) => (c !== null ? c - 1 : null));
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [emergencyCountdown, blockedPackage, finishUnlock]);
+
   if (loading || initResult?.kind === 'redirect-home' || initResult?.kind === 'auto-unlocked') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
@@ -486,6 +596,31 @@ export default function StandaloneAppLockPage() {
             ? 'Unlocking your app...'
             : 'Loading Focus Guard...'}
         </p>
+      </div>
+    );
+  }
+
+  if (recapCount !== null) {
+    const target = blockedPackage ? blockedPackage.split('.').pop() || 'app' : null;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background text-center">
+        <Kai size={64} className="mb-4" />
+        <h1 className="font-display text-xl font-bold text-foreground mb-2">
+          Session complete
+        </h1>
+        <p className="text-sm text-muted max-w-xs leading-relaxed mb-1">
+          {recapCount} card{recapCount === 1 ? '' : 's'} reviewed.
+        </p>
+        <p className="text-xs text-muted max-w-xs leading-relaxed mb-6">
+          Opening {target ?? 'your app'}…
+        </p>
+        <button
+          type="button"
+          onClick={() => void finishUnlock(blockedPackage)}
+          className="w-full max-w-xs h-12 rounded-2xl bg-indigo-ai text-white font-bold text-sm shadow-sm hover:brightness-105 transition active:translate-y-[2px] flex items-center justify-center gap-2"
+        >
+          🚀 {target ? `Open ${target}` : 'Launch app'} now
+        </button>
       </div>
     );
   }
@@ -530,15 +665,16 @@ export default function StandaloneAppLockPage() {
                 ? `Complete cards to open ${blockedPackage.split('.').pop() || 'app'}`
                 : 'Complete cards to unlock'}
             </p>
+            {requestedCount !== null && requiredCount < requestedCount && (
+              <p className="text-[10px] text-muted/80">
+                Only {requiredCount} card{requiredCount === 1 ? '' : 's'} available
+                right now, so that&apos;s the goal.
+              </p>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {practice && (
-            <span className="px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-600 font-display text-[10px] font-extrabold border border-violet-500/20">
-              PRACTICE
-            </span>
-          )}
           <div className="px-3.5 py-1.5 rounded-full bg-indigo-ai/10 text-indigo-ai font-display text-xs font-extrabold border border-indigo-ai/20">
             {Math.max(0, requiredCount - completedCount)} Left
           </div>
@@ -550,25 +686,6 @@ export default function StandaloneAppLockPage() {
           className="h-full bg-indigo-ai transition-all duration-300 ease-out"
           style={{ width: `${progressPct}%` }}
         />
-      </div>
-
-      <div className="flex items-center justify-center gap-2 pt-3">
-        {cards.slice(0, 5).map((c, idx) => {
-          const isCurrent = idx === currentIndex;
-          const isRetrying = gradedIds.has(c.id);
-          return (
-            <div
-              key={`${c.id}-${idx}`}
-              className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${isCurrent
-                  ? 'bg-indigo-ai ring-4 ring-indigo-ai/20 scale-125'
-                  : isRetrying
-                    ? 'bg-sakura ring-2 ring-sakura/30'
-                    : 'bg-border border border-muted/20'
-                }`}
-              title={isCurrent ? 'Current card' : isRetrying ? 'Needs review' : 'Upcoming'}
-            />
-          );
-        })}
       </div>
 
       <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-4 max-w-md mx-auto w-full">
@@ -606,6 +723,40 @@ export default function StandaloneAppLockPage() {
             }
           }}
         />
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={skipCard}
+            disabled={cards.length < 2}
+            title="Moves this card to the end without grading it"
+            className="text-xs font-semibold text-muted underline-offset-2 hover:underline disabled:opacity-40"
+          >
+            Skip this card
+          </button>
+
+          {!emergencyUsedToday && (
+            emergencyCountdown !== null ? (
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-600">
+                <span>Emergency unlock in {emergencyCountdown}s…</span>
+                <button
+                  type="button"
+                  onClick={() => setEmergencyCountdown(null)}
+                  className="underline hover:text-foreground cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEmergencyCountdown(5)}
+                className="text-[11px] font-medium text-muted/70 hover:text-foreground underline-offset-2 hover:underline cursor-pointer"
+              >
+                Emergency pass (1/day)
+              </button>
+            )
+          )}
+        </div>
       </main>
     </div>
   );

@@ -42,11 +42,11 @@ const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 
   unlockDurationMinutes: 45,
   reviewType: 'vocabulary',
   direction: 'mixed',
-  studyMode: 'all',
+  studyMode: 'due',
   practice: false,
   noDueAction: 'autoOpen',
   earlyReviewStrategy: 'practice',
-  learningRatio: 0.5,
+  learningRatio: 0.2,
 };
 
 export default function AppBlockerSettings() {
@@ -126,9 +126,9 @@ export default function AppBlockerSettings() {
         setUnlockDurationMinutes(config.unlockDurationMinutes ?? 45);
         setReviewType(config.reviewType ?? 'vocabulary');
         setDirection(config.direction ?? 'mixed');
-        setStudyMode(config.studyMode ?? 'all');
-        setPractice(config.practice ?? false);
-        setLearningRatio(config.learningRatio ?? 0.5);
+        setStudyMode(config.studyMode ?? 'due');
+        setPractice(false);
+        setLearningRatio(config.learningRatio ?? 0.2);
         setNoDueAction(config.noDueAction ?? 'autoOpen');
         setEarlyReviewStrategy(config.earlyReviewStrategy ?? 'practice');
       }
@@ -429,7 +429,6 @@ export default function AppBlockerSettings() {
           studyMode={studyMode}
           practice={practice}
           learningRatio={learningRatio}
-          noDueAction={noDueAction}
           earlyReviewStrategy={earlyReviewStrategy}
           hasPermissions={effectiveHasPermissions}
           usageStatsGranted={effectiveUsageGranted}

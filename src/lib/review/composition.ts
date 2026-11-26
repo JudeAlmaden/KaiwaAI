@@ -17,6 +17,8 @@ export type CompositionCounts = {
 export type DueCounts = {
   new: number;
   review: number;
+  /** Studied, not due yet — what the session falls back to when due runs out. */
+  ahead?: number;
 };
 
 export type SessionMixOptions = {
@@ -51,8 +53,8 @@ export function summarizeComposition(
 /**
  * Mirror the composer for a session that hasn't been built yet: the active share
  * of the session holds the new cards (rationed by the intake quota and the daily
- * ceiling), and reviews fill everything else. Extra new cards never pad a
- * session — if there aren't enough reviews the session is simply shorter.
+ * ceiling), due reviews fill everything else, and studied-but-not-due cards keep
+ * the session at its requested size once the due pool is spent.
  */
 export function projectSessionMix(
   due: DueCounts,
@@ -60,9 +62,10 @@ export function projectSessionMix(
 ): CompositionCounts & { total: number } {
   const dueNew = Math.max(0, due.new);
   const dueReview = Math.max(0, due.review);
+  const ahead = Math.max(0, due.ahead ?? 0);
   const size = Math.min(
-    dueNew + dueReview,
-    Math.max(0, options.maxReviews ?? dueNew + dueReview)
+    dueNew + dueReview + ahead,
+    Math.max(0, options.maxReviews ?? dueNew + dueReview + ahead)
   );
   const ratio = clampRatio(options.learningRatio);
   const activeTarget =
@@ -84,7 +87,7 @@ export function projectSessionMix(
   });
 
   const newCount = poolFull ? 0 : Math.min(dueNew, activeTarget, quota);
-  const reviewCount = Math.min(dueReview, size - newCount);
+  const reviewCount = Math.min(dueReview + ahead, size - newCount);
 
   return { newCount, reviewCount, total: newCount + reviewCount };
 }
