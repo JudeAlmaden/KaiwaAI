@@ -41,12 +41,6 @@ const NEW_PER_SESSION: { value: number; label: string }[] = [
   { value: 5, label: "5" },
 ];
 
-const LEARNING_RATIOS: { value: number; label: string }[] = [
-  { value: 0.0, label: "Reviews only" },
-  { value: 0.2, label: "20% new" },
-  { value: 0.5, label: "50/50" },
-  { value: 0.7, label: "70% new" },
-];
 
 type IntakeCounts = { inProgress: number; introducedToday: number };
 
@@ -182,25 +176,6 @@ export default function ReviewDefaultsCard() {
             {intakeMessage()}
           </p>
         )}
-      </div>
-
-      <div className="mt-5">
-        <p className="text-sm font-bold">Review mix (new vs reviews)</p>
-        <p className="mb-2 text-xs text-muted">
-          Proportion of new or struggling cards to mature reviews in sessions and Focus Guard.
-        </p>
-        <div className="mt-2 grid grid-cols-4 gap-2">
-          {LEARNING_RATIOS.map((r) => (
-            <Chip
-              key={r.value}
-              active={Math.abs(config.defaultLearningRatio - r.value) < 0.05}
-              onClick={() => patch({ defaultLearningRatio: r.value })}
-              className="w-full justify-center"
-            >
-              {r.label}
-            </Chip>
-          ))}
-        </div>
       </div>
 
       <div className="mt-5">
