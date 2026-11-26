@@ -29,7 +29,7 @@ function makeCard(overrides: Partial<ReviewableCard> = {}): ReviewableCard {
 describe("applyFsrsReview — payload rules", () => {
   it("stores interval 0 on a lapse so it matches the 10-minute return", () => {
     const result = applyFsrsReview({ card: makeCard(), grade: 0, cardType: "flashcard" });
-    expect(result.repetitions).toBe(0);
+    expect(result.repetitions).toBe(2);
     expect(result.interval).toBe(0);
     expect(result.touchLastReviewed).not.toBe(false);
     expect(buildReviewPersistData(result).interval).toBe(0);

@@ -90,4 +90,18 @@ describe("applyFsrsReview — retrievability recomputation (doom-loop regression
     expect(Number.isFinite(r.stability)).toBe(true);
     expect(r.stability).toBeGreaterThan(0);
   });
+
+  it("preserves repetitions on Again while dropping interval and status to learning", () => {
+    const card = makeCard({
+      repetitions: 5,
+      interval: 30,
+      status: "known",
+      stability: 30,
+      timesReviewed: 5,
+    });
+    const r = applyFsrsReview({ card, grade: 0, cardType: "flashcard" });
+    expect(r.repetitions).toBe(5);
+    expect(r.interval).toBe(0);
+    expect(r.status).toBe("learning");
+  });
 });

@@ -197,7 +197,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
         ? new Date(now.getTime() + LOCK_LAPSE_COOLDOWN_MS)
         : result.nextReview;
     const interval = grade === 0 ? 0 : sm2IntervalFromStability(result.stability, retention);
-    const repetitions = grade === 0 ? 0 : card.repetitions + 1;
+    const repetitions = grade === 0 ? card.repetitions : card.repetitions + 1;
 
     return {
       easeFactor: card.easeFactor,

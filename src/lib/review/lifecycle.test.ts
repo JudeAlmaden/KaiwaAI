@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   GRADUATED_INTERVAL_DAYS,
-  GRADUATED_REPETITIONS,
   cardStatus,
   isGraduated,
   isLearningCard,
@@ -15,12 +14,11 @@ describe("card lifecycle", () => {
     expect(isNewCard({ repetitions: 1, interval: 1 })).toBe(false);
   });
 
-  it("requires both reps and a long interval to graduate", () => {
-    expect(
-      isGraduated({ repetitions: GRADUATED_REPETITIONS, interval: GRADUATED_INTERVAL_DAYS })
-    ).toBe(true);
-    expect(isGraduated({ repetitions: 2, interval: 40 })).toBe(false);
+  it("graduates based on interval alone regardless of repetitions", () => {
+    expect(isGraduated({ repetitions: 1, interval: GRADUATED_INTERVAL_DAYS })).toBe(true);
+    expect(isGraduated({ repetitions: 2, interval: 40 })).toBe(true);
     expect(isGraduated({ repetitions: 9, interval: 20 })).toBe(false);
+    expect(isGraduated({ repetitions: 0, interval: 0 })).toBe(false);
   });
 
   it("counts graded-but-not-graduated cards as learning", () => {
@@ -28,6 +26,7 @@ describe("card lifecycle", () => {
     expect(isLearningCard({ repetitions: 9, interval: 20 })).toBe(true);
     expect(isLearningCard({ repetitions: 0, interval: 0 })).toBe(false);
     expect(isLearningCard({ repetitions: 3, interval: 21 })).toBe(false);
+    expect(isLearningCard({ repetitions: 2, interval: 40 })).toBe(false);
   });
 
   it("derives the stored status string from the same rule", () => {
