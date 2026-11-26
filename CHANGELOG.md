@@ -4,6 +4,30 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Lapse decay** — after 5 consecutive passing reviews (`successesSinceLapse` reaches 5), a card's `lapses` counter decrements by 1 (floored at 0) and the streak resets, allowing recovered cards to naturally exit Trouble Spots / leech status. Failing with Again (unless `suppressLapse` is set) or resetting progress resets the streak.
+- **Server-side emergency pass validation** — Focus Guard's 1/day emergency unlock is now enforced on the server via `User.lastEmergencyPassAt` and `POST /api/app-lock/emergency-pass`, preventing localStorage clears or device switches from bypassing the 24-hour cooldown.
+
+### Changed
+- **Removed per-day review and new-card ceilings from in-app sessions** — removed `maxDailyReviews` and `maxNewCards` from `LearningConfig`, in-app `/review` requests, `/api/review/composition`, and Settings (`ReviewDefaultsCard` / `FsrsSettingsCard`). Focus Guard continues to use `maxNewCards` for intake pacing.
+- **Default learning pool cap** — `maxLearningPool` now defaults to `20` cards instead of unlimited (`0`), keeping the active learning pile bounded by default.
+
+### Fixed
+- **Review mix removed from Learning settings** — the "Review mix (new vs reviews)" chip section in Settings was silently overwriting the session plan ratio chosen in Focus Guard (e.g. changing to "50/50" would revert Casual Drip). The section is removed: Focus Guard owns its ratio via the named session plan picker, and the global `defaultLearningRatio` fallback for `/review` sessions is unchanged.
+- **Graduation based on interval only** — cards now graduate when their interval reaches 21+ days regardless of `repetitions`, and grading Again no longer resets `repetitions` to 0 (preventing cards with long intervals or prior resets from getting stuck in learning).
+- **Focus Guard new-card count derived from plan ratio** — `/app-lock` now computes `newPerSession` from the active session plan's `learningRatio` (`Math.ceil(count * learningRatio)`) instead of using the global `learningCfg.newPerSession`.
+- **Active pool contains genuinely new cards only** — removed `isWeakAndShort` injection from `session-composer` so Again/weak cards are no longer pulled into the active new-card pool.
+- **Leech threshold raised from 3 to 5 lapses** — `LEECH_MIN_LAPSES` is now 5 across `leech.ts`, `session-plan.ts` ("Missed 5+ times"), and all review routes, reducing premature Trouble Spots labelling.
+- **Stale Focus Guard completion counter cleared on init** — `/app-lock` clears `kaiwa_app_lock_completed` on session initialization so re-entering Focus Guard never immediately triggers goal-met from a previous session.
+- **Dynamic Again-card re-queue buffer** — `/app-lock` scales the in-session Again buffer (`Math.min(2, Math.max(0, Math.floor(cards.length / 2) - 1))`) so small pools don't immediately re-surface a failed card.
+- **Per-card Mixed direction** — "Mixed" card direction in `/app-lock` is now assigned per card rather than once per session.
+
+### Technical
+- Modified: `prisma/schema.prisma`, `src/lib/review/lifecycle.ts`, `src/lib/fsrs/apply-review.ts`, `src/lib/session-composer.ts`, `src/lib/review/leech.ts`, `src/lib/review/session-plan.ts`, `src/lib/learning-config.ts`, `src/lib/review/intake.ts`, `src/lib/review/composition.ts`, `src/lib/review/session-ready.ts`, `src/app/api/review/composition/route.ts`, `src/app/api/review/mixed/route.ts`, `src/app/api/flashcards/review/route.ts`, `src/app/api/kanji/review/route.ts`, `src/app/(app)/settings/ReviewDefaultsCard.tsx`, `src/app/(app)/settings/FsrsSettingsCard.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/review/hooks/useReviewQueue.ts`, `src/app/app-lock/page.tsx`, and associated unit/route tests
+- New: `prisma/migrations/20261126220200_add_lapse_decay/migration.sql`, `prisma/migrations/20261126220300_add_emergency_pass_tracking/migration.sql`, `src/app/api/app-lock/emergency-pass/route.ts`, `src/app/api/app-lock/emergency-pass/route.test.ts`
+- Deleted: `src/lib/review/daily-cap.ts`, `src/lib/review/daily-cap.test.ts`
+- Tests: `npm run lint` and `npm run typecheck` clean; `npm run test` 119 files / 1076 tests passing
+
 ## [2.8.0] - 2026-11-26
 
 ### Changed
