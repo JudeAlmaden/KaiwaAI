@@ -228,7 +228,9 @@ export default function StandaloneAppLockPage() {
     // Same intake rules as the in-app session: the route combines the daily
     // ceiling with the per-session quota.
     const maxNewCards = learningCfg.maxNewCards;
-    const newPerSession = learningCfg.newPerSession;
+    // Derive per-session new-card allowance from the Focus Guard plan ratio so
+    // global `newPerSession` (e.g. 3) does not silently override Active Intake or All New.
+    const newPerSession = Math.ceil(count * learningRatio);
 
     // `fill=1` lets the session reach its card count (due → new → anything
     // studied). `maxDailyReviews` is deliberately NOT sent: spending the daily
