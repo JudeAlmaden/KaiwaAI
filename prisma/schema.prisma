@@ -38,8 +38,10 @@ model User {
   // ── Streak ──
   streakCount        Int       @default(0) // consecutive active days
   streakBestCount    Int       @default(0) // longest streak achieved
-  lastStreakDay      String? // dayKey of the last counted active day
-  createdAt          DateTime  @default(now())
+  lastStreakDay       String? // dayKey of the last counted active day
+  // ── Focus Guard ──
+  lastEmergencyPassAt DateTime? // 1/day emergency unlock timestamp
+  createdAt           DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   memories       Memory[]

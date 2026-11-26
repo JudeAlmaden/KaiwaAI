@@ -123,6 +123,7 @@ export default function StandaloneAppLockPage() {
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
   const [emergencyCountdown, setEmergencyCountdown] = useState<number | null>(null);
+  const [emergencyError, setEmergencyError] = useState<string | null>(null);
   const [emergencyUsedToday, setEmergencyUsedToday] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     try {
@@ -578,12 +579,41 @@ export default function StandaloneAppLockPage() {
     if (emergencyCountdown === null) return;
     const timer = setTimeout(() => {
       if (emergencyCountdown <= 1) {
-        try {
-          localStorage.setItem('kaiwa_emergency_pass_date', new Date().toISOString().slice(0, 10));
-        } catch { }
-        setEmergencyUsedToday(true);
-        setEmergencyCountdown(null);
-        void finishUnlock(blockedPackage);
+        void (async () => {
+          try {
+            const res = await fetch('/api/app-lock/emergency-pass', { method: 'POST' });
+            if (!res.ok) {
+              setEmergencyError('Could not verify emergency pass. Please try again.');
+              setEmergencyCountdown(null);
+              return;
+            }
+            const data = (await res.json()) as { granted?: boolean; nextAvailableAt?: string };
+            if (data.granted) {
+              try {
+                localStorage.setItem(
+                  'kaiwa_emergency_pass_date',
+                  new Date().toISOString().slice(0, 10)
+                );
+              } catch { }
+              setEmergencyUsedToday(true);
+              setEmergencyCountdown(null);
+              void finishUnlock(blockedPackage);
+            } else {
+              setEmergencyUsedToday(true);
+              setEmergencyCountdown(null);
+              const when = data.nextAvailableAt
+                ? new Date(data.nextAvailableAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'tomorrow';
+              setEmergencyError(`Emergency pass already used today. Available at ${when}.`);
+            }
+          } catch {
+            setEmergencyError('Could not verify emergency pass. Please try again.');
+            setEmergencyCountdown(null);
+          }
+        })();
       } else {
         setEmergencyCountdown((c) => (c !== null ? c - 1 : null));
       }
@@ -738,6 +768,12 @@ export default function StandaloneAppLockPage() {
             Skip this card
           </button>
 
+          {emergencyError && (
+            <p className="text-[11px] font-medium text-amber-600 text-center max-w-xs">
+              {emergencyError}
+            </p>
+          )}
+
           {!emergencyUsedToday && (
             emergencyCountdown !== null ? (
               <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-600">
@@ -753,7 +789,10 @@ export default function StandaloneAppLockPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => setEmergencyCountdown(5)}
+                onClick={() => {
+                  setEmergencyError(null);
+                  setEmergencyCountdown(5);
+                }}
                 className="text-[11px] font-medium text-muted/70 hover:text-foreground underline-offset-2 hover:underline cursor-pointer"
               >
                 Emergency pass (1/day)
