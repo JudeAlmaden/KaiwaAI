@@ -1,13 +1,11 @@
 import { getLearningConfig } from "@/lib/learning-config";
 import { projectSessionMix, type CompositionCounts, type DueCounts } from "./composition";
-import { remainingDailyReviews } from "./daily-cap";
 
 export type ProjectedMix = CompositionCounts & { total: number };
 
 type CompositionPayload = {
   due?: DueCounts;
-  intake?: { introducedToday?: number; inProgress?: number };
-  reviewedToday?: number;
+  intake?: { inProgress?: number };
 };
 
 /**
@@ -24,10 +22,7 @@ export async function fetchProjectedMix(): Promise<ProjectedMix | null> {
   const cfg = getLearningConfig();
   return projectSessionMix(data.due, {
     learningRatio: cfg.defaultLearningRatio,
-    maxNewCards: cfg.maxNewCards,
     maxNewPerSession: cfg.newPerSession,
-    maxReviews: remainingDailyReviews(cfg.maxDailyReviews, data.reviewedToday ?? 0),
-    introducedToday: data.intake?.introducedToday ?? 0,
     inProgress: data.intake?.inProgress ?? 0,
     maxLearningPool: cfg.maxLearningPool,
   });

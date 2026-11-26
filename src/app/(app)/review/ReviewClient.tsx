@@ -99,9 +99,7 @@ export default function ReviewClient() {
         limit: String(s.limit),
         learningRatio: String(learningRatio),
         maxLearningPool: String(learningCfg.maxLearningPool),
-        maxNewCards: String(learningCfg.maxNewCards),
         newPerSession: String(learningCfg.newPerSession),
-        maxDailyReviews: String(learningCfg.maxDailyReviews),
       });
       if (s.studyMode === "new") params.set("status", "new");
       if (s.practice) params.set("practice", "true");

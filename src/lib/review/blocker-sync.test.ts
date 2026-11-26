@@ -34,7 +34,7 @@ describe("blockerUpdatesForLearningDefaults", () => {
   });
 
   it("writes nothing for unrelated settings", () => {
-    expect(blockerUpdatesForLearningDefaults({ maxNewCards: 10 })).toEqual({});
+    expect(blockerUpdatesForLearningDefaults({ maxLearningPool: 20 })).toEqual({});
     expect(blockerUpdatesForLearningDefaults({ newPerSession: 3 })).toEqual({});
   });
 });

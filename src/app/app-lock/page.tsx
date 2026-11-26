@@ -225,19 +225,15 @@ export default function StandaloneAppLockPage() {
 
     const learningCfg = getLearningConfig();
     const maxLearningPool = learningCfg.maxLearningPool;
-    // Same intake rules as the in-app session: the route combines the daily
-    // ceiling with the per-session quota.
-    const maxNewCards = learningCfg.maxNewCards;
     // Derive per-session new-card allowance from the Focus Guard plan ratio so
     // global `newPerSession` (e.g. 3) does not silently override Active Intake or All New.
     const newPerSession = Math.ceil(count * learningRatio);
 
     // `fill=1` lets the session reach its card count (due → new → anything
-    // studied). `maxDailyReviews` is deliberately NOT sent: spending the daily
-    // review goal must not turn the lock screen into a free unlock.
+    // studied).
     try {
       const res = await fetch(
-        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&fill=1&maxNewCards=${maxNewCards}&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}`
+        `${endpoint}?studyMode=${encodeURIComponent(studyMode)}&limit=${count}&learningRatio=${learningRatio}&fill=1&newPerSession=${newPerSession}&maxLearningPool=${maxLearningPool}`
       );
       if (res.ok) {
         const data = await res.json();

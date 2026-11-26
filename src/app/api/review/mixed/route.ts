@@ -10,13 +10,7 @@ import {
 } from "@/lib/review/maintenance-window";
 import { LEARNING_CARD_WHERE, STUDIED_CARD_WHERE, isNewCard } from "@/lib/review/lifecycle";
 import { LEECH_MAX_INTERVAL_DAYS, LEECH_MIN_LAPSES } from "@/lib/review/leech";
-import {
-  introducedTodayWhere,
-  isLearningPoolFull,
-  resolveNewAllowance,
-  startOfToday,
-} from "@/lib/review/intake";
-import { clampSessionToDailyCap, remainingDailyReviews } from "@/lib/review/daily-cap";
+import { isLearningPoolFull } from "@/lib/review/intake";
 import { DEFAULT_LEARNING_CONFIG } from "@/lib/learning-config";
 import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
 import { mergeComponents } from "@/lib/kanji-mnemonic/context";
@@ -39,23 +33,16 @@ export async function GET(req: Request) {
 
   const sp = new URL(req.url).searchParams;
   const studyMode = sp.get("studyMode") ?? "due";
-  let limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
+  const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 200);
   const rawRatio = sp.get("learningRatio");
   const learningRatio = rawRatio !== null && !isNaN(parseFloat(rawRatio)) ? parseFloat(rawRatio) : 0.5;
-  const rawMaxNew = sp.get("maxNewCards");
   const rawMaxLearning = sp.get("maxLearningPool");
   const rawNewPerSession = sp.get("newPerSession");
-  const maxNewCards = rawMaxNew !== null && !isNaN(parseInt(rawMaxNew, 10)) ? parseInt(rawMaxNew, 10) : undefined;
   const newPerSession = rawNewPerSession !== null && !isNaN(parseInt(rawNewPerSession, 10)) ? parseInt(rawNewPerSession, 10) : undefined;
-  // A caller that sends neither quota gets the learner's default drip instead of
-  // an unlimited one (an unrationed new-card dump).
-  const unsetQuota = maxNewCards === undefined && newPerSession === undefined;
   // The blocked-app session asks for a full card count; a normal study session
   // must not quietly pull in new words or study-ahead cards.
   const fillSession = sp.get("fill") === "1" || sp.get("fill") === "true";
   const maxLearningPool = rawMaxLearning !== null && !isNaN(parseInt(rawMaxLearning, 10)) ? parseInt(rawMaxLearning, 10) : undefined;
-  const rawMaxDaily = sp.get("maxDailyReviews");
-  const maxDailyReviews = rawMaxDaily !== null && !isNaN(parseInt(rawMaxDaily, 10)) ? parseInt(rawMaxDaily, 10) : undefined;
 
   // Build where clauses for both vocab and kanji
   const vocabWhere: Prisma.UserFlashcardWhereInput = { userId: user.id };
@@ -94,33 +81,6 @@ export async function GET(req: Request) {
       { lapses: { gte: LEECH_MIN_LAPSES } },
       { interval: { lt: LEECH_MAX_INTERVAL_DAYS } }
     ];
-  }
-
-  // Daily ceiling: shrink the session to what is left of today's review goal.
-  // The ceiling is per learner, so vocab and kanji reviews share it.
-  if (maxDailyReviews !== undefined) {
-    const [reviewedVocab, reviewedKanji] = await Promise.all([
-      prisma.userFlashcard.count({
-        where: {
-          userId: user.id,
-          lastReviewedAt: { gte: startOfToday(new Date(), user.timezone) },
-        },
-      }),
-      prisma.userKanji.count({
-        where: {
-          userId: user.id,
-          lastReviewedAt: { gte: startOfToday(new Date(), user.timezone) },
-        },
-      }),
-    ]);
-    limit = clampSessionToDailyCap(
-      limit,
-      remainingDailyReviews(
-        maxDailyReviews,
-        (Number(reviewedVocab) || 0) + (Number(reviewedKanji) || 0)
-      )
-    );
-    if (limit === 0) return NextResponse.json({ cards: [] });
   }
 
   // Use session composition for all standard review modes
@@ -269,23 +229,7 @@ export async function GET(req: Request) {
       allKanji = mergeUniqueById(allKanji, reviewedKanji ?? []);
     }
 
-    let effectiveMaxNewCards = unsetQuota
-      ? DEFAULT_LEARNING_CONFIG.maxNewCards
-      : maxNewCards;
-    const effectiveNewPerSession = unsetQuota
-      ? DEFAULT_LEARNING_CONFIG.newPerSession
-      : newPerSession;
-    if (maxNewCards !== undefined || newPerSession !== undefined) {
-      const [introducedVocab, introducedKanji] = await Promise.all([
-        prisma.userFlashcard.count({ where: introducedTodayWhere(user.id, new Date(), user.timezone) }),
-        prisma.userKanji.count({ where: introducedTodayWhere(user.id, new Date(), user.timezone) }),
-      ]);
-      effectiveMaxNewCards = resolveNewAllowance({
-        maxNewCards: maxNewCards ?? Number.POSITIVE_INFINITY,
-        maxNewPerSession: newPerSession,
-        introducedToday: (Number(introducedVocab) || 0) + (Number(introducedKanji) || 0),
-      });
-    }
+    let effectiveNewPerSession = newPerSession ?? DEFAULT_LEARNING_CONFIG.newPerSession;
     if (maxLearningPool !== undefined && maxLearningPool > 0) {
       const [inLearningVocab, inLearningKanji] = await Promise.all([
         prisma.userFlashcard.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
@@ -297,7 +241,7 @@ export async function GET(req: Request) {
           maxLearningPool,
         })
       ) {
-        effectiveMaxNewCards = 0;
+        effectiveNewPerSession = 0;
       }
     }
 
@@ -308,30 +252,25 @@ export async function GET(req: Request) {
     // up turned a quota of 3 into 2 + 2 = 4 new cards in one mixed session.
     // A pool with no new cards must not strand its share: with 3 new allowed
     // and all of them kanji, kanji gets 3, not floor(3/2) = 1.
-    let vocabNewBudget: number | undefined;
-    let kanjiNewBudget: number | undefined;
-    if (effectiveMaxNewCards !== undefined) {
-      const vocabShare = Math.ceil(effectiveMaxNewCards / 2);
-      const kanjiShare = Math.floor(effectiveMaxNewCards / 2);
-      const vocabNewAvailable = allVocab.filter(isNewCard).length;
-      const kanjiNewAvailable = allKanji.filter(isNewCard).length;
-      vocabNewBudget = Math.min(vocabShare, vocabNewAvailable);
-      kanjiNewBudget = Math.min(kanjiShare, kanjiNewAvailable);
+    const vocabShare = Math.ceil(effectiveNewPerSession / 2);
+    const kanjiShare = Math.floor(effectiveNewPerSession / 2);
+    const vocabNewAvailable = allVocab.filter(isNewCard).length;
+    const kanjiNewAvailable = allKanji.filter(isNewCard).length;
+    let vocabNewBudget = Math.min(vocabShare, vocabNewAvailable);
+    let kanjiNewBudget = Math.min(kanjiShare, kanjiNewAvailable);
 
-      let stranded = effectiveMaxNewCards - vocabNewBudget - kanjiNewBudget;
-      const kanjiExtra = Math.min(stranded, kanjiNewAvailable - kanjiNewBudget);
-      kanjiNewBudget += kanjiExtra;
-      stranded -= kanjiExtra;
-      vocabNewBudget += Math.min(stranded, vocabNewAvailable - vocabNewBudget);
-    }
+    let stranded = effectiveNewPerSession - vocabNewBudget - kanjiNewBudget;
+    const kanjiExtra = Math.min(stranded, kanjiNewAvailable - kanjiNewBudget);
+    kanjiNewBudget += kanjiExtra;
+    stranded -= kanjiExtra;
+    vocabNewBudget += Math.min(stranded, vocabNewAvailable - vocabNewBudget);
+
     const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio, {
-      maxNewCards: vocabNewBudget,
-      maxNewPerSession: vocabNewBudget ?? effectiveNewPerSession,
+      maxNewPerSession: vocabNewBudget,
       fillSession,
     });
     const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate, learningRatio, {
-      maxNewCards: kanjiNewBudget,
-      maxNewPerSession: kanjiNewBudget ?? effectiveNewPerSession,
+      maxNewPerSession: kanjiNewBudget,
       fillSession,
     });
 
@@ -351,12 +290,8 @@ export async function GET(req: Request) {
     if (vocabShortfall > 0 && kanjiShortfall <= 0) {
       // Kanji has surplus; pull extra from it — but only with the allowance the
       // vocab half did not spend, so the backfill cannot spend it twice.
-      const remainingNew =
-        effectiveMaxNewCards !== undefined
-          ? Math.max(0, effectiveMaxNewCards - vocabNewUsed)
-          : undefined;
+      const remainingNew = Math.max(0, effectiveNewPerSession - vocabNewUsed);
       const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate, learningRatio, {
-        maxNewCards: remainingNew,
         maxNewPerSession: remainingNew,
         fillSession,
       });
@@ -364,12 +299,8 @@ export async function GET(req: Request) {
       kanjiMaintenanceCards = extraKanji.maintenanceCards;
     } else if (kanjiShortfall > 0 && vocabShortfall <= 0) {
       // Vocab has surplus; pull extra from it with the unspent allowance only.
-      const remainingNew =
-        effectiveMaxNewCards !== undefined
-          ? Math.max(0, effectiveMaxNewCards - kanjiNewUsed)
-          : undefined;
+      const remainingNew = Math.max(0, effectiveNewPerSession - kanjiNewUsed);
       const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate, learningRatio, {
-        maxNewCards: remainingNew,
         maxNewPerSession: remainingNew,
         fillSession,
       });

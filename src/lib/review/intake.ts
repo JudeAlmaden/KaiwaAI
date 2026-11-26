@@ -45,18 +45,13 @@ export function resolveNewAllowance(options: {
   return Math.min(daily, quota);
 }
 
-export type IntakePauseReason = "off" | "learning-pool" | "daily-ceiling" | "ready";
+export type IntakePauseReason = "off" | "learning-pool" | "ready";
 
 export type IntakeStatus = {
   allowance: number;
   reason: IntakePauseReason;
 };
 
-/**
- * The three limits that govern new-card intake, resolved into one answer plus
- * the reason for it: the per-session quota, the daily ceiling, and the cap on
- * cards already in progress.
- */
 /**
  * Whether the in-progress learning cap blocks new cards. Zero or missing means
  * unlimited, so the gate is skipped instead of blocking everything.
@@ -71,13 +66,11 @@ export function isLearningPoolFull(options: {
 }
 
 export function describeIntake(options: {
-  maxNewCards: number;
   maxNewPerSession: number;
-  introducedToday: number;
   inProgress: number;
   maxLearningPool: number;
 }): IntakeStatus {
-  if (options.maxNewPerSession <= 0 || options.maxNewCards <= 0) {
+  if (options.maxNewPerSession <= 0) {
     return { allowance: 0, reason: "off" };
   }
 
@@ -85,13 +78,7 @@ export function describeIntake(options: {
     return { allowance: 0, reason: "learning-pool" };
   }
 
-  const allowance = resolveNewAllowance({
-    maxNewCards: options.maxNewCards,
-    maxNewPerSession: options.maxNewPerSession,
-    introducedToday: options.introducedToday,
-  });
-
-  return { allowance, reason: allowance > 0 ? "ready" : "daily-ceiling" };
+  return { allowance: options.maxNewPerSession, reason: "ready" };
 }
 
 /** Prisma filter for cards first successfully reviewed today. */
