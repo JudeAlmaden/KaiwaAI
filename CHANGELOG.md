@@ -4,6 +4,15 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **An archived group you own is handed over, not destroyed** — the archived trash removes a conversation for you, but `DELETE /api/groups/[id]/leave` refused an owner who still shared the group, so the button only raised "You own this conversation. Delete it for everyone instead." An owner now hands the group to its longest-standing accepted member and leaves: the others keep the conversation and its history, the departing owner's stored API key is cleared instead of passing to the new owner, and a conversation nobody else shares is still deleted outright. The confirm reads **Leave this group?**, and the owner's trash never deletes the group for everyone. Someone who is the last accepted member still deletes the conversation outright — it has no one to hand over to — and is told so first (**Delete this group for good?**), instead of being promised that others keep it. `GET /api/groups` now sends each member's invite `status` so the row can tell an accepted member from a pending invite that goes away with the chat.
+
+### Technical
+- Modified: `src/app/api/groups/[id]/leave/route.ts` (ownership handover, `apiKeyEnc` cleared), `src/app/api/groups/[id]/leave/route.test.ts`, `src/app/api/groups/route.ts` (member `status` in the inbox payload), `src/app/(app)/chat/InboxList.tsx` (owner and last-member confirm copy), `src/app/(app)/chat/useInbox.ts` (member `status` type)
+- New: none
+- Deleted: none
+- Tests: leave route 7 passing (handover replaces the old refusal case); full `npm run test` 1080 passing (119 files); `npm run lint` and `npm run typecheck` clean. No component test added: the repo has no client component test setup.
+
 ## [2.7.0] - 2026-11-25
 
 ### Added

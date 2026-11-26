@@ -5,17 +5,37 @@ import * as authHelpers from "@/lib/auth-helpers";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    chat: { findUnique: vi.fn(), delete: vi.fn() },
+    chat: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
     chatMember: { delete: vi.fn() },
+    $transaction: vi.fn(async (ops: unknown[]) => ops),
   },
 }));
 
 vi.mock("@/lib/auth-helpers", () => ({ getCurrentUser: vi.fn() }));
 
 const me = { id: "user1", email: "me@example.com", name: "Me" };
-const myMember = { id: "m1", userId: "user1", kind: "user", status: "accepted" };
-const otherMember = { id: "m2", userId: "user2", kind: "user", status: "accepted" };
-const personaMember = { id: "p1", userId: null, kind: "persona", status: "accepted" };
+const at = (day: number) => new Date(2026, 10, day);
+const myMember = {
+  id: "m1",
+  userId: "user1",
+  kind: "user",
+  status: "accepted",
+  createdAt: at(1),
+};
+const otherMember = {
+  id: "m2",
+  userId: "user2",
+  kind: "user",
+  status: "accepted",
+  createdAt: at(2),
+};
+const personaMember = {
+  id: "p1",
+  userId: null,
+  kind: "persona",
+  status: "accepted",
+  createdAt: at(1),
+};
 
 function del() {
   return DELETE(
@@ -55,11 +75,18 @@ describe("/api/groups/[id]/leave DELETE", () => {
     expect(prisma.chat.delete).not.toHaveBeenCalled();
   });
 
-  it("refuses an owner who would strand other people", async () => {
-    chat([myMember, otherMember], "user1");
+  it("hands an owned group to the longest-standing member and leaves", async () => {
+    const later = { ...otherMember, id: "m3", userId: "user3", createdAt: at(5) };
+    chat([myMember, later, otherMember], "user1");
     const res = await del();
-    expect(res.status).toBe(400);
-    expect(prisma.chatMember.delete).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect((await res.json()).scope).toBe("handover");
+    expect(prisma.chat.update).toHaveBeenCalledWith({
+      where: { id: "g1" },
+      // The departing owner's API key is not handed to the new owner.
+      data: { ownerId: "user2", apiKeyEnc: null },
+    });
+    expect(prisma.chatMember.delete).toHaveBeenCalledWith({ where: { id: "m1" } });
     expect(prisma.chat.delete).not.toHaveBeenCalled();
   });
 
@@ -68,6 +95,7 @@ describe("/api/groups/[id]/leave DELETE", () => {
     const res = await del();
     expect(res.status).toBe(200);
     expect(prisma.chat.delete).toHaveBeenCalled();
+    expect(prisma.chat.update).not.toHaveBeenCalled();
   });
 
   it("refuses a non-member", async () => {

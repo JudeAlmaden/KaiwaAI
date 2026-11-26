@@ -7,8 +7,8 @@ import { getCurrentUser } from "@/lib/auth-helpers";
 //     so every list and membership check stops returning the chat)
 //   - the last human in a persona chat deletes the chat instead, so no
 //     ownerless conversation is left behind
-//   - an owner who shares the conversation with other people must delete it
-//     for everyone; there is no ownership transfer to hand it to
+//   - an owner who shares the conversation hands it to the longest-standing
+//     other member and leaves; the group and its history stay for them
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -21,7 +21,15 @@ export async function DELETE(
     where: { id },
     select: {
       ownerId: true,
-      members: { select: { id: true, userId: true, kind: true, status: true } },
+      members: {
+        select: {
+          id: true,
+          userId: true,
+          kind: true,
+          status: true,
+          createdAt: true,
+        },
+      },
     },
   });
   if (!chat) return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -31,12 +39,16 @@ export async function DELETE(
   );
   if (!me) return NextResponse.json({ error: "Not a member." }, { status: 403 });
 
-  const otherHumans = chat.members.filter(
-    (m) =>
-      m.kind === "user" &&
-      m.userId !== user.id &&
-      m.status === "accepted"
-  );
+  type Member = (typeof chat.members)[number];
+  const otherHumans = chat.members
+    .filter(
+      (m): m is Member & { userId: string } =>
+        m.kind === "user" &&
+        m.userId !== null &&
+        m.userId !== user.id &&
+        m.status === "accepted"
+    )
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   if (otherHumans.length === 0) {
     await prisma.chat.delete({ where: { id } });
@@ -44,13 +56,16 @@ export async function DELETE(
   }
 
   if (chat.ownerId === user.id) {
-    return NextResponse.json(
-      {
-        error:
-          "You own this conversation. Delete it for everyone instead.",
-      },
-      { status: 400 }
-    );
+    // The chat's stored API key belongs to the owner leaving it, so it goes
+    // with them instead of being handed to whoever inherits the group.
+    await prisma.$transaction([
+      prisma.chat.update({
+        where: { id },
+        data: { ownerId: otherHumans[0].userId, apiKeyEnc: null },
+      }),
+      prisma.chatMember.delete({ where: { id: me.id } }),
+    ]);
+    return NextResponse.json({ ok: true, scope: "handover" });
   }
 
   await prisma.chatMember.delete({ where: { id: me.id } });

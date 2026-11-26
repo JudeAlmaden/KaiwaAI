@@ -14,7 +14,12 @@ export type Conversation = {
   lastMessage: { content: string; senderName: string; fromMe?: boolean } | null;
   lastAt?: string;
   mood?: string;
-  members: { kind: string; name?: string | null; avatar?: string | null }[];
+  members: {
+    kind: string;
+    name?: string | null;
+    avatar?: string | null;
+    status?: string;
+  }[];
 };
 
 export type Persona = {
@@ -140,9 +145,8 @@ export function useInbox() {
     [hiddenConvos, reloadConvos]
   );
 
-  // Remove the conversation for this user only (archived rows): a group they
-  // don't own is left, a persona chat is deleted, an owned shared chat is
-  // refused and has to be deleted for everyone.
+  // Remove the conversation for this user only (archived rows): a group is
+  // left (an owner hands it to the other members), a persona chat is deleted.
   const deleteConvo = useCallback(
     async (id: string) => {
       try {
