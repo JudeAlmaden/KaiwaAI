@@ -71,10 +71,11 @@ export default function ReviewClient() {
   };
 
   const refreshDueCount = useCallback(() => {
-    // Same projected session total as the home screen and the nav badge.
+    // Each quest card counts what its own session will hand over, and the nav
+    // badge and home pill are exactly the sum of the two.
     fetchProjectedMix()
       .then((mix) => {
-        setDueCount(mix?.total ?? 0);
+        setDueCount(mix?.dailyDue ?? 0);
         setKanjiDueCount(mix?.kanjiDue ?? 0);
       })
       .catch(() => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatComposition,
   isNewCard,
-  projectSessionMix,
+  projectQuestDelivery,
   summarizeComposition,
 } from "./composition";
 
@@ -29,71 +29,68 @@ describe("summarizeComposition", () => {
   });
 });
 
-describe("projectSessionMix", () => {
-  const base = { learningRatio: 0.5 };
+describe("projectQuestDelivery", () => {
+  const quest = { maxNewPerSession: 3, maxReviews: 50 };
 
   it("rations new cards to the per-session quota", () => {
-    const mix = projectSessionMix({ new: 16, review: 139 }, { ...base, maxNewPerSession: 3, maxReviews: 10 });
-    expect(mix).toEqual({ newCount: 3, reviewCount: 7, total: 10 });
+    expect(projectQuestDelivery({ new: 19, review: 0 }, quest)).toEqual({
+      new: 3,
+      review: 0,
+      total: 3,
+    });
   });
 
-  it("splits a balanced session 50/50 without a quota", () => {
-    const mix = projectSessionMix({ new: 10, review: 10 }, { ...base, maxReviews: 20 });
-    expect(mix).toEqual({ newCount: 10, reviewCount: 10, total: 20 });
+  it("serves every due review alongside the quota", () => {
+    expect(
+      projectQuestDelivery({ new: 19, review: 4 }, { maxNewPerSession: 2, maxReviews: 50 })
+    ).toEqual({ new: 2, review: 4, total: 6 });
   });
 
-  it("never pads a session with new cards when reviews are missing", () => {
-    const mix = projectSessionMix({ new: 30, review: 2 }, { ...base, maxReviews: 10 });
-    expect(mix).toEqual({ newCount: 5, reviewCount: 2, total: 7 });
+  it("never runs past the quest card limit, trimming reviews first", () => {
+    expect(
+      projectQuestDelivery({ new: 5, review: 90 }, { maxNewPerSession: 5, maxReviews: 50 })
+    ).toEqual({ new: 5, review: 45, total: 50 });
   });
 
-  it("fills with reviews when there are no new cards", () => {
-    const mix = projectSessionMix({ new: 0, review: 12 }, { ...base, maxReviews: 50 });
-    expect(mix).toEqual({ newCount: 0, reviewCount: 12, total: 12 });
+  it("serves only what the deck has", () => {
+    expect(projectQuestDelivery({ new: 2, review: 0 }, quest)).toEqual({
+      new: 2,
+      review: 0,
+      total: 2,
+    });
   });
 
-  it("caps a fresh deck at the active share", () => {
-    const mix = projectSessionMix({ new: 8, review: 0 }, { ...base, maxReviews: 10 });
-    // Size 8 → active target 4; reviews can't fill the rest, and new cards never pad.
-    expect(mix).toEqual({ newCount: 4, reviewCount: 0, total: 4 });
-  });
-
-  it("excludes new cards entirely at ratio 0", () => {
-    const mix = projectSessionMix(
-      { new: 10, review: 4 },
-      { learningRatio: 0, maxNewPerSession: 3, maxReviews: 10 }
-    );
-    expect(mix).toEqual({ newCount: 0, reviewCount: 4, total: 4 });
-  });
-
-  it("drops new cards when the learning pool is full", () => {
-    const mix = projectSessionMix(
-      { new: 10, review: 10 },
-      { ...base, maxNewPerSession: 3, maxReviews: 10, inProgress: 48, maxLearningPool: 20 }
-    );
-    expect(mix).toEqual({ newCount: 0, reviewCount: 10, total: 10 });
-  });
-
-  it("ignores the learning cap when it is unlimited", () => {
-    const mix = projectSessionMix(
-      { new: 10, review: 10 },
-      { ...base, maxNewPerSession: 3, maxReviews: 10, inProgress: 48, maxLearningPool: 0 }
-    );
-    expect(mix.newCount).toBe(3);
+  it("pauses new cards when the learning pool is full", () => {
+    expect(
+      projectQuestDelivery(
+        { new: 17, review: 2 },
+        { ...quest, inProgress: 20, maxLearningPool: 20 }
+      )
+    ).toEqual({ new: 0, review: 2, total: 2 });
   });
 
   it("still introduces new cards just below the cap", () => {
-    const mix = projectSessionMix(
-      { new: 10, review: 10 },
-      { ...base, maxNewPerSession: 3, maxReviews: 10, inProgress: 19, maxLearningPool: 20 }
-    );
-    expect(mix.newCount).toBe(3);
+    expect(
+      projectQuestDelivery(
+        { new: 17, review: 0 },
+        { ...quest, inProgress: 19, maxLearningPool: 20 }
+      )
+    ).toEqual({ new: 3, review: 0, total: 3 });
   });
 
-  it("returns zeroes for an empty deck", () => {
-    expect(projectSessionMix({ new: 0, review: 0 }, base)).toEqual({
-      newCount: 0,
-      reviewCount: 0,
+  it("treats a zero learning cap as unlimited", () => {
+    expect(
+      projectQuestDelivery(
+        { new: 17, review: 0 },
+        { ...quest, inProgress: 40, maxLearningPool: 0 }
+      ).new
+    ).toBe(3);
+  });
+
+  it("ignores due-ahead padding, which only a fill session uses", () => {
+    expect(projectQuestDelivery({ new: 0, review: 0, ahead: 156 }, quest)).toEqual({
+      new: 0,
+      review: 0,
       total: 0,
     });
   });

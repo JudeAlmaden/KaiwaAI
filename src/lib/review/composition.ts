@@ -1,7 +1,7 @@
 /**
  * Visible session composition: how many cards in a session are brand-new vs
- * already reviewed. Kept pure so the home button and the session header
- * describe the mix the same way the composer builds it.
+ * already reviewed, and how many cards a quest can actually hand over right now.
+ * Kept pure so the quest cards and the routes describe the same session.
  */
 
 import { isNewCard } from "./lifecycle";
@@ -17,24 +17,20 @@ export type CompositionCounts = {
 export type DueCounts = {
   new: number;
   review: number;
-  /** Studied, not due yet — what the session falls back to when due runs out. */
+  /** Studied, not due yet — only a `fill` session falls back to these. */
   ahead?: number;
 };
 
-export type SessionMixOptions = {
-  learningRatio: number;
+export type QuestDeliveryOptions = {
   /** Fixed per-session new-card intake. Unlimited when omitted. */
   maxNewPerSession?: number;
-  /** Session size cap (Goal / limit). */
+  /** Session size cap (the quest's card limit). */
   maxReviews?: number;
   /** Cards currently in progress — blocks intake when the cap is reached. */
   inProgress?: number;
   /** Max in-progress learning cards (0 or omitted = unlimited). */
   maxLearningPool?: number;
 };
-
-const clampRatio = (ratio: number) =>
-  Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0.5));
 
 export function summarizeComposition(
   cards: { repetitions?: number | null; interval?: number | null }[]
@@ -47,39 +43,35 @@ export function summarizeComposition(
 }
 
 /**
- * Mirror the composer for a session that hasn't been built yet: the active share
- * of the session holds the new cards (rationed by the intake quota and the daily
- * ceiling), due reviews fill everything else, and studied-but-not-due cards keep
- * the session at its requested size once the due pool is spent.
+ * What one quest can hand over right now, mirroring what the review routes
+ * build: due reviews are always served, brand-new cards only inside the
+ * per-session intake drip and only while the in-progress learning cap allows
+ * intake, and never more than the quest's card limit.
+ *
+ * This is the single rule behind every count in the app, so a quest card can
+ * never advertise a card its session will withhold.
  */
-export function projectSessionMix(
+export function projectQuestDelivery(
   due: DueCounts,
-  options: SessionMixOptions
-): CompositionCounts & { total: number } {
+  options: QuestDeliveryOptions = {}
+): { new: number; review: number; total: number } {
   const dueNew = Math.max(0, due.new);
   const dueReview = Math.max(0, due.review);
-  const ahead = Math.max(0, due.ahead ?? 0);
-  const size = Math.min(
-    dueNew + dueReview + ahead,
-    Math.max(0, options.maxReviews ?? dueNew + dueReview + ahead)
-  );
-  const ratio = clampRatio(options.learningRatio);
-  const activeTarget =
-    ratio === 0 ? 0 : Math.min(size, Math.max(1, Math.round(size * ratio)));
-
-  const quota = options.maxNewPerSession ?? Number.POSITIVE_INFINITY;
-
-  // A full learning pool pauses intake, exactly as the routes do, so the home
-  // button cannot promise new cards the session will refuse to deliver.
+  const available = dueNew + dueReview;
+  const cap = Math.max(0, options.maxReviews ?? available);
+  const quota =
+    options.maxNewPerSession === undefined || Number.isNaN(options.maxNewPerSession)
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, options.maxNewPerSession);
   const poolFull = isLearningPoolFull({
     inProgress: options.inProgress,
     maxLearningPool: options.maxLearningPool,
   });
 
-  const newCount = poolFull ? 0 : Math.min(dueNew, activeTarget, quota);
-  const reviewCount = Math.min(dueReview + ahead, size - newCount);
+  const newCount = poolFull ? 0 : Math.min(dueNew, quota, cap);
+  const reviewCount = Math.min(dueReview, cap - newCount);
 
-  return { newCount, reviewCount, total: newCount + reviewCount };
+  return { new: newCount, review: reviewCount, total: newCount + reviewCount };
 }
 
 /** "6 review · 4 new" (omits whichever side is empty). */

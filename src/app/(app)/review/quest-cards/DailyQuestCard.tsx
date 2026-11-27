@@ -37,7 +37,8 @@ export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProp
             </span>
           </div>
           <p className="text-xs md:text-sm text-muted leading-relaxed max-w-2xl">
-            Clear your daily review backlog. Up to 50 cards per session with mixed content.
+            Clear your daily vocabulary backlog. Up to 50 cards per session — kanji
+            has its own quest.
           </p>
         </div>
       </div>

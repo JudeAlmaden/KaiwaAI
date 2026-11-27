@@ -154,7 +154,9 @@ export default function QuestGallery({
                 studyMode: "due",
                 limit: 50,
                 isContinuous: false,
-                reviewType: "mixed",
+                // Vocabulary only, matching the count on the card: kanji is
+                // counted and studied on its own quest.
+                reviewType: "vocabulary",
                 activeLimit: 5,
               })
             }

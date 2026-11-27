@@ -4,6 +4,15 @@ All notable changes to KaiwaAI are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **One rule for every review count: cards you can study right now** — the nav badge, the mobile Review tab badge, the home "due" pill, the home Review Cards subtitle, Today's Quest line and both quest cards now report what a session will actually hand over instead of the raw scheduled due pool. The Daily Quest counts the vocabulary cards its session delivers, the Kanji Quest counts the kanji cards, and every global number is exactly the sum of those two cards. Brand-new cards count only inside the per-session intake drip and stop counting once the in-progress learning cap pauses intake, and each quest stops at its 50-card session limit, so no surface advertises a card its session will withhold. 19 scheduled due cards (17 of them brand-new kanji) previously read 19 everywhere and opened a 3-card session; the app now reads 5 = 2 vocabulary + 3 kanji, and Kai's speech uses the same number.
+- **Daily Quest is vocabulary-only** — kanji is counted and studied on its own Kanji Quest card, which keeps the Daily Quest count unambiguous. Nothing is hidden: both cards sit side by side on `/review` and their totals add up to the nav badge.
+
+### Technical
+- Modified: `src/lib/review/composition.ts`, `src/lib/review/session-ready.ts`, `src/lib/review/composition.test.ts`, `src/app/(app)/AppNav.tsx`, `src/app/(app)/layout.tsx`, `src/app/(app)/home/KaiRoomClient.tsx`, `src/app/(app)/review/ReviewClient.tsx`, `src/app/(app)/review/QuestGallery.tsx`, `src/app/(app)/review/quest-cards/DailyQuestCard.tsx`
+- Removed: `projectSessionMix`, which padded a projected total with ahead-of-schedule cards; `projectQuestDelivery` replaces it and mirrors the review routes.
+- Tests: `npx tsc --noEmit` clean, `npm run lint` clean, `npx vitest run` 119 files / 1076 tests passing
+
 ## [2.8.1] - 2026-11-26
 
 ### Added
