@@ -86,6 +86,34 @@ describe("applyFsrsReview — retrievability recomputation (doom-loop regression
     expect(r.stability).toBeGreaterThanOrEqual(card.stability!);
   });
 
+  it("schedules a brand-new card from its first grade", () => {
+    const card = makeCard({
+      repetitions: 0,
+      timesReviewed: 0,
+      difficulty: null,
+      stability: null,
+      retrievability: null,
+      interval: 0,
+      lastReviewedAt: null,
+      // Cards are due the moment they are created (schema default now()).
+      nextReview: new Date(),
+    });
+
+    const r = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+
+    // Good on a new card uses the FSRS initial stability (w2 = 2.4 days), not
+    // the early-review discount, which must only apply to cards ahead of due.
+    expect(r.stability).toBe(DEFAULT_FSRS_PARAMETERS[2]);
+    expect(r.interval).toBe(Math.round(DEFAULT_FSRS_PARAMETERS[2]));
+    const daysAhead = (r.nextReview.getTime() - Date.now()) / DAY_MS;
+    expect(daysAhead).toBeGreaterThan(1.9);
+    expect(daysAhead).toBeLessThan(2.1);
+    expect(r.firstLearnedAt).toBeInstanceOf(Date);
+    expect(r.lastReviewedAt).toBeInstanceOf(Date);
+    expect(r.timesReviewedIncrement).toBe(1);
+    expect(r.lapsesIncrement).toBe(0);
+  });
+
   it("never shortens the interval of a card graded before it is due", () => {
     const card = makeCard({
       interval: 10,

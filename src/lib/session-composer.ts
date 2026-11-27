@@ -120,17 +120,19 @@ export function composeSession<T extends Card>(
   const aheadPool: T[] = [];
   let newCardsAdded = 0;
 
-  for (const card of allCards) {
-    // Recently served cards are out for this session: last time's deck must not
-    // come straight back when nothing else is due.
-    if (
-      seenCooldownSince &&
-      card.lastReviewedAt &&
-      card.lastReviewedAt >= seenCooldownSince
-    ) {
-      continue;
-    }
+  // The pool the session draws from. The lock cooldown is a preference, not a
+  // gate: recently served cards only drop out while enough other cards remain to
+  // fill the requested size. A blocked app must never come back empty, because
+  // an empty deck unlocks it for free. Ordering still puts the oldest-seen
+  // cards first, so anything inside the cooldown comes back last.
+  const eligible = seenCooldownSince
+    ? allCards.filter(
+        (card) => !(card.lastReviewedAt && card.lastReviewedAt >= seenCooldownSince)
+      )
+    : allCards;
+  const pool = eligible.length >= safeSize ? eligible : allCards;
 
+  for (const card of pool) {
     const isNew = isNewCard(card);
 
     // A filling session carries new cards even at ratio 0: it still has to reach
@@ -210,6 +212,20 @@ export function composeSession<T extends Card>(
   shuffleArray(selectedMaintenance);
 
   const session = interleave(selectedActive, selectedMaintenance);
+
+  // Last resort for a filling session: if every cooldown conspired to exclude
+  // the whole deck (a second lock started seconds after the first), serve the
+  // oldest-seen cards anyway. An empty Focus Guard session would unlock the app.
+  if (session.length === 0 && fillSession && safeSize > 0 && allCards.length > 0) {
+    const ordered = rotateByOldestSeen(allCards);
+    const reviewed = ordered.filter((card) => card.lastReviewedAt != null);
+    const fallback = (reviewed.length > 0 ? reviewed : ordered).slice(0, safeSize);
+    return {
+      session: fallback,
+      activeCards: [],
+      maintenanceCards: fallback,
+    };
+  }
 
   return {
     session,

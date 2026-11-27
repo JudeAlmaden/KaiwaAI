@@ -446,24 +446,102 @@ describe("session-composer integration with app blocker", () => {
       expect(second.session.length).toBe(10);
     });
 
-    it("excludes cards seen inside the lock cooldown", () => {
+    it("still serves cards when the whole deck is inside the lock cooldown", () => {
       const now = new Date();
-      const cards = Array.from({ length: 4 }, (_, i) =>
+      const cards = Array.from({ length: 6 }, (_, i) =>
         createMockCard({
-          id: `recent-${i}`,
+          id: `fresh-${i}`,
           repetitions: 5,
           interval: 10,
           nextReview: now,
-          lastReviewedAt: new Date(now.getTime() - 30 * 60 * 1000),
+          lastReviewedAt: new Date(now.getTime() - i * 1000),
         })
       );
+
+      const { session } = composeSession(cards, 6, false, 0, {
+        fillSession: true,
+        seenCooldownMs: LOCK_SEEN_COOLDOWN_MS,
+      });
+
+      // A non-empty deck must never produce an empty lock session: the cooldown
+      // gives way instead of unlocking the blocked app for free.
+      expect(session.length).toBe(6);
+    });
+
+    it("stays non-empty when every card is inside both cooldowns", () => {
+      const now = new Date();
+      // Graded seconds ago: inside the 4-hour lock cooldown AND the 2-minute
+      // in-session cooldown. A blocked app must still get cards.
+      const cards = Array.from({ length: 5 }, (_, i) =>
+        createMockCard({
+          id: `both-${i}`,
+          repetitions: 5,
+          interval: 10,
+          nextReview: now,
+          lastReviewedAt: new Date(now.getTime() - 10 * 1000),
+        })
+      );
+
+      const { session } = composeSession(cards, 5, false, 0.5, {
+        fillSession: true,
+        seenCooldownMs: LOCK_SEEN_COOLDOWN_MS,
+      });
+
+      expect(session.length).toBe(5);
+      expect(session.every((card) => card.id.startsWith("both-"))).toBe(true);
+    });
+
+    it("never returns an empty session for a filling request on a non-empty deck", () => {
+      const now = new Date();
+      // Every card graded seconds ago: both the 4-hour and the 2-minute
+      // in-session cooldowns would exclude them all.
+      const cards = Array.from({ length: 3 }, (_, i) =>
+        createMockCard({
+          id: `just-${i}`,
+          repetitions: 5,
+          interval: 10,
+          nextReview: now,
+          lastReviewedAt: new Date(now.getTime() - 5 * 1000),
+        })
+      );
+
+      const { session } = composeSession(cards, 3, false, 0.5, { fillSession: true });
+
+      expect(session.length).toBe(3);
+    });
+
+    it("excludes cards seen inside the lock cooldown when others can fill the session", () => {
+      const now = new Date();
+      const recent = new Date(now.getTime() - 30 * 60 * 1000);
+      const older = new Date(now.getTime() - 30 * 60 * 60 * 1000);
+      const cards = [
+        ...Array.from({ length: 4 }, (_, i) =>
+          createMockCard({
+            id: `recent-${i}`,
+            repetitions: 5,
+            interval: 10,
+            nextReview: now,
+            lastReviewedAt: recent,
+          })
+        ),
+        ...Array.from({ length: 4 }, (_, i) =>
+          createMockCard({
+            id: `older-${i}`,
+            repetitions: 5,
+            interval: 10,
+            nextReview: now,
+            lastReviewedAt: older,
+          })
+        ),
+      ];
 
       const { session } = composeSession(cards, 4, false, 0, {
         fillSession: true,
         seenCooldownMs: LOCK_SEEN_COOLDOWN_MS,
       });
 
-      expect(session.length).toBe(0);
+      expect(session.length).toBe(4);
+      expect(session.every((card) => card.id.startsWith("older-"))).toBe(true);
     });
 
     it("rotates study-ahead cards instead of always serving the nearest due", () => {
