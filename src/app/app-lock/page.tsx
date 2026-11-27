@@ -76,6 +76,8 @@ export default function StandaloneAppLockPage() {
   const [blockedPackage, setBlockedPackage] = useState<string | null>(null);
   // What the learner asked for, before the pool shrank the goal.
   const [requestedCount, setRequestedCount] = useState<number | null>(null);
+  // True when the due pool was empty and the session fell back to study-ahead.
+  const [studiedAhead, setStudiedAhead] = useState(false);
   const [requiredCount, setRequiredCount] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const countParam = new URLSearchParams(window.location.search).get('count');
@@ -346,6 +348,7 @@ export default function StandaloneAppLockPage() {
         if (!('offline' in pulledCards) && pulledCards.length === 0 && studyMode !== 'all') {
           pulledCards = await fetchCards(reviewType, 'all', resolvedLearningRatio, targetCount);
           if (cancelled) return;
+          if (!('offline' in pulledCards) && pulledCards.length > 0) setStudiedAhead(true);
         }
 
         // Offline or unvalidated network error — auto-unlock and pass through immediately
@@ -692,6 +695,11 @@ export default function StandaloneAppLockPage() {
                 ? `Complete cards to open ${blockedPackage.split('.').pop() || 'app'}`
                 : 'Complete cards to unlock'}
             </p>
+            {studiedAhead && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                Nothing due — these are cards you saw recently.
+              </p>
+            )}
             {requestedCount !== null && requiredCount < requestedCount && (
               <p className="text-[10px] text-muted/80">
                 Only {requiredCount} card{requiredCount === 1 ? '' : 's'} available

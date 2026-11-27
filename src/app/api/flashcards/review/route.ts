@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import type { ReviewGrade } from "@/lib/srs";
-import { composeSession } from "@/lib/session-composer";
+import { composeSession, LOCK_SEEN_COOLDOWN_MS } from "@/lib/session-composer";
 import {
   applyFsrsReview,
   buildReviewPersistData,
@@ -201,7 +201,12 @@ export async function GET(req: Request) {
     }
 
     let effectiveNewPerSession = newPerSession ?? DEFAULT_LEARNING_CONFIG.newPerSession;
-    if (maxLearningPool !== undefined && maxLearningPool > 0) {
+    // A blocked-app session still needs something to show: the pool cap gates
+    // normal sessions, but a filling session keeps at least one new card.
+    if (fillSession) {
+      effectiveNewPerSession = Math.max(1, effectiveNewPerSession);
+    }
+    if (!fillSession && maxLearningPool !== undefined && maxLearningPool > 0) {
       const inLearningCount = await prisma.userFlashcard.count({
         where: { userId: user.id, ...LEARNING_CARD_WHERE },
       });
@@ -217,7 +222,11 @@ export async function GET(req: Request) {
       limit,
       ignoreDueDate,
       learningRatio,
-      { maxNewPerSession: effectiveNewPerSession, fillSession }
+      {
+        maxNewPerSession: effectiveNewPerSession,
+        fillSession,
+        seenCooldownMs: fillSession ? LOCK_SEEN_COOLDOWN_MS : undefined,
+      }
     );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
