@@ -75,20 +75,51 @@ describe("applyFsrsReview — retrievability recomputation (doom-loop regression
     expect(Number.isFinite(r.difficulty ?? NaN)).toBe(true);
   });
 
-  it("early proportional review with 0 days elapsed does not collapse stability to 0/NaN", () => {
+  it("keeps an immediate early review finite and never below the incoming stability", () => {
     const card = makeCard({
       nextReview: new Date(Date.now() + DAY_MS), // early
       stability: 30,
       lastReviewedAt: new Date(), // 0 days elapsed
     });
-    const r = applyFsrsReview({
-      card,
+    const r = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+    expect(Number.isFinite(r.stability)).toBe(true);
+    expect(r.stability).toBeGreaterThanOrEqual(card.stability!);
+  });
+
+  it("never shortens the interval of a card graded before it is due", () => {
+    const card = makeCard({
+      interval: 10,
+      stability: 10,
+      nextReview: new Date(Date.now() + 5 * DAY_MS),
+      lastReviewedAt: new Date(Date.now() - 5 * DAY_MS),
+    });
+    const r = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+    expect(r.nextReview.getTime()).toBeGreaterThanOrEqual(card.nextReview!.getTime());
+    expect(r.interval).toBeGreaterThanOrEqual(card.interval);
+    expect(r.lastReviewedAt).not.toEqual(card.lastReviewedAt);
+  });
+
+  it("earns less growth when reviewed early than on time", () => {
+    const base = { difficulty: 5, stability: 20, interval: 20, repetitions: 4 };
+    const early = applyFsrsReview({
+      card: makeCard({
+        ...base,
+        nextReview: new Date(Date.now() + 15 * DAY_MS),
+        lastReviewedAt: new Date(Date.now() - 5 * DAY_MS),
+      }),
       grade: 2,
       cardType: "flashcard",
-      earlyReviewStrategy: "proportional",
     });
-    expect(Number.isFinite(r.stability)).toBe(true);
-    expect(r.stability).toBeGreaterThan(0);
+    const onTime = applyFsrsReview({
+      card: makeCard({
+        ...base,
+        nextReview: new Date(Date.now() - 1000),
+        lastReviewedAt: new Date(Date.now() - 20 * DAY_MS),
+      }),
+      grade: 2,
+      cardType: "flashcard",
+    });
+    expect(early.stability!).toBeLessThan(onTime.stability!);
   });
 
   it("preserves repetitions on Again while dropping interval and status to learning", () => {

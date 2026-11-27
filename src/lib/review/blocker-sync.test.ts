@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 import { blockerUpdatesForLearningDefaults, learningDefaultsForBlocker } from "./blocker-sync";
 
 describe("blockerUpdatesForLearningDefaults", () => {
-  it("mirrors earlyReviewStrategy but NOT the review mix ratio", () => {
-    expect(
-      blockerUpdatesForLearningDefaults({
-        earlyReviewStrategy: "proportional",
-      })
-    ).toEqual({ earlyReviewStrategy: "proportional" });
+  it("mirrors furigana but NOT the review mix ratio", () => {
+    expect(blockerUpdatesForLearningDefaults({ defaultFuriganaMode: "never" })).toEqual({
+      furiganaMode: "never",
+      showFurigana: false,
+    });
 
     // defaultLearningRatio must NOT flow through to the app blocker:
     // Focus Guard owns its learningRatio via the named session plan picker.
@@ -17,10 +16,6 @@ describe("blockerUpdatesForLearningDefaults", () => {
   });
 
   it("mirrors furigana as both the modern mode and the legacy boolean", () => {
-    expect(blockerUpdatesForLearningDefaults({ defaultFuriganaMode: "never" })).toEqual({
-      furiganaMode: "never",
-      showFurigana: false,
-    });
     expect(blockerUpdatesForLearningDefaults({ defaultFuriganaMode: "always" })).toEqual({
       furiganaMode: "always",
       showFurigana: true,
@@ -40,16 +35,14 @@ describe("blockerUpdatesForLearningDefaults", () => {
 });
 
 describe("learningDefaultsForBlocker", () => {
-  it("keeps the round trip intact for direction, strategy and furigana", () => {
+  it("keeps the round trip intact for direction and furigana", () => {
     const blocker = blockerUpdatesForLearningDefaults({
       defaultDirection: "mixed",
-      earlyReviewStrategy: "practice",
       defaultFuriganaMode: "learning_only",
     });
 
     expect(learningDefaultsForBlocker(blocker)).toEqual({
       defaultDirection: "mixed",
-      earlyReviewStrategy: "practice",
       defaultFuriganaMode: "learning_only",
     });
   });

@@ -11,7 +11,6 @@ export type BlockerNoDueAction =
   | 'autoOpen'
   | 'studyAny';
 
-export type BlockerEarlyReviewStrategy = 'practice' | 'proportional';
 export type BlockerFuriganaMode = 'always' | 'learning_only' | 'never';
 
 export interface AppBlockerConfig {
@@ -23,7 +22,6 @@ export interface AppBlockerConfig {
   studyMode: BlockerStudyMode;
   practice: boolean; // If true, don't update SRS / learning status
   noDueAction: BlockerNoDueAction;
-  earlyReviewStrategy?: BlockerEarlyReviewStrategy;
   showFurigana?: boolean; // Backwards compatibility: false = never, true = always
   furiganaMode?: BlockerFuriganaMode; // 'always' | 'learning_only' (removes when mastered) | 'never'
   learningRatio?: number; // Ratio of learning vs retention cards (0.1 - 1.0, default: 0.5)

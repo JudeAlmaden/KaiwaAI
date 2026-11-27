@@ -2,10 +2,10 @@ import { setLearningConfig, type LearningConfig } from "@/lib/learning-config";
 import type { AppBlockerConfig } from "@/plugins/app-blocker/definitions";
 
 /**
- * Direction, review mix, furigana and early-review strategy are owned by both
- * the Learning tab and Focus Guard. Each surface used to write only its own
- * copy, so changing one left the other showing a stale value that the session
- * might then use. Both writers now mirror into the other store.
+ * Direction and furigana are owned by both the Learning tab and Focus Guard.
+ * Each surface used to write only its own copy, so changing one left the other
+ * showing a stale value that the session might then use. Both writers now
+ * mirror into the other store.
  */
 export function blockerUpdatesForLearningDefaults(
   updates: Partial<LearningConfig>
@@ -23,9 +23,6 @@ export function blockerUpdatesForLearningDefaults(
   // Focus Guard has its own named session plan picker (Reviews Only, Casual Drip,
   // Active Intake, All New) which owns the learningRatio there. Syncing from the
   // global default would silently overwrite the plan the user chose in Focus Guard.
-  if (updates.earlyReviewStrategy !== undefined) {
-    out.earlyReviewStrategy = updates.earlyReviewStrategy;
-  }
 
   return out;
 }
@@ -38,9 +35,6 @@ export function learningDefaultsForBlocker(
   if (update.direction !== undefined) out.defaultDirection = update.direction;
   // learningRatio is intentionally NOT mirrored back: Focus Guard owns that
   // value through its session plan picker, not from the Learning defaults.
-  if (update.earlyReviewStrategy !== undefined) {
-    out.earlyReviewStrategy = update.earlyReviewStrategy;
-  }
   if (update.furiganaMode !== undefined) out.defaultFuriganaMode = update.furiganaMode;
 
   return out;

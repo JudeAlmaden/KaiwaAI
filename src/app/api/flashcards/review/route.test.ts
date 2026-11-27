@@ -30,10 +30,6 @@ vi.mock("@/lib/srs", () => ({
 vi.mock("@/lib/fsrs/apply-review", () => ({
   applyFsrsReview: vi.fn(),
   buildReviewPersistData: vi.fn(),
-  EarlyReviewStrategy: {
-    PRACTICE: "practice",
-    PROPORTIONAL: "proportional",
-  },
 }));
 
 import { prisma } from "@/lib/prisma";

@@ -14,7 +14,6 @@ import { DEFAULT_LEARNING_CONFIG } from "@/lib/learning-config";
 import {
   applyFsrsReview,
   buildReviewPersistData,
-  type EarlyReviewStrategy,
 } from "@/lib/fsrs/apply-review";
 import { loadComponentMap } from "@/lib/kanji-mnemonic/context.server";
 import { mergeComponents } from "@/lib/kanji-mnemonic/context";
@@ -345,7 +344,6 @@ export async function POST(req: Request) {
   let body: {
     cardId?: string;
     grade?: number;
-    earlyReviewStrategy?: EarlyReviewStrategy;
     desiredRetention?: number;
     /** Sent by the blocked-app screen; grade 0 there must not count as a lapse. */
     fromLock?: boolean;
@@ -384,7 +382,6 @@ export async function POST(req: Request) {
     },
     grade: grade as ReviewGrade,
     cardType: "kanji",
-    earlyReviewStrategy: body.earlyReviewStrategy,
     desiredRetention: body.desiredRetention,
     suppressLapse: body.fromLock === true,
   });

@@ -116,9 +116,6 @@ export default function StandaloneAppLockPage() {
   const [initResult, setInitResult] = useState<InitResult | null>(null);
   const [gradedIds, setGradedIds] = useState<Set<string>>(new Set());
   const [failedCardIds, setFailedCardIds] = useState<Set<string>>(new Set());
-  const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>(
-    () => getLearningConfig().earlyReviewStrategy
-  );
   const [furiganaMode, setFuriganaMode] = useState<BlockerFuriganaMode>('always');
   const [showHint, setShowHint] = useState(false);
   const [generatingMnemonic, setGeneratingMnemonic] = useState(false);
@@ -304,8 +301,6 @@ export default function StandaloneAppLockPage() {
         const reviewType: AppBlockerConfig['reviewType'] = urlReviewType ?? savedConfig?.reviewType ?? 'vocabulary';
         const studyMode: BlockerStudyMode = urlStudyMode ?? savedConfig?.studyMode ?? 'due';
         const direction: Direction = urlDirection ?? (savedConfig?.direction as Direction | undefined | null) ?? 'jp-to-en';
-        const urlEarlyStrategy = params.get('earlyReviewStrategy') as 'practice' | 'proportional' | null;
-        const earlyStrategy = urlEarlyStrategy ?? savedConfig?.earlyReviewStrategy ?? getLearningConfig().earlyReviewStrategy;
 
         const urlFuriganaMode = params.get('furiganaMode') as BlockerFuriganaMode | null;
         const urlShowFurigana = params.get('showFurigana');
@@ -328,7 +323,6 @@ export default function StandaloneAppLockPage() {
             ? parseFloat(urlLearningRatio)
             : (savedConfig?.learningRatio ?? getLearningConfig().defaultLearningRatio ?? 0.2);
 
-        setEarlyReviewStrategy(earlyStrategy);
         setFuriganaMode(resolvedFuriganaMode);
 
         // On web, skip native unlock check — always start a fresh session
@@ -455,7 +449,6 @@ export default function StandaloneAppLockPage() {
               grade,
               // Being interrupted into your hardest cards must not breed leeches.
               fromLock: true,
-              earlyReviewStrategy,
               desiredRetention: getLearningConfig().desiredRetention,
             }),
           };
@@ -523,7 +516,7 @@ export default function StandaloneAppLockPage() {
         }, 100);
       }
     },
-    [completedCount, requiredCount, cards, currentIndex, gradedIds, earlyReviewStrategy]
+    [completedCount, requiredCount, cards, currentIndex, gradedIds]
   );
 
   // Move the current card to the back without grading it: the only other way past

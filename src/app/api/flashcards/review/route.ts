@@ -6,7 +6,6 @@ import { composeSession } from "@/lib/session-composer";
 import {
   applyFsrsReview,
   buildReviewPersistData,
-  type EarlyReviewStrategy,
 } from "@/lib/fsrs/apply-review";
 
 import { FlashcardStatus, PartOfSpeech, Prisma } from "@/generated/prisma/client";
@@ -337,7 +336,6 @@ export async function POST(req: Request) {
   let body: {
     cardId?: string;
     grade?: number;
-    earlyReviewStrategy?: EarlyReviewStrategy;
     desiredRetention?: number;
     /** Sent by the blocked-app screen; grade 0 there must not count as a lapse. */
     fromLock?: boolean;
@@ -376,7 +374,6 @@ export async function POST(req: Request) {
     },
     grade: grade as ReviewGrade,
     cardType: "flashcard",
-    earlyReviewStrategy: body.earlyReviewStrategy,
     desiredRetention: body.desiredRetention,
     suppressLapse: body.fromLock === true,
   });

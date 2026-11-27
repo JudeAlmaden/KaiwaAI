@@ -5,7 +5,7 @@ import type {
   BlockerNoDueAction,
   BlockerStudyMode,
 } from "@/plugins/app-blocker/definitions";
-import type { ContentType, EarlyReviewStrategy, ReviewDirection } from "@/lib/review/types";
+import type { ContentType, ReviewDirection } from "@/lib/review/types";
 import { getLearningConfig } from "@/lib/learning-config";
 import SessionPlanPicker from "./SessionPlanPicker";
 
@@ -18,7 +18,6 @@ export interface InterceptionRulesState {
   studyMode: BlockerStudyMode;
   practice: boolean;
   noDueAction: BlockerNoDueAction;
-  earlyReviewStrategy: EarlyReviewStrategy;
   learningRatio?: number;
   useReviewDefaults?: boolean;
 }
@@ -80,7 +79,6 @@ export default function InterceptionRulesEditor({
     onChange({
       useReviewDefaults: true,
       direction: cfg.defaultDirection,
-      earlyReviewStrategy: cfg.earlyReviewStrategy,
       learningRatio: cfg.defaultLearningRatio,
     });
   }
@@ -92,7 +90,7 @@ export default function InterceptionRulesEditor({
           <div>
             <p className="text-xs font-bold text-foreground">Use my review defaults</p>
             <p className="text-[10px] text-muted">
-              Direction, mix, and early-review from Learning settings
+              Direction and mix from Learning settings
             </p>
           </div>
           <button
@@ -206,30 +204,6 @@ export default function InterceptionRulesEditor({
             learningRatio={values.learningRatio}
             onChange={(updates) => onChange({ ...updates, useReviewDefaults: false })}
           />
-        </div>
-
-        <div className="space-y-1.5">
-          <SectionTitle>Early review strategy</SectionTitle>
-          <div className="flex gap-1.5">
-            <Segmented
-              active={values.earlyReviewStrategy === "practice"}
-              onClick={() =>
-                onChange({ earlyReviewStrategy: "practice", useReviewDefaults: false })
-              }
-              className="flex-1 py-1.5 text-xs"
-            >
-              Practice
-            </Segmented>
-            <Segmented
-              active={values.earlyReviewStrategy === "proportional"}
-              onClick={() =>
-                onChange({ earlyReviewStrategy: "proportional", useReviewDefaults: false })
-              }
-              className="flex-1 py-1.5 text-xs"
-            >
-              Proportional
-            </Segmented>
-          </div>
         </div>
       </div>
     </div>

@@ -12,7 +12,6 @@ const DEFAULT_CONFIG: AppBlockerConfig = {
   studyMode: 'all',
   practice: false,
   noDueAction: 'autoOpen',
-  earlyReviewStrategy: 'practice',
   showFurigana: true,
   furiganaMode: 'always',
   learningRatio: 0.5,
