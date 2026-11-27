@@ -63,8 +63,11 @@ export async function GET() {
     },
     vocab: { new: vocabNew, review: vocabReview },
     kanji: { new: kanjiNew, review: kanjiReview },
-    // Feeds the "why are new cards paused" line in Learning settings.
+    // Feeds the "why are new cards paused" lines. Per deck: the cap gates each
+    // deck's own pile, so a quest is never paused by the other deck's backlog.
     intake: {
+      vocabInProgress,
+      kanjiInProgress,
       inProgress: vocabInProgress + kanjiInProgress,
     },
   });

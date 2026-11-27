@@ -5,9 +5,15 @@
 type DailyQuestCardProps = {
   dueCount: number | null;
   onStart: () => void;
+  /** Shown instead of "All caught up" when new cards are being withheld. */
+  pauseNote?: string | null;
 };
 
-export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProps) {
+export default function DailyQuestCard({
+  dueCount,
+  onStart,
+  pauseNote = null,
+}: DailyQuestCardProps) {
   return (
     <button
       onClick={onStart}
@@ -49,7 +55,9 @@ export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProp
           {dueCount === null
             ? "⏳ Checking..."
             : dueCount === 0
-              ? "✓ All caught up!"
+              ? pauseNote
+                ? "⏸ NEW CARDS PAUSED"
+                : "✓ All caught up!"
               : dueCount > 50
                 ? "🎯 50+ CARDS READY"
                 : `🎯 ${dueCount} CARD${dueCount === 1 ? "" : "S"} READY`}
@@ -59,6 +67,10 @@ export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProp
           Active
         </span>
       </div>
+
+      {pauseNote && dueCount === 0 && (
+        <p className="relative z-10 mt-2 text-[11px] leading-relaxed text-muted">{pauseNote}</p>
+      )}
     </button>
   );
 }

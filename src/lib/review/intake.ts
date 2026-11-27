@@ -55,6 +55,11 @@ export type IntakeStatus = {
 /**
  * Whether the in-progress learning cap blocks new cards. Zero or missing means
  * unlimited, so the gate is skipped instead of blocking everything.
+ *
+ * The cap is per deck. Vocabulary and kanji are studied in separate quests, so
+ * one deck's backlog must never freeze intake in the other: each quest counts
+ * only its own deck, and a mixed session gates each half separately instead of
+ * summing them (18 vocabulary + 1 kanji used to read as 19 of 20 and pause both).
  */
 export function isLearningPoolFull(options: {
   inProgress?: number | null;

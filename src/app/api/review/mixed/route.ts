@@ -235,19 +235,23 @@ export async function GET(req: Request) {
     if (fillSession) {
       effectiveNewPerSession = Math.max(1, effectiveNewPerSession);
     }
+    // The cap is per deck. Summing both decks let a full vocabulary pile stop
+    // kanji intake entirely (18 vocabulary + 1 kanji looked like 19 of 20).
+    let vocabIntakeOpen = true;
+    let kanjiIntakeOpen = true;
     if (!fillSession && maxLearningPool !== undefined && maxLearningPool > 0) {
       const [inLearningVocab, inLearningKanji] = await Promise.all([
         prisma.userFlashcard.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
         prisma.userKanji.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
       ]);
-      if (
-        isLearningPoolFull({
-          inProgress: inLearningVocab + inLearningKanji,
-          maxLearningPool,
-        })
-      ) {
-        effectiveNewPerSession = 0;
-      }
+      vocabIntakeOpen = !isLearningPoolFull({
+        inProgress: inLearningVocab,
+        maxLearningPool,
+      });
+      kanjiIntakeOpen = !isLearningPoolFull({
+        inProgress: inLearningKanji,
+        maxLearningPool,
+      });
     }
 
     // Split limit 50/50 but allow backfill: if one type has fewer cards, donate
@@ -259,8 +263,10 @@ export async function GET(req: Request) {
     // and all of them kanji, kanji gets 3, not floor(3/2) = 1.
     const vocabShare = Math.ceil(effectiveNewPerSession / 2);
     const kanjiShare = Math.floor(effectiveNewPerSession / 2);
-    const vocabNewAvailable = allVocab.filter(isNewCard).length;
-    const kanjiNewAvailable = allKanji.filter(isNewCard).length;
+    // A deck at its cap offers no new cards; the allowance its share would have
+    // used flows to the other deck through the stranded-quota pass below.
+    const vocabNewAvailable = vocabIntakeOpen ? allVocab.filter(isNewCard).length : 0;
+    const kanjiNewAvailable = kanjiIntakeOpen ? allKanji.filter(isNewCard).length : 0;
     let vocabNewBudget = Math.min(vocabShare, vocabNewAvailable);
     let kanjiNewBudget = Math.min(kanjiShare, kanjiNewAvailable);
 

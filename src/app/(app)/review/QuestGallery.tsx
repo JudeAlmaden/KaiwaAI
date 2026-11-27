@@ -41,6 +41,9 @@ export type QuestStartParams = {
 type QuestGalleryProps = {
   dueCount: number;
   kanjiDueCount: number | null;
+  /** Why vocabulary / kanji intake is paused, when it is. */
+  vocabPauseNote?: string | null;
+  kanjiPauseNote?: string | null;
   strugglingCount?: number;
   totalCards?: number;
   isMonitoring: boolean;
@@ -53,6 +56,8 @@ type QuestGalleryProps = {
 export default function QuestGallery({
   dueCount,
   kanjiDueCount,
+  vocabPauseNote = null,
+  kanjiPauseNote = null,
   isMonitoring,
   isAndroid = true,
   appBlockerConfig,
@@ -149,6 +154,7 @@ export default function QuestGallery({
         <div className="col-span-1 md:col-span-3">
           <DailyQuestCard
             dueCount={dueCount}
+            pauseNote={vocabPauseNote}
             onStart={() =>
               onStartQuest({
                 studyMode: "due",
@@ -197,6 +203,7 @@ export default function QuestGallery({
           <KanjiQuestCard
             onStart={() => setShowKanjiSourceModal(true)}
             dueCount={kanjiDueCount}
+            pauseNote={kanjiPauseNote}
           />
         </div>
 
