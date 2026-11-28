@@ -323,19 +323,27 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
   }, []);
 
   const ready = stats !== null;
-  const readyCount = mix?.total ?? stats?.dueNow ?? 0;
+  // One rule for every number on this screen: cards a quest can hand over now,
+  // so the pill, Today's Quest and the review page cannot disagree. The raw
+  // scheduled due figure is never shown.
+  const readyCount = mix?.readyTotal ?? 0;
   const streak = stats?.streak ?? 0;
   const activeToday = stats?.activeToday ?? false;
   const reviewFirst = ready && readyCount > 0;
 
-  const mood = roomMoodFor(stats, hour);
+  // Kai speaks the same number the pill shows.
+  const speechStats = useMemo(
+    () => (stats && mix ? { ...stats, dueNow: readyCount } : stats),
+    [stats, mix, readyCount]
+  );
+  const mood = roomMoodFor(speechStats, hour);
   // Rotate the line by day + hour so a reload doesn't shuffle it, but Kai
   // doesn't repeat the same sentence all day.
   const baseLine = useMemo(() => {
     const now = new Date();
     const seed = now.getDate() * 24 + now.getHours();
-    return pickKaiLine(kaiLineVariants(mood, stats), seed);
-  }, [mood, stats]);
+    return pickKaiLine(kaiLineVariants(mood, speechStats), seed);
+  }, [mood, speechStats]);
   const tempo = isLateNight(hour) ? 0.6 : mood === "proud" ? 1.35 : 1;
 
   const onAvatarChange = useCallback((handle: KaiAvatarHandle) => {
@@ -471,11 +479,14 @@ export default function KaiRoomClient({ initialStats }: { initialStats: Dashboar
               title="Review Cards"
               subtitle={
                 ready
-                  ? mix && mix.total > 0
-                    ? formatComposition(mix)
-                    : readyCount > 0
-                      ? `${readyCount} waiting`
+                  ? mix
+                    ? mix.readyTotal > 0
+                      ? formatComposition({
+                          newCount: mix.readyNew,
+                          reviewCount: mix.readyReview,
+                        })
                       : "All caught up!"
+                    : "—"
                   : "—"
               }
               icon={<Cards size={18} weight="fill" className={reviewFirst ? "text-white" : "text-indigo-ai"} />}

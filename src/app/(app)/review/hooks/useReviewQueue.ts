@@ -213,7 +213,6 @@ export function useReviewQueue(setup: Setup, onDone: () => void) {
           body: JSON.stringify({
             cardId: card.id,
             grade: g,
-            earlyReviewStrategy: getLearningConfig().earlyReviewStrategy,
             desiredRetention: getLearningConfig().desiredRetention,
           }),
         }).catch(() => {});

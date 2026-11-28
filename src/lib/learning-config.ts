@@ -3,13 +3,12 @@
  * Stored in localStorage; server endpoints may read via request headers or future profile sync.
  */
 
-import type { EarlyReviewStrategy, FuriganaMode, ReviewDirection } from "./review/types";
+import type { FuriganaMode, ReviewDirection } from "./review/types";
 
 export interface LearningConfig {
   desiredRetention: number;
   newPerSession: number; // Fixed intake of new cards per session (default: 3)
   maxLearningPool: number; // Max in-progress learning cards before pausing new cards (default: 20, 0 = unlimited)
-  earlyReviewStrategy: EarlyReviewStrategy;
   defaultDirection: ReviewDirection;
   defaultFuriganaMode: FuriganaMode;
   defaultLearningRatio: number;
@@ -21,7 +20,6 @@ export const DEFAULT_LEARNING_CONFIG: LearningConfig = {
   desiredRetention: 0.9,
   newPerSession: 3,
   maxLearningPool: 20,
-  earlyReviewStrategy: "proportional",
   defaultDirection: "mixed",
   defaultFuriganaMode: "always",
   defaultLearningRatio: 0.5,

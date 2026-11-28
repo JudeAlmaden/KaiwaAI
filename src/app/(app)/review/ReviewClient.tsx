@@ -33,6 +33,8 @@ export default function ReviewClient() {
   });
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [kanjiDueCount, setKanjiDueCount] = useState<number | null>(null);
+  const [vocabPauseNote, setVocabPauseNote] = useState<string | null>(null);
+  const [kanjiPauseNote, setKanjiPauseNote] = useState<string | null>(null);
   const [furiganaMode, setFuriganaMode] = useState<FuriganaMode>("always");
 
   const queue = useReviewQueue(setup, () => setPhase("done"));
@@ -71,15 +73,22 @@ export default function ReviewClient() {
   };
 
   const refreshDueCount = useCallback(() => {
-    // Same projected session total as the home screen and the nav badge.
+    // Each quest card counts what its own session will hand over, and the nav
+    // badge and home pill are exactly the sum of the two.
     fetchProjectedMix()
       .then((mix) => {
-        setDueCount(mix?.total ?? 0);
+        setDueCount(mix?.dailyDue ?? 0);
         setKanjiDueCount(mix?.kanjiDue ?? 0);
+        // Each deck's own cap: a quest can read "nothing due" because its new
+        // cards are paused, and the card has to say so.
+        setVocabPauseNote(mix?.vocabPauseNote ?? null);
+        setKanjiPauseNote(mix?.kanjiPauseNote ?? null);
       })
       .catch(() => {
         setDueCount(0);
         setKanjiDueCount(0);
+        setVocabPauseNote(null);
+        setKanjiPauseNote(null);
       });
   }, []);
 
@@ -255,6 +264,8 @@ export default function ReviewClient() {
         <QuestGallery
           dueCount={dueCount || 0}
           kanjiDueCount={kanjiDueCount}
+          vocabPauseNote={vocabPauseNote}
+          kanjiPauseNote={kanjiPauseNote}
           isMonitoring={isMonitoring}
           isAndroid={true}
           appBlockerConfig={appBlockerConfig}

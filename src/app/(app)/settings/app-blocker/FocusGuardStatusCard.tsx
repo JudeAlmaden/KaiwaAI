@@ -16,7 +16,6 @@ interface FocusGuardStatusCardProps {
   studyMode?: BlockerStudyMode;
   practice?: boolean;
   learningRatio?: number;
-  earlyReviewStrategy?: 'practice' | 'proportional';
   hasPermissions: boolean;
   usageStatsGranted?: boolean;
   overlayGranted?: boolean;
@@ -33,7 +32,6 @@ interface FocusGuardStatusCardProps {
     studyMode?: BlockerStudyMode;
     practice?: boolean;
     learningRatio?: number;
-    earlyReviewStrategy?: 'practice' | 'proportional';
   }) => void;
 }
 

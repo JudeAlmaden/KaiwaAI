@@ -6,14 +6,22 @@ type KanjiQuestCardProps = {
   onStart: () => void;
   /** Live due kanji count from the composition API. Null while loading. */
   dueCount: number | null;
+  /** Shown instead of "UP TO DATE" when new kanji cards are being withheld. */
+  pauseNote?: string | null;
 };
 
-export default function KanjiQuestCard({ onStart, dueCount }: KanjiQuestCardProps) {
+export default function KanjiQuestCard({
+  onStart,
+  dueCount,
+  pauseNote = null,
+}: KanjiQuestCardProps) {
   const countLabel =
     dueCount === null
       ? null
       : dueCount === 0
-        ? "UP TO DATE"
+        ? pauseNote
+          ? "NEW CARDS PAUSED"
+          : "UP TO DATE"
         : dueCount > 50
           ? "50+ DUE"
           : `${dueCount} DUE`;
@@ -48,6 +56,10 @@ export default function KanjiQuestCard({ onStart, dueCount }: KanjiQuestCardProp
           </span>
         )}
       </div>
+
+      {pauseNote && dueCount === 0 && (
+        <p className="relative z-10 mt-2 text-[10px] leading-relaxed text-muted">{pauseNote}</p>
+      )}
     </button>
   );
 }

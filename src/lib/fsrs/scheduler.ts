@@ -33,7 +33,10 @@ export interface FSRSResult extends FSRSState {
  * Options for FSRS scheduling.
  */
 export interface FSRSOptions {
-  /** Review before scheduled date (proportional interval scaling) */
+  /**
+   * Reviewed before the scheduled date. Scales the growth term by how much of
+   * the interval actually elapsed; it never shrinks the base stability.
+   */
   isEarly?: boolean;
   /** Actual days since last review (for early review calculation) */
   daysElapsed?: number;
@@ -81,6 +84,13 @@ const MAX_DIFFICULTY = 10;
 
 /** Minimum stability (in days) */
 const MIN_STABILITY = 0.1;
+
+/**
+ * Smallest share of the growth term an early review can earn. Reviewing at 10%
+ * of the interval still earns 60% of the growth: early passes are discounted,
+ * not punished into a longer wait than they already had.
+ */
+const MIN_EARLY_FACTOR = 0.6;
 
 /**
  * Stability ceiling (days). Stability feeds the interval written to the card, so
@@ -297,16 +307,20 @@ export class FSRSScheduler {
     options: FSRSOptions
   ): number {
     const w = params;
-    
-    // Handle early review with proportional scaling
+
+    // Early review earns reduced credit: the shorter the wait, the smaller the
+    // share of the growth term. Applying the factor to the growth (not to the
+    // base stability) is what stops an early pass from shortening the interval
+    // the card already had — the old version halved stability and scheduled it
+    // sooner than it already was.
+    let earlyFactor = 1;
     if (options.isEarly && options.daysElapsed !== undefined) {
       const scheduledInterval = this.calculateInterval(stability, this.desiredRetention);
-      if (options.daysElapsed < scheduledInterval) {
-        // Scale the stability proportionally
-        const earlyFactor = options.daysElapsed / scheduledInterval;
-        // Clamp so a degenerate 0-elapsed review can't scale stability to 0
-        // (S=0 would make S^(-w9) = Infinity and poison the result with NaN).
-        stability = Math.max(stability * earlyFactor, MIN_STABILITY);
+      if (scheduledInterval > 0 && options.daysElapsed < scheduledInterval) {
+        earlyFactor = Math.max(
+          MIN_EARLY_FACTOR,
+          Math.min(1, options.daysElapsed / scheduledInterval)
+        );
       }
     }
     
@@ -325,8 +339,13 @@ export class FSRSScheduler {
       hardFactor *
       easyFactor;
     
-    const newStability = stability * (1 + stabilityGrowth);
-    
+    // Floor at the incoming stability: a pass can earn little, never less than
+    // the card was already worth.
+    const newStability = Math.max(
+      stability,
+      stability * (1 + stabilityGrowth * earlyFactor)
+    );
+
     return Math.max(newStability, MIN_STABILITY);
   }
 

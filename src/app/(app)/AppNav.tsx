@@ -242,7 +242,7 @@ export function Sidebar({
   useEffect(() => {
     fetchProjectedMix()
       .then((mix) => {
-        if (mix) setDueCount(mix.total);
+        if (mix) setDueCount(mix.readyTotal);
       })
       .catch(() => { });
   }, [pathname]);
@@ -392,15 +392,17 @@ export function Sidebar({
 }
 
 /** Mobile modern floating island bottom navigation. */
-export function BottomTabs({ initialDueNow = 0 }: { initialDueNow?: number }) {
+export function BottomTabs() {
   const pathname = usePathname();
   const hasUnreadKai = useUnreadKaiMessages();
-  const [dueCount, setDueCount] = useState(initialDueNow);
+  // Starts empty and fills from the same projection the sidebar uses: the
+  // server's raw due figure would show a different number first.
+  const [dueCount, setDueCount] = useState(0);
 
   useEffect(() => {
     fetchProjectedMix()
       .then((mix) => {
-        if (mix) setDueCount(mix.total);
+        if (mix) setDueCount(mix.readyTotal);
       })
       .catch(() => {});
   }, [pathname]);

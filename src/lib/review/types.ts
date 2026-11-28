@@ -3,7 +3,6 @@
 export type ContentType = "vocabulary" | "kanji" | "mixed";
 export type StudyPool = "due" | "all" | "recent" | "struggling" | "leeches" | "new" | "custom";
 export type ReviewDirection = "jp-to-en" | "en-to-jp" | "mixed";
-export type EarlyReviewStrategy = "practice" | "proportional";
 export type FuriganaMode = "always" | "learning_only" | "never";
 
 export type SessionPreset =

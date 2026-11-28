@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import type { ReviewGrade } from "@/lib/srs";
-import { composeSession } from "@/lib/session-composer";
+import { composeSession, LOCK_SEEN_COOLDOWN_MS } from "@/lib/session-composer";
 import {
   applyFsrsReview,
   buildReviewPersistData,
-  type EarlyReviewStrategy,
 } from "@/lib/fsrs/apply-review";
 
 import { FlashcardStatus, PartOfSpeech, Prisma } from "@/generated/prisma/client";
@@ -202,7 +201,12 @@ export async function GET(req: Request) {
     }
 
     let effectiveNewPerSession = newPerSession ?? DEFAULT_LEARNING_CONFIG.newPerSession;
-    if (maxLearningPool !== undefined && maxLearningPool > 0) {
+    // A blocked-app session still needs something to show: the pool cap gates
+    // normal sessions, but a filling session keeps at least one new card.
+    if (fillSession) {
+      effectiveNewPerSession = Math.max(1, effectiveNewPerSession);
+    }
+    if (!fillSession && maxLearningPool !== undefined && maxLearningPool > 0) {
       const inLearningCount = await prisma.userFlashcard.count({
         where: { userId: user.id, ...LEARNING_CARD_WHERE },
       });
@@ -218,7 +222,11 @@ export async function GET(req: Request) {
       limit,
       ignoreDueDate,
       learningRatio,
-      { maxNewPerSession: effectiveNewPerSession, fillSession }
+      {
+        maxNewPerSession: effectiveNewPerSession,
+        fillSession,
+        seenCooldownMs: fillSession ? LOCK_SEEN_COOLDOWN_MS : undefined,
+      }
     );
     const maintenanceIds = new Set(maintenanceCards.map((c) => c.id));
     cards = session.map((c) => ({ ...c, _isMaintenance: maintenanceIds.has(c.id) }));
@@ -337,7 +345,6 @@ export async function POST(req: Request) {
   let body: {
     cardId?: string;
     grade?: number;
-    earlyReviewStrategy?: EarlyReviewStrategy;
     desiredRetention?: number;
     /** Sent by the blocked-app screen; grade 0 there must not count as a lapse. */
     fromLock?: boolean;
@@ -376,7 +383,6 @@ export async function POST(req: Request) {
     },
     grade: grade as ReviewGrade,
     cardType: "flashcard",
-    earlyReviewStrategy: body.earlyReviewStrategy,
     desiredRetention: body.desiredRetention,
     suppressLapse: body.fromLock === true,
   });

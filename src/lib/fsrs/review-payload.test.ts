@@ -31,7 +31,7 @@ describe("applyFsrsReview — payload rules", () => {
     const result = applyFsrsReview({ card: makeCard(), grade: 0, cardType: "flashcard" });
     expect(result.repetitions).toBe(2);
     expect(result.interval).toBe(0);
-    expect(result.touchLastReviewed).not.toBe(false);
+    expect(buildReviewPersistData(result).lastReviewedAt).toBeInstanceOf(Date);
     expect(buildReviewPersistData(result).interval).toBe(0);
     expect(result.lapsesIncrement).toBe(1);
     expect(buildReviewPersistData(result).lapses).toEqual({ increment: 1 });
@@ -43,7 +43,6 @@ describe("applyFsrsReview — payload rules", () => {
       card: makeCard({ nextReview: new Date(Date.now() - DAY_MS) }),
       grade: 0,
       cardType: "flashcard",
-      earlyReviewStrategy: "proportional",
       suppressLapse: true,
     });
     expect(result.lapsesIncrement).toBe(0);
@@ -56,23 +55,23 @@ describe("applyFsrsReview — payload rules", () => {
       card: makeCard({ nextReview: new Date(Date.now() + 5 * DAY_MS) }),
       grade: 0,
       cardType: "flashcard",
-      earlyReviewStrategy: "proportional",
     });
     expect(result.lapsesIncrement).toBe(0);
     expect(buildReviewPersistData(result).lapses).toBeUndefined();
   });
 
-  it("does not move the scheduling clock for an early practice review", () => {
-    const result = applyFsrsReview({
-      card: makeCard({ nextReview: new Date(Date.now() + 5 * DAY_MS) }),
-      grade: 2,
-      cardType: "flashcard",
-      earlyReviewStrategy: "practice",
-    });
-    expect(result.touchLastReviewed).toBe(false);
-    expect(buildReviewPersistData(result).lastReviewedAt).toBeUndefined();
-    expect(result.timesReviewedIncrement).toBe(0);
+  it("stamps and schedules an early pass like any other review", () => {
+    const before = Date.now();
+    const card = makeCard({ nextReview: new Date(before + 5 * DAY_MS) });
+    const result = applyFsrsReview({ card, grade: 2, cardType: "flashcard" });
+    expect(result.lastReviewedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(buildReviewPersistData(result).lastReviewedAt).toBeInstanceOf(Date);
+    expect(result.timesReviewedIncrement).toBe(1);
+    expect(result.repetitions).toBe(card.repetitions + 1);
     expect(result.lapsesIncrement).toBe(0);
+    // Reduced credit, never a shorter wait than the card already had.
+    expect(result.nextReview.getTime()).toBeGreaterThanOrEqual(card.nextReview!.getTime());
+    expect(result.interval).toBeGreaterThanOrEqual(card.interval);
   });
 
   it("stamps firstLearnedAt on the first success only", () => {

@@ -7,7 +7,6 @@ import {
   type LearningConfig,
 } from "@/lib/learning-config";
 import type { FuriganaMode, ReviewDirection } from "@/lib/review/types";
-import { describeIntake } from "@/lib/review/intake";
 import { getAutoSaveWords, setAutoSaveWords } from "@/lib/model-config";
 import { blockerUpdatesForLearningDefaults } from "@/lib/review/blocker-sync";
 import { AppBlocker } from "@/plugins/app-blocker";
@@ -42,7 +41,7 @@ const NEW_PER_SESSION: { value: number; label: string }[] = [
 ];
 
 
-type IntakeCounts = { inProgress: number };
+type IntakeCounts = { vocabInProgress: number; kanjiInProgress: number };
 
 export default function ReviewDefaultsCard() {
   const [config, setConfig] = useState<LearningConfig>(() => getLearningConfig());
@@ -58,7 +57,8 @@ export default function ReviewDefaultsCard() {
       .then((d) => {
         if (cancelled || !d?.intake) return;
         setCounts({
-          inProgress: Number(d.intake.inProgress) || 0,
+          vocabInProgress: Number(d.intake.vocabInProgress ?? 0) || 0,
+          kanjiInProgress: Number(d.intake.kanjiInProgress ?? 0) || 0,
         });
       })
       .catch(() => {});
@@ -85,23 +85,27 @@ export default function ReviewDefaultsCard() {
     setAutoSave(next);
   }
 
-  const intake = counts
-    ? describeIntake({
-        maxNewPerSession: config.newPerSession,
-        inProgress: counts.inProgress,
-        maxLearningPool: config.maxLearningPool,
-      })
-    : null;
+  // The cap is per deck, so the line names the deck that is actually paused
+  // instead of one opaque total (a full vocabulary pile no longer reads as a
+  // full kanji pile too).
+  const cap = config.maxLearningPool;
+  const vocabAtCap = cap > 0 && (counts?.vocabInProgress ?? 0) >= cap;
+  const kanjiAtCap = cap > 0 && (counts?.kanjiInProgress ?? 0) >= cap;
 
   function intakeMessage(): string {
-    if (!intake || !counts) return "";
-    if (intake.reason === "off") {
-      return "Right now: new cards are off — set a number above 0 per session to introduce any.";
+    if (!counts) return "";
+    const capText = cap > 0 ? ` of ${cap}` : "";
+    const decks = `vocabulary ${counts.vocabInProgress}${capText} · kanji ${counts.kanjiInProgress}${capText} in progress`;
+    if (config.newPerSession <= 0) {
+      return `Right now: new cards are off — set a number above 0 per session to introduce any (${decks}).`;
     }
-    if (intake.reason === "learning-pool") {
-      return `Right now: new cards are paused — ${counts.inProgress} cards are in progress against a cap of ${config.maxLearningPool}. Raise the cap or choose All.`;
+    if (vocabAtCap && kanjiAtCap) {
+      return `Right now: new cards are paused in both decks — ${decks}. Raise the cap or choose All.`;
     }
-    return `Right now: ${counts.inProgress} in progress · ${intake.allowance} new available this session`;
+    if (vocabAtCap || kanjiAtCap) {
+      return `Right now: new ${vocabAtCap ? "vocabulary" : "kanji"} cards are paused — ${decks}. Raise the cap or choose All.`;
+    }
+    return `Right now: ${decks} · ${config.newPerSession} new available per session.`;
   }
 
   return (
@@ -115,7 +119,8 @@ export default function ReviewDefaultsCard() {
         <p className="text-sm font-bold">New cards</p>
         <p className="mb-2 text-xs text-muted">
           Two limits: how many new cards a session may introduce, and how many unfinished cards
-          you tolerate before intake pauses.
+          you tolerate before intake pauses. The cap is counted per deck — vocabulary and kanji
+          each get their own, so one busy pile never pauses the other.
         </p>
 
         <p className="text-xs font-bold text-muted">Per session</p>
@@ -132,7 +137,7 @@ export default function ReviewDefaultsCard() {
           ))}
         </div>
 
-        <p className="mt-3 text-xs font-bold text-muted">In-progress learning cap</p>
+        <p className="mt-3 text-xs font-bold text-muted">In-progress learning cap (per deck)</p>
         <div className="mt-1 grid grid-cols-5 gap-2">
           {LEARNING_POOLS.map((p) => (
             <Chip
@@ -146,7 +151,7 @@ export default function ReviewDefaultsCard() {
           ))}
         </div>
 
-        {intake && counts && (
+        {counts && (
           <p className="mt-3 rounded-2xl border border-border bg-background/60 px-3 py-2 text-xs text-muted">
             {intakeMessage()}
           </p>

@@ -23,7 +23,7 @@ export default function FsrsSettingsCard() {
       <h2 className="font-display text-lg font-bold">Spaced repetition (FSRS)</h2>
       <p className="mt-1 text-sm text-muted">
         Controls how often cards come back for review. Applies to every graded
-        review — retention and early-review handling.
+        review — retention and how early passes are credited.
       </p>
 
       <div className="mt-5 space-y-2">
@@ -44,30 +44,9 @@ export default function FsrsSettingsCard() {
         </p>
       </div>
 
-      <div className="mt-5 border-t-2 border-border pt-4 space-y-2">
-        <p className="text-sm font-bold">Early review (before due)</p>
-        <div className="grid grid-cols-2 gap-2">
-          {(
-            [
-              { id: "practice" as const, label: "Practice — don't change intervals" },
-              { id: "proportional" as const, label: "Proportional — adjust by how early" },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => patch({ earlyReviewStrategy: opt.id })}
-              className={`rounded-2xl px-3 py-2.5 text-xs font-bold border-2 transition text-center leading-snug ${
-                config.earlyReviewStrategy === opt.id
-                  ? "border-indigo-ai bg-indigo-ai/10 text-indigo-ai"
-                  : "border-border text-muted hover:text-foreground"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className="mt-4 border-t-2 border-border pt-4 text-xs text-muted">
+        Early reviews earn reduced credit but never shorten a card&apos;s interval.
+      </p>
     </Surface>
   );
 }

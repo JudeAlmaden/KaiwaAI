@@ -31,7 +31,19 @@ export interface ComposeSessionOptions {
    * app turns this on — a normal study session must respect what it asked for.
    */
   fillSession?: boolean;
+  /**
+   * Skip any card seen inside this window. Focus Guard passes its lock cooldown
+   * so a second blocked session cannot hand back what the first just served;
+   * a normal session keeps only its short in-session cooldowns.
+   */
+  seenCooldownMs?: number;
 }
+
+/**
+ * Focus Guard's lock window: cards graded inside it stay out of the next
+ * blocked-app session, so back-to-back locks never replay the same deck.
+ */
+export const LOCK_SEEN_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 
 /**
  * Composes a review session from active (focused learning) and maintenance
@@ -81,6 +93,10 @@ export function composeSession<T extends Card>(
   // appear twice in one sitting.
   const ACTIVE_COOLDOWN_MS = 10 * 60 * 1000;
   const activeCooldownAgo = new Date(now.getTime() - ACTIVE_COOLDOWN_MS);
+  const seenCooldownSince =
+    options?.seenCooldownMs && options.seenCooldownMs > 0
+      ? new Date(now.getTime() - options.seenCooldownMs)
+      : null;
 
   const safeSize = Math.max(0, Math.floor(sessionSize));
   const ratio = Math.max(
@@ -104,7 +120,19 @@ export function composeSession<T extends Card>(
   const aheadPool: T[] = [];
   let newCardsAdded = 0;
 
-  for (const card of allCards) {
+  // The pool the session draws from. The lock cooldown is a preference, not a
+  // gate: recently served cards only drop out while enough other cards remain to
+  // fill the requested size. A blocked app must never come back empty, because
+  // an empty deck unlocks it for free. Ordering still puts the oldest-seen
+  // cards first, so anything inside the cooldown comes back last.
+  const eligible = seenCooldownSince
+    ? allCards.filter(
+        (card) => !(card.lastReviewedAt && card.lastReviewedAt >= seenCooldownSince)
+      )
+    : allCards;
+  const pool = eligible.length >= safeSize ? eligible : allCards;
+
+  for (const card of pool) {
     const isNew = isNewCard(card);
 
     // A filling session carries new cards even at ratio 0: it still has to reach
@@ -130,16 +158,12 @@ export function composeSession<T extends Card>(
     }
   }
 
-  // Least-recently-reviewed first: rotation, not luck.
-  maintenancePool.sort((a, b) => {
-    const at = a.lastReviewedAt ? a.lastReviewedAt.getTime() : 0;
-    const bt = b.lastReviewedAt ? b.lastReviewedAt.getTime() : 0;
-    return at - bt;
-  });
-
   const selectedActive = activePool.slice(0, activeTarget);
   const activeIds = new Set(selectedActive.map((c) => c.id));
-  const rotatedMaintenance = maintenancePool.filter((c) => !activeIds.has(c.id));
+  // Oldest-seen first, random inside the oldest hour: rotation, not luck.
+  const rotatedMaintenance = rotateByOldestSeen(
+    maintenancePool.filter((c) => !activeIds.has(c.id))
+  );
 
   const maintenanceTarget = safeSize - activeTarget;
   const selectedMaintenance = rotatedMaintenance.slice(0, maintenanceTarget);
@@ -176,10 +200,11 @@ export function composeSession<T extends Card>(
       ...selectedActive.map((c) => c.id),
       ...selectedMaintenance.map((c) => c.id),
     ]);
-    const ahead = aheadPool
-      .filter((c) => !selectedIds.has(c.id))
-      .sort((a, b) => a.nextReview.getTime() - b.nextReview.getTime())
-      .slice(0, missing);
+    // Study-ahead cards rotate the same way: being nearest due is not a reason
+    // to serve the same ones every time the due pool is empty.
+    const ahead = rotateByOldestSeen(
+      aheadPool.filter((c) => !selectedIds.has(c.id))
+    ).slice(0, missing);
     selectedMaintenance.push(...ahead);
   }
 
@@ -187,6 +212,20 @@ export function composeSession<T extends Card>(
   shuffleArray(selectedMaintenance);
 
   const session = interleave(selectedActive, selectedMaintenance);
+
+  // Last resort for a filling session: if every cooldown conspired to exclude
+  // the whole deck (a second lock started seconds after the first), serve the
+  // oldest-seen cards anyway. An empty Focus Guard session would unlock the app.
+  if (session.length === 0 && fillSession && safeSize > 0 && allCards.length > 0) {
+    const ordered = rotateByOldestSeen(allCards);
+    const reviewed = ordered.filter((card) => card.lastReviewedAt != null);
+    const fallback = (reviewed.length > 0 ? reviewed : ordered).slice(0, safeSize);
+    return {
+      session: fallback,
+      activeCards: [],
+      maintenanceCards: fallback,
+    };
+  }
 
   return {
     session,
@@ -215,6 +254,26 @@ function interleave<T>(active: T[], maintenance: T[]): T[] {
   }
   while (placed < maintenance.length) out.push(maintenance[placed++]);
   return out;
+}
+
+/** One hour of study counts as one sitting for rotation purposes. */
+const SEEN_BUCKET_MS = 60 * 60 * 1000;
+
+/**
+ * Rotation order for review pools: never-seen cards first, then oldest-seen
+ * first, with a random order inside each bucket. Two sessions an hour apart land
+ * in different buckets, so the second cannot replay the first, while the pick
+ * inside the oldest bucket still varies.
+ */
+function rotateByOldestSeen<T extends Card>(pool: T[]): T[] {
+  const shuffled = [...pool];
+  shuffleArray(shuffled);
+  const bucketOf = (card: T) =>
+    card.lastReviewedAt
+      ? Math.floor(card.lastReviewedAt.getTime() / SEEN_BUCKET_MS)
+      : 0;
+  // Array#sort is stable, so the shuffled order survives inside each bucket.
+  return shuffled.sort((a, b) => bucketOf(a) - bucketOf(b));
 }
 
 /** Fisher-Yates shuffle (in-place) */

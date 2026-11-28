@@ -449,6 +449,80 @@ describe("Mixed Review API - GET (/api/review/mixed)", () => {
     expect(newCards).toHaveLength(3);
   });
 
+  it("counts the in-progress cap per deck, so a full vocabulary deck cannot pause kanji", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
+
+    const newVocab = Array.from({ length: 3 }, (_, i) => ({
+      id: `uf-cap-${i}`,
+      userId: "user-123",
+      status: "learning",
+      easeFactor: 2.5,
+      repetitions: 0,
+      timesReviewed: 0,
+      interval: 0,
+      nextReview: new Date(Date.now() - 60000),
+      createdAt: new Date("2026-01-01"),
+      lastReviewedAt: null,
+      word: {
+        dictionary: `言葉${i}`,
+        reading: "ことば",
+        meanings: '["word"]',
+        partOfSpeech: "noun",
+      },
+      wordForm: null,
+      phrase: null,
+    }));
+
+    const newKanji = Array.from({ length: 3 }, (_, i) => ({
+      id: `uk-cap-${i}`,
+      userId: "user-123",
+      status: "learning",
+      easeFactor: 2.5,
+      repetitions: 0,
+      timesReviewed: 0,
+      interval: 0,
+      nextReview: new Date(Date.now() - 60000),
+      createdAt: new Date("2026-01-01"),
+      lastReviewedAt: null,
+      kanji: {
+        id: `k-cap-${i}`,
+        character: "学",
+        meanings: '["study"]',
+        readingsOn: "[]",
+        readingsKun: "[]",
+        radicals: "[]",
+        primitives: "[]",
+        heisigNumber: null,
+        heisigKeyword: null,
+        heisigLesson: null,
+      },
+      customMeaning: null,
+      mnemonic: null,
+    }));
+
+    vi.mocked(prisma.userFlashcard.findMany).mockResolvedValue(newVocab as never);
+    vi.mocked(prisma.userKanji.findMany).mockResolvedValue(newKanji as never);
+    // Vocabulary sits at the cap; kanji is far below it.
+    vi.mocked(prisma.userFlashcard.count).mockResolvedValue(20 as never);
+    vi.mocked(prisma.userKanji.count).mockResolvedValue(1 as never);
+
+    const req = new Request(
+      "http://localhost/api/review/mixed?studyMode=due&limit=6&newPerSession=3&maxLearningPool=20&learningRatio=1"
+    );
+    const res = await GET(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    const newCards = data.cards.filter(
+      (c: { repetitions?: number; timesReviewed?: number }) =>
+        (c.repetitions ?? 0) === 0 && (c.timesReviewed ?? 0) === 0
+    );
+    // Every new slot goes to kanji. Summing the decks (20 + 1 > 20) used to
+    // pause both, which is the bug this covers.
+    expect(newCards.length).toBe(3);
+    expect(newCards.every((c: { type?: string }) => c.type === "kanji")).toBe(true);
+  });
+
   it("safely parses malformed JSON without crashing", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue(mockUser as never);
 

@@ -5,9 +5,15 @@
 type DailyQuestCardProps = {
   dueCount: number | null;
   onStart: () => void;
+  /** Shown instead of "All caught up" when new cards are being withheld. */
+  pauseNote?: string | null;
 };
 
-export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProps) {
+export default function DailyQuestCard({
+  dueCount,
+  onStart,
+  pauseNote = null,
+}: DailyQuestCardProps) {
   return (
     <button
       onClick={onStart}
@@ -37,7 +43,8 @@ export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProp
             </span>
           </div>
           <p className="text-xs md:text-sm text-muted leading-relaxed max-w-2xl">
-            Clear your daily review backlog. Up to 50 cards per session with mixed content.
+            Clear your daily vocabulary backlog. Up to 50 cards per session — kanji
+            has its own quest.
           </p>
         </div>
       </div>
@@ -48,7 +55,9 @@ export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProp
           {dueCount === null
             ? "⏳ Checking..."
             : dueCount === 0
-              ? "✓ All caught up!"
+              ? pauseNote
+                ? "⏸ NEW CARDS PAUSED"
+                : "✓ All caught up!"
               : dueCount > 50
                 ? "🎯 50+ CARDS READY"
                 : `🎯 ${dueCount} CARD${dueCount === 1 ? "" : "S"} READY`}
@@ -58,6 +67,10 @@ export default function DailyQuestCard({ dueCount, onStart }: DailyQuestCardProp
           Active
         </span>
       </div>
+
+      {pauseNote && dueCount === 0 && (
+        <p className="relative z-10 mt-2 text-[11px] leading-relaxed text-muted">{pauseNote}</p>
+      )}
     </button>
   );
 }

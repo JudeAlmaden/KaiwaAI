@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import type { Prisma } from "@/generated/prisma/client";
-import { composeSession } from "@/lib/session-composer";
+import { composeSession, LOCK_SEEN_COOLDOWN_MS } from "@/lib/session-composer";
 import { parseCardSource } from "@/lib/review/card-source";
 import {
   mergeUniqueById,
@@ -230,19 +230,28 @@ export async function GET(req: Request) {
     }
 
     let effectiveNewPerSession = newPerSession ?? DEFAULT_LEARNING_CONFIG.newPerSession;
-    if (maxLearningPool !== undefined && maxLearningPool > 0) {
+    // A blocked-app session still needs something to show: the pool cap gates
+    // normal sessions, but a filling session keeps at least one new card.
+    if (fillSession) {
+      effectiveNewPerSession = Math.max(1, effectiveNewPerSession);
+    }
+    // The cap is per deck. Summing both decks let a full vocabulary pile stop
+    // kanji intake entirely (18 vocabulary + 1 kanji looked like 19 of 20).
+    let vocabIntakeOpen = true;
+    let kanjiIntakeOpen = true;
+    if (!fillSession && maxLearningPool !== undefined && maxLearningPool > 0) {
       const [inLearningVocab, inLearningKanji] = await Promise.all([
         prisma.userFlashcard.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
         prisma.userKanji.count({ where: { userId: user.id, ...LEARNING_CARD_WHERE } }),
       ]);
-      if (
-        isLearningPoolFull({
-          inProgress: inLearningVocab + inLearningKanji,
-          maxLearningPool,
-        })
-      ) {
-        effectiveNewPerSession = 0;
-      }
+      vocabIntakeOpen = !isLearningPoolFull({
+        inProgress: inLearningVocab,
+        maxLearningPool,
+      });
+      kanjiIntakeOpen = !isLearningPoolFull({
+        inProgress: inLearningKanji,
+        maxLearningPool,
+      });
     }
 
     // Split limit 50/50 but allow backfill: if one type has fewer cards, donate
@@ -254,8 +263,10 @@ export async function GET(req: Request) {
     // and all of them kanji, kanji gets 3, not floor(3/2) = 1.
     const vocabShare = Math.ceil(effectiveNewPerSession / 2);
     const kanjiShare = Math.floor(effectiveNewPerSession / 2);
-    const vocabNewAvailable = allVocab.filter(isNewCard).length;
-    const kanjiNewAvailable = allKanji.filter(isNewCard).length;
+    // A deck at its cap offers no new cards; the allowance its share would have
+    // used flows to the other deck through the stranded-quota pass below.
+    const vocabNewAvailable = vocabIntakeOpen ? allVocab.filter(isNewCard).length : 0;
+    const kanjiNewAvailable = kanjiIntakeOpen ? allKanji.filter(isNewCard).length : 0;
     let vocabNewBudget = Math.min(vocabShare, vocabNewAvailable);
     let kanjiNewBudget = Math.min(kanjiShare, kanjiNewAvailable);
 
@@ -265,13 +276,16 @@ export async function GET(req: Request) {
     stranded -= kanjiExtra;
     vocabNewBudget += Math.min(stranded, vocabNewAvailable - vocabNewBudget);
 
+    const seenCooldownMs = fillSession ? LOCK_SEEN_COOLDOWN_MS : undefined;
     const vocabSession = composeSession(allVocab, halfLimit, ignoreDueDate, learningRatio, {
       maxNewPerSession: vocabNewBudget,
       fillSession,
+      seenCooldownMs,
     });
     const kanjiSession = composeSession(allKanji, halfLimit, ignoreDueDate, learningRatio, {
       maxNewPerSession: kanjiNewBudget,
       fillSession,
+      seenCooldownMs,
     });
 
     const vocabActual = vocabSession.session.length;
@@ -294,6 +308,7 @@ export async function GET(req: Request) {
       const extraKanji = composeSession(allKanji, halfLimit + vocabShortfall, ignoreDueDate, learningRatio, {
         maxNewPerSession: remainingNew,
         fillSession,
+        seenCooldownMs,
       });
       kanjiFinal = extraKanji.session;
       kanjiMaintenanceCards = extraKanji.maintenanceCards;
@@ -303,6 +318,7 @@ export async function GET(req: Request) {
       const extraVocab = composeSession(allVocab, halfLimit + kanjiShortfall, ignoreDueDate, learningRatio, {
         maxNewPerSession: remainingNew,
         fillSession,
+        seenCooldownMs,
       });
       vocabFinal = extraVocab.session;
       vocabMaintenanceCards = extraVocab.maintenanceCards;

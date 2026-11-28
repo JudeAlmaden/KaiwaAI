@@ -7,8 +7,6 @@ import { getServerDesiredRetention, parseDesiredRetention } from "@/lib/learning
 import { MAX_INTERVAL_DAYS, cardStatus } from "@/lib/review/lifecycle";
 import { DEFAULT_FSRS_PARAMETERS } from "./config";
 
-export type EarlyReviewStrategy = "practice" | "proportional";
-
 export interface ReviewableCard {
   id: string;
   userId: string;
@@ -37,14 +35,12 @@ export interface ReviewUpdatePayload {
   stability?: number;
   retrievability?: number;
   lastReviewedAt: Date;
-  /** False for practice reviews: they must not move the scheduling clock. */
-  touchLastReviewed?: boolean;
   /** Set the first time a card is ever successfully graded. */
   firstLearnedAt?: Date;
   /** SM-2 fallback: drop stale FSRS state so the next review converts cleanly. */
   clearFsrs?: boolean;
   timesReviewedIncrement: number;
-  /** 1 only for a real grade-0 review; early/practice reviews never lapse. */
+  /** 1 only for a real grade-0 review; early reviews never lapse. */
   lapsesIncrement: number;
   /** 1 when consecutive successes post-lapse reach the decay threshold. */
   lapsesDecrement?: number;
@@ -56,7 +52,6 @@ export interface ApplyReviewInput {
   card: ReviewableCard;
   grade: ReviewGrade;
   cardType: "flashcard" | "kanji";
-  earlyReviewStrategy?: EarlyReviewStrategy;
   desiredRetention?: number;
   /**
    * A blocked-app session: grade 0 still reschedules, but it is not counted as a
@@ -126,9 +121,14 @@ function sm2IntervalFromStability(stability: number, retention: number): number 
 
 /**
  * Apply FSRS scheduling (with SM-2 fallback) to a card review.
+ *
+ * There is one rule for reviewing before the due date: the pass always
+ * reschedules the card and always stamps `lastReviewedAt`, but it earns only the
+ * share of the normal growth that the elapsed wait represents — and it can never
+ * pull the card's interval or due date closer than they already were.
  */
 export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
-  const { card, grade, cardType, earlyReviewStrategy, suppressLapse } = input;
+  const { card, grade, cardType, suppressLapse } = input;
   const retention =
     parseDesiredRetention(input.desiredRetention) ?? getServerDesiredRetention();
   const now = new Date();
@@ -140,32 +140,16 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
   const firstLearnedAt =
     grade > 0 && card.repetitions === 0 && !card.firstLearnedAt ? now : undefined;
 
-  if (isEarly && earlyReviewStrategy === "practice") {
-    return {
-      easeFactor: card.easeFactor,
-      interval: card.interval,
-      repetitions: card.repetitions,
-      status: card.status as CardStatus,
-      nextReview: card.nextReview ?? now,
-      difficulty: card.difficulty ?? undefined,
-      stability: card.stability ?? undefined,
-      retrievability: card.retrievability ?? undefined,
-      lastReviewedAt: card.lastReviewedAt ?? now,
-      // Practising early must not shift lastReviewedAt: retrievability is
-      // measured from it, so touching it would weaken the next real review.
-      touchLastReviewed: false,
-      timesReviewedIncrement: 0,
-      lapsesIncrement: 0,
-    };
-  }
-
   let fsrsOptions: FSRSOptions = { desiredRetention: retention };
   const lapseDecay = computeLapseDecay(card, grade);
 
-  if (isEarly && earlyReviewStrategy === "proportional") {
+  if (isEarly) {
+    // How much of the scheduled wait actually elapsed decides how much growth
+    // this pass earns. The server owns this: a client cannot opt out of
+    // scheduling, so no card can be reviewed forever without moving.
     const lastReviewed = card.lastReviewedAt ? new Date(card.lastReviewedAt) : null;
     const daysElapsed = lastReviewed
-      ? Math.max(0, (now.getTime() - lastReviewed.getTime()) / (1000 * 60 * 60 * 24))
+      ? Math.max(0, (now.getTime() - lastReviewed.getTime()) / MS_PER_DAY)
       : card.interval;
     fsrsOptions = { ...fsrsOptions, isEarly: true, daysElapsed };
   }
@@ -225,13 +209,24 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
     const interval = grade === 0 ? 0 : sm2IntervalFromStability(result.stability, retention);
     const repetitions = grade === 0 ? card.repetitions : card.repetitions + 1;
 
+    // Reduced credit still means forward motion: an early pass may keep the
+    // existing wait, but it never shortens it.
+    const guardedInterval =
+      isEarly && grade > 0 ? Math.max(interval, card.interval) : interval;
+    const guardedNextReview =
+      isEarly && grade > 0 && card.nextReview
+        ? new Date(
+            Math.max(nextReview.getTime(), new Date(card.nextReview).getTime())
+          )
+        : nextReview;
+
     return {
       easeFactor: card.easeFactor,
-      interval,
+      interval: guardedInterval,
       repetitions,
       // One graduation rule for both schedulers (see review/lifecycle.ts).
-      status: cardStatus({ repetitions, interval }),
-      nextReview,
+      status: cardStatus({ repetitions, interval: guardedInterval }),
+      nextReview: guardedNextReview,
       difficulty: result.difficulty,
       stability: result.stability,
       retrievability: result.retrievability,
@@ -244,7 +239,7 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
     };
   } catch (error) {
     const sm2Options =
-      isEarly && earlyReviewStrategy === "proportional" && fsrsOptions.daysElapsed != null
+      isEarly && fsrsOptions.daysElapsed != null
         ? { isEarly: true as const, daysElapsed: fsrsOptions.daysElapsed }
         : undefined;
 
@@ -279,15 +274,6 @@ export function applyFsrsReview(input: ApplyReviewInput): ReviewUpdatePayload {
   }
 }
 
-/** Practice-only early review — no SRS writes except lastReviewedAt */
-export function isPracticeOnlyReview(
-  card: Pick<ReviewableCard, "nextReview">,
-  earlyReviewStrategy?: EarlyReviewStrategy
-): boolean {
-  const isEarly = card.nextReview != null && new Date(card.nextReview) > new Date();
-  return isEarly && earlyReviewStrategy === "practice";
-}
-
 /** Prisma update payload from a review result */
 export function buildReviewPersistData(result: ReviewUpdatePayload) {
   const data: {
@@ -310,11 +296,9 @@ export function buildReviewPersistData(result: ReviewUpdatePayload) {
     repetitions: result.repetitions,
     status: result.status,
     nextReview: result.nextReview,
+    lastReviewedAt: result.lastReviewedAt,
   };
 
-  if (result.touchLastReviewed !== false) {
-    data.lastReviewedAt = result.lastReviewedAt;
-  }
   if (result.firstLearnedAt) {
     data.firstLearnedAt = result.firstLearnedAt;
   }

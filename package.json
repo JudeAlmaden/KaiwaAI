@@ -1,6 +1,6 @@
 {
   "name": "kaiwaai",
-  "version": "2.8.1",
+  "version": "2.8.2",
   "private": true,
   "scripts": {
     "postinstall": "prisma generate --schema prisma/schema.prisma",
@@ -15,10 +15,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "ci": "npm run lint && npm run typecheck && npm run test",
-    "import:dictionary": "npx tsx scripts/import-dictionary.ts",
     "regenerate:words": "node scripts/regenerate-word-csvs.mjs",
-    "restore:flashcards": "npx tsx scripts/restore-flashcards.ts",
-    "migrate:phrases": "npx tsx scripts/migrate-to-phrases.ts",
     "migrate:fsrs": "npx tsx scripts/migrate-to-fsrs.ts",
     "cap:sync": "node scripts/write-app-version-env.mjs && npx cap sync",
     "cap:android": "npx cap open android",

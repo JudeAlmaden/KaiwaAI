@@ -147,7 +147,6 @@ class AppBlockerPlugin : Plugin() {
             put("studyMode", prefs.getString("study_mode", "due") ?: "due")
             put("practice", prefs.getBoolean("practice_mode", false))
             put("noDueAction", prefs.getString("no_due_action", "autoOpen") ?: "autoOpen")
-            put("earlyReviewStrategy", prefs.getString("early_review_strategy", "practice") ?: "practice")
             put("showFurigana", prefs.getBoolean("show_furigana", true))
             put("furiganaMode", prefs.getString("furigana_mode", "always") ?: "always")
             put("learningRatio", prefs.getFloat("learning_ratio", 0.5f).toDouble())
@@ -172,7 +171,6 @@ class AppBlockerPlugin : Plugin() {
         call.getString("studyMode")?.let { editor.putString("study_mode", it) }
         call.getBoolean("practice")?.let { editor.putBoolean("practice_mode", it) }
         call.getString("noDueAction")?.let { editor.putString("no_due_action", it) }
-        call.getString("earlyReviewStrategy")?.let { editor.putString("early_review_strategy", it) }
         call.getBoolean("showFurigana")?.let { editor.putBoolean("show_furigana", it) }
         call.getString("furiganaMode")?.let { editor.putString("furigana_mode", it) }
         call.getDouble("learningRatio")?.let { editor.putFloat("learning_ratio", it.toFloat()) }

@@ -36,7 +36,7 @@ const RECOMMENDED_APPS: RecommendedApp[] = [
   { appName: 'Netflix', packageName: 'com.netflix.mediaclient', domain: 'netflix.com', category: 'Media' },
 ];
 
-const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction' | 'earlyReviewStrategy' | 'learningRatio'>> = {
+const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 'unlockDurationMinutes' | 'reviewType' | 'direction' | 'studyMode' | 'practice' | 'noDueAction' | 'learningRatio'>> = {
   count: 10,
   blockChance: 100,
   unlockDurationMinutes: 45,
@@ -45,7 +45,6 @@ const DEFAULT_CONFIG: Required<Pick<AppBlockerConfig, 'count' | 'blockChance' | 
   studyMode: 'due',
   practice: false,
   noDueAction: 'autoOpen',
-  earlyReviewStrategy: 'practice',
   learningRatio: 0.2,
 };
 
@@ -65,7 +64,6 @@ export default function AppBlockerSettings() {
   const [practice, setPractice] = useState<boolean>(DEFAULT_CONFIG.practice);
   const [learningRatio, setLearningRatio] = useState<number>(DEFAULT_CONFIG.learningRatio);
   const [noDueAction, setNoDueAction] = useState<BlockerNoDueAction>(DEFAULT_CONFIG.noDueAction);
-  const [earlyReviewStrategy, setEarlyReviewStrategy] = useState<'practice' | 'proportional'>(DEFAULT_CONFIG.earlyReviewStrategy);
   const [loading, setLoading] = useState(true);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [modalFeedback, setModalFeedback] = useState<string | null>(null);
@@ -130,7 +128,6 @@ export default function AppBlockerSettings() {
         setPractice(false);
         setLearningRatio(config.learningRatio ?? 0.2);
         setNoDueAction(config.noDueAction ?? 'autoOpen');
-        setEarlyReviewStrategy(config.earlyReviewStrategy ?? 'practice');
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -211,7 +208,6 @@ export default function AppBlockerSettings() {
           practice,
           learningRatio,
           noDueAction,
-          earlyReviewStrategy,
         });
         await AppBlocker.startMonitoring();
         setIsMonitoring(true);
@@ -258,7 +254,6 @@ export default function AppBlockerSettings() {
     practice?: boolean;
     learningRatio?: number;
     noDueAction?: BlockerNoDueAction;
-    earlyReviewStrategy?: 'practice' | 'proportional';
   }) => {
     // Apply optimistic UI state
     if (updates.count !== undefined) setFlashcardCount(updates.count);
@@ -270,7 +265,6 @@ export default function AppBlockerSettings() {
     if (updates.practice !== undefined) setPractice(updates.practice);
     if (updates.learningRatio !== undefined) setLearningRatio(updates.learningRatio);
     if (updates.noDueAction !== undefined) setNoDueAction(updates.noDueAction);
-    if (updates.earlyReviewStrategy !== undefined) setEarlyReviewStrategy(updates.earlyReviewStrategy);
 
     // Keep the Learning tab's copies of these defaults in step with this page.
     mirrorBlockerDefaultsToLearning(updates);
@@ -429,7 +423,6 @@ export default function AppBlockerSettings() {
           studyMode={studyMode}
           practice={practice}
           learningRatio={learningRatio}
-          earlyReviewStrategy={earlyReviewStrategy}
           hasPermissions={effectiveHasPermissions}
           usageStatsGranted={effectiveUsageGranted}
           overlayGranted={effectiveOverlayGranted}
@@ -556,7 +549,6 @@ export default function AppBlockerSettings() {
                   studyMode,
                   practice: practice ? '1' : '0',
                   noDueAction,
-                  earlyReviewStrategy,
                   learningRatio: String(learningRatio),
                   // Furigana is owned by Learning settings now; mirror it into
                   // the native config so the interceptor URL stays correct.
